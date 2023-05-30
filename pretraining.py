@@ -12,43 +12,54 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 from torchvision.models import Wide_ResNet101_2_Weights
 from tqdm import tqdm
-from common import (get_pdn_small, get_pdn_medium,
-                    ImageFolderWithoutTarget, InfiniteDataloader)
+from common import (
+    get_pdn_small,
+    get_pdn_medium,
+    ImageFolderWithoutTarget,
+    InfiniteDataloader,
+)
 
 
 def get_argparse():
     parser = argparse.ArgumentParser(
-        prog='ProgramName',
-        description='What the program does',
-        epilog='Text at the bottom of help')
-    parser.add_argument('-o', '--output_folder',
-                        default='output/pretraining/1/')
+        prog="ProgramName",
+        description="What the program does",
+        epilog="Text at the bottom of help",
+    )
+    parser.add_argument("-o", "--output_folder", default="output/pretraining/")
     return parser.parse_args()
 
+
 # variables
-model_size = 'small'
-imagenet_train_path = './ILSVRC/Data/CLS-LOC/train'
+model_size = "small"
+imagenet_train_path = "./ILSVRC/Data/CLS-LOC/train"
 seed = 42
 on_gpu = torch.cuda.is_available()
-device = 'cuda' if on_gpu else 'cpu'
+device = "cuda" if on_gpu else "cpu"
 
 # constants
 out_channels = 384
 grayscale_transform = transforms.RandomGrayscale(0.1)  # apply same to both
-extractor_transform = transforms.Compose([
-    transforms.Resize((512, 512)),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-])
-pdn_transform = transforms.Compose([
-    transforms.Resize((256, 256)),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-])
+extractor_transform = transforms.Compose(
+    [
+        transforms.Resize((512, 512)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ]
+)
+pdn_transform = transforms.Compose(
+    [
+        transforms.Resize((256, 256)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ]
+)
+
 
 def train_transform(image):
     image = grayscale_transform(image)
     return extractor_transform(image), pdn_transform(image)
+
 
 def main():
     torch.manual_seed(seed)
@@ -60,28 +71,32 @@ def main():
     os.makedirs(config.output_folder)
 
     backbone = torchvision.models.wide_resnet101_2(
-        weights=Wide_ResNet101_2_Weights.IMAGENET1K_V1)
+        weights=Wide_ResNet101_2_Weights.IMAGENET1K_V1
+    )
 
-    extractor = FeatureExtractor(backbone=backbone,
-                                 layers_to_extract_from=['layer2', 'layer3'],
-                                 device=device,
-                                 input_shape=(3, 512, 512))
+    extractor = FeatureExtractor(
+        backbone=backbone,
+        layers_to_extract_from=["layer2", "layer3"],
+        device=device,
+        input_shape=(3, 512, 512),
+    )
 
-    if model_size == 'small':
+    if model_size == "small":
         pdn = get_pdn_small(out_channels, padding=True)
-    elif model_size == 'medium':
+    elif model_size == "medium":
         pdn = get_pdn_medium(out_channels, padding=True)
     else:
         raise Exception()
 
-    train_set = ImageFolderWithoutTarget(imagenet_train_path,
-                                         transform=train_transform)
-    train_loader = DataLoader(train_set, batch_size=16, shuffle=True,
-                              num_workers=7, pin_memory=True)
+    train_set = ImageFolderWithoutTarget(imagenet_train_path, transform=train_transform)
+    train_loader = DataLoader(
+        train_set, batch_size=16, shuffle=True, num_workers=7, pin_memory=True
+    )
     train_loader = InfiniteDataloader(train_loader)
 
-    channel_mean, channel_std = feature_normalization(extractor=extractor,
-                                                      train_loader=train_loader)
+    channel_mean, channel_std = feature_normalization(
+        extractor=extractor, train_loader=train_loader
+    )
 
     pdn.train()
     if on_gpu:
@@ -97,35 +112,38 @@ def main():
         target = extractor.embed(image_fe)
         target = (target - channel_mean) / channel_std
         prediction = pdn(image_pdn)
-        loss = torch.mean((target - prediction)**2)
+        loss = torch.mean((target - prediction) ** 2)
 
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
-        tqdm_obj.set_description(f'{(loss.item())}')
+        tqdm_obj.set_description(f"{(loss.item())}")
 
         if iteration % 10000 == 0:
-            torch.save(pdn,
-                       os.path.join(config.output_folder,
-                                    f'teacher_{model_size}_tmp.pth'))
-            torch.save(pdn.state_dict(),
-                       os.path.join(config.output_folder,
-                                    f'teacher_{model_size}_tmp_state.pth'))
-    torch.save(pdn,
-               os.path.join(config.output_folder,
-                            f'teacher_{model_size}_final.pth'))
-    torch.save(pdn.state_dict(),
-               os.path.join(config.output_folder,
-                            f'teacher_{model_size}_final_state.pth'))
+            torch.save(
+                pdn, os.path.join(config.output_folder, f"teacher_{model_size}_tmp.pth")
+            )
+            torch.save(
+                pdn.state_dict(),
+                os.path.join(
+                    config.output_folder, f"teacher_{model_size}_tmp_state.pth"
+                ),
+            )
+    torch.save(
+        pdn, os.path.join(config.output_folder, f"teacher_{model_size}_final.pth")
+    )
+    torch.save(
+        pdn.state_dict(),
+        os.path.join(config.output_folder, f"teacher_{model_size}_final_state.pth"),
+    )
 
 
 @torch.no_grad()
 def feature_normalization(extractor, train_loader, steps=10000):
-
     mean_outputs = []
     normalization_count = 0
-    with tqdm(desc='Computing mean of features', total=steps) as pbar:
+    with tqdm(desc="Computing mean of features", total=steps) as pbar:
         for image_fe, _ in train_loader:
             if on_gpu:
                 image_fe = image_fe.cuda()
@@ -143,7 +161,7 @@ def feature_normalization(extractor, train_loader, steps=10000):
 
     mean_distances = []
     normalization_count = 0
-    with tqdm(desc='Computing variance of features', total=steps) as pbar:
+    with tqdm(desc="Computing variance of features", total=steps) as pbar:
         for image_fe, _ in train_loader:
             if on_gpu:
                 image_fe = image_fe.cuda()
@@ -201,8 +219,7 @@ class FeatureExtractor(torch.nn.Module):
         features = [features[layer] for layer in self.layers_to_extract_from]
 
         features = [
-            self.patch_maker.patchify(x, return_spatial_info=True) for x in
-            features
+            self.patch_maker.patchify(x, return_spatial_info=True) for x in features
         ]
         patch_shapes = [x[1] for x in features]
         features = [x[0] for x in features]
@@ -213,8 +230,7 @@ class FeatureExtractor(torch.nn.Module):
             patch_dims = patch_shapes[i]
 
             _features = _features.reshape(
-                _features.shape[0], patch_dims[0], patch_dims[1],
-                *_features.shape[2:]
+                _features.shape[0], patch_dims[0], patch_dims[1], *_features.shape[2:]
             )
             _features = _features.permute(0, -3, -2, -1, 1, 2)
             perm_base_shape = _features.shape
@@ -230,8 +246,7 @@ class FeatureExtractor(torch.nn.Module):
                 *perm_base_shape[:-2], ref_num_patches[0], ref_num_patches[1]
             )
             _features = _features.permute(0, -2, -1, 1, 2, 3)
-            _features = _features.reshape(len(_features), -1,
-                                          *_features.shape[-3:])
+            _features = _features.reshape(len(_features), -1, *_features.shape[-3:])
             features[i] = _features
         features = [x.reshape(-1, *x.shape[-3:]) for x in features]
 
@@ -261,15 +276,14 @@ class PatchMaker:
         """
         padding = int((self.patchsize - 1) / 2)
         unfolder = torch.nn.Unfold(
-            kernel_size=self.patchsize, stride=self.stride, padding=padding,
-            dilation=1
+            kernel_size=self.patchsize, stride=self.stride, padding=padding, dilation=1
         )
         unfolded_features = unfolder(features)
         number_of_total_patches = []
         for s in features.shape[-2:]:
             n_patches = (
-                                s + 2 * padding - 1 * (self.patchsize - 1) - 1
-                        ) / self.stride + 1
+                s + 2 * padding - 1 * (self.patchsize - 1) - 1
+            ) / self.stride + 1
             number_of_total_patches.append(int(n_patches))
         unfolded_features = unfolded_features.reshape(
             *features.shape[:2], self.patchsize, self.patchsize, -1
@@ -306,8 +320,7 @@ class MeanMapper(torch.nn.Module):
 
     def forward(self, features):
         features = features.reshape(len(features), 1, -1)
-        return F.adaptive_avg_pool1d(features,
-                                     self.preprocessing_dim).squeeze(1)
+        return F.adaptive_avg_pool1d(features, self.preprocessing_dim).squeeze(1)
 
 
 class Aggregator(torch.nn.Module):
@@ -357,8 +370,7 @@ class NetworkFeatureAggregator(torch.nn.Module):
                     extract_idx = int(extract_idx)
                     network_layer = network_layer[extract_idx]
                 else:
-                    network_layer = network_layer.__dict__["_modules"][
-                        extract_idx]
+                    network_layer = network_layer.__dict__["_modules"][extract_idx]
             else:
                 network_layer = backbone.__dict__["_modules"][extract_layer]
 
@@ -387,8 +399,7 @@ class NetworkFeatureAggregator(torch.nn.Module):
         """Computes the feature dimensions for all layers given input_shape."""
         _input = torch.ones([1] + list(input_shape)).to(self.device)
         _output = self(_input)
-        return [_output[layer].shape[1] for layer in
-                self.layers_to_extract_from]
+        return [_output[layer].shape[1] for layer in self.layers_to_extract_from]
 
 
 class ForwardHook:
@@ -409,5 +420,6 @@ class ForwardHook:
 class LastLayerToExtractReachedException(Exception):
     pass
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

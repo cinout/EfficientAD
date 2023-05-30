@@ -1,4 +1,5 @@
 # EfficientAD
+
 Unofficial implementation of paper https://arxiv.org/abs/2303.14535
 
 [![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/efficientad-accurate-visual-anomaly-detection/anomaly-detection-on-mvtec-loco-ad)](https://paperswithcode.com/sota/anomaly-detection-on-mvtec-loco-ad?p=efficientad-accurate-visual-anomaly-detection)
@@ -8,7 +9,7 @@ Unofficial implementation of paper https://arxiv.org/abs/2303.14535
 ## Results
 
 | Model         | Dataset    | Official Paper | efficientad.py |
-|---------------|------------|----------------|----------------|
+| ------------- | ---------- | -------------- | -------------- |
 | EfficientAD-M | Mvtec AD   | 99.1           | 99.1           |
 | EfficientAD-M | VisA       | 98.1           | 98.2           |
 | EfficientAD-M | Mvtec LOCO | 90.7           | 90.1           |
@@ -16,15 +17,13 @@ Unofficial implementation of paper https://arxiv.org/abs/2303.14535
 | EfficientAD-S | VisA       | 97.5           | 97.6           |
 | EfficientAD-S | Mvtec LOCO | 90.0           | 89.5           |
 
-
 ## Benchmarks
 
 | Model         | GPU   | Official Paper | benchmark.py |
-|---------------|-------|----------------|--------------|
+| ------------- | ----- | -------------- | ------------ |
 | EfficientAD-M | A6000 | 4.5 ms         | 4.4 ms       |
 | EfficientAD-M | A100  | -              | 4.6 ms       |
 | EfficientAD-M | A5000 | 5.3 ms         | 5.3 ms       |
-
 
 ## Setup
 
@@ -81,7 +80,7 @@ python efficientad.py --dataset mvtec_ad --subdataset bottle
 Evaluation with Mvtec evaluation code:
 
 ```
-python mvtec_ad_evaluation/evaluate_experiment.py --dataset_base_dir './mvtec_anomaly_detection/' --anomaly_maps_dir './output/1/anomaly_maps/mvtec_ad/' --output_dir './output/1/metrics/mvtec_ad/' --evaluated_objects bottle
+python mvtec_ad_evaluation/evaluate_experiment.py --dataset_base_dir './mvtec_anomaly_detection/' --anomaly_maps_dir './output/anomaly_maps/mvtec_ad/' --output_dir './output/metrics/mvtec_ad/' --evaluated_objects bottle
 ```
 
 ## Reproduce paper results
@@ -134,5 +133,5 @@ python efficientad.py --dataset mvtec_loco --subdataset breakfast_box
 Evaluation with LOCO evaluation code:
 
 ```
-python mvtec_loco_ad_evaluation/evaluate_experiment.py --dataset_base_dir './mvtec_loco_anomaly_detection/' --anomaly_maps_dir './output/1/anomaly_maps/mvtec_loco/' --output_dir './output/1/metrics/mvtec_loco/' --object_name breakfast_box
+python mvtec_loco_ad_evaluation/evaluate_experiment.py --dataset_base_dir './mvtec_loco_anomaly_detection/' --anomaly_maps_dir './output/anomaly_maps/mvtec_loco/' --output_dir './output/metrics/mvtec_loco/' --object_name breakfast_box
 ```

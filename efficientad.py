@@ -21,7 +21,7 @@ def get_argparse():
     parser.add_argument('-s', '--subdataset', default='bottle',
                         help='One of 15 sub-datasets of Mvtec AD or 5' +
                              'sub-datasets of Mvtec LOCO')
-    parser.add_argument('-o', '--output_dir', default='output/1')
+    parser.add_argument('-o', '--output_dir', default='output')
     parser.add_argument('-m', '--model_size', default='small',
                         choices=['small', 'medium'])
     parser.add_argument('-w', '--weights', default='models/teacher_small.pth')

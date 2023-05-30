@@ -9,9 +9,9 @@
 #SBATCH --qos=gpgpudeeplearn
 #SBATCH --constraint=dlg3|dlg4|dlg5
 
-#SBATCH --job-name="deb"
+#SBATCH --job-name="loc_bb"
 #SBATCH --account=punim1623
-#SBATCH --time=0-00:20:00
+#SBATCH --time=0-05:00:00
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
