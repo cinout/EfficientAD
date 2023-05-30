@@ -2,7 +2,7 @@
 
 #SBATCH --partition=physical
 
-#SBATCH --job-name="eval_loc_bb"
+#SBATCH --job-name="eval_bb"
 #SBATCH --account=punim1623
 #SBATCH --time=0-00:30:00
 
