@@ -3,6 +3,7 @@
 The important class for users of this module is MetricsAggregator.
 """
 
+import math
 from typing import Sequence, Optional, Callable, Iterable
 
 import numpy as np
@@ -516,19 +517,23 @@ class MetricsAggregator:
         # Therefore, we possibly need to sample random anomaly scores from each
         # anomaly map.
         num_images = len(self.anomaly_maps)
+        print(f">>> num_images: {num_images}")
         num_scores_per_image = np.prod(self.anomaly_maps[0].np_array.shape)
         if num_images * num_scores_per_image <= max_num_scores:
             # We don't need to subsample. This corresponds to sampling
             # all scores (given that we sample without replacement).
             num_sampled_per_image = num_scores_per_image
+            print(f">>> condition 1")
         else:
             # We need to subsample.
             num_sampled_per_image = int(np.floor(max_num_scores / num_images))
+            print(f">>> condition 2")
         sampled_scores = []
 
         # Iterate through the images and keep track of the maximum and minimum
         # of all anomaly scores.
         some_score = self.anomaly_maps[0].np_array[0, 0]
+        print(f">>> some_score: {some_score}")
         min_score, max_score = some_score, some_score
         for anomaly_map in self.anomaly_maps:
             min_score = min(min_score, np.min(anomaly_map.np_array))
@@ -549,6 +554,14 @@ class MetricsAggregator:
         sampled_scores = np.concatenate(sampled_scores).flatten()
         sampled_scores.sort()
 
+        scores_size = sampled_scores.size
+        print(f">>> sampled_scores.size: {scores_size}")
+        print(f">>> sampled_scores[0]: {sampled_scores[0]}")
+        print(f">>> sampled_scores[last]: {sampled_scores[scores_size-1]}")
+        print(
+            f">>> sampled_scores[middle+-20]: {sampled_scores[ math.floor(scores_size/2)-20:math.floor(scores_size/2)+20]}"
+        )
+
         # From the sampled scores, take values at equidistant indices.
         equidistant_indices = np.linspace(
             0, len(sampled_scores) - 1, num=num_thresholds, endpoint=True, dtype=int
@@ -558,6 +571,6 @@ class MetricsAggregator:
 
         # Combine the minimum, the maximum and the equidistant anomaly scores
         # to form the list of thresholds, sorted in descending order.
-        thresholds = equiheight_scores.tolist()[::-1]
+        thresholds = equiheight_scores.tolist()[::-1] # reverse
         thresholds = [max_threshold] + thresholds + [min_threshold]
         return thresholds
