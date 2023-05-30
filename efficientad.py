@@ -31,10 +31,10 @@ def get_argparse():
                              'pretraining penalty. Or see README.md to' +
                              'download ImageNet and set to ImageNet path')
     parser.add_argument('-a', '--mvtec_ad_path',
-                        default='./mvtec_anomaly_detection',
+                        default='./datasets/mvtec',
                         help='Downloaded Mvtec AD dataset')
     parser.add_argument('-b', '--mvtec_loco_path',
-                        default='./mvtec_loco_anomaly_detection',
+                        default='./datasets/loco',
                         help='Downloaded Mvtec LOCO dataset')
     parser.add_argument('-t', '--train_steps', type=int, default=70000)
     return parser.parse_args()
