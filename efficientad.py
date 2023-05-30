@@ -330,6 +330,7 @@ def main():
     print("Final image auc: {:.4f}".format(auc))
 
 
+@torch.no_grad()
 def test(
     test_set,
     teacher,
@@ -365,7 +366,11 @@ def test(
             q_ae_start=q_ae_start,
             q_ae_end=q_ae_end,
         )
-        map_combined = torch.nn.functional.pad(map_combined, (4, 4, 4, 4))
+
+        # TODO: I disabled the padding to test if it prevents evaluation error
+        # map_combined = torch.nn.functional.pad(
+        #     map_combined, (4, 4, 4, 4)
+        # )  # pad last dim by (4, 4) and 2nd to last by (4, 4), the value in padding area is 0
         map_combined = torch.nn.functional.interpolate(
             map_combined, (orig_height, orig_width), mode="bilinear"
         )
