@@ -218,7 +218,9 @@ def main():
         with torch.no_grad():
             teacher_output_st = teacher(image_st)
             teacher_output_st = (teacher_output_st - teacher_mean) / teacher_std
-        student_output_st = student(image_st)[:, :out_channels]
+        student_output_st = student(image_st)[
+            :, :out_channels
+        ]  # the first half of student outputs
         distance_st = (teacher_output_st - student_output_st) ** 2
         d_hard = torch.quantile(distance_st, q=0.999)
         loss_hard = torch.mean(distance_st[distance_st >= d_hard])
@@ -234,7 +236,9 @@ def main():
         with torch.no_grad():
             teacher_output_ae = teacher(image_ae)
             teacher_output_ae = (teacher_output_ae - teacher_mean) / teacher_std
-        student_output_ae = student(image_ae)[:, out_channels:]
+        student_output_ae = student(image_ae)[
+            :, out_channels:
+        ]  # the second half of student outputs
         distance_ae = (teacher_output_ae - ae_output) ** 2
         distance_stae = (ae_output - student_output_ae) ** 2
         loss_ae = torch.mean(distance_ae)
@@ -246,7 +250,7 @@ def main():
         optimizer.step()
         scheduler.step()
 
-        if iteration % 10 == 0:
+        if iteration % 200 == 0:
             tqdm_obj.set_description("Current loss: {:.4f}  ".format(loss_total.item()))
 
         if iteration % 1000 == 0:
