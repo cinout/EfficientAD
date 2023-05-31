@@ -21,7 +21,13 @@ from common import (
 from sklearn.metrics import roc_auc_score
 from datetime import datetime
 
-timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+timestamp = (
+    datetime.now().strftime("%Y%m%d_%H%M%S")
+    + "_"
+    + str(random.randint(0, 100))
+    + "_"
+    + str(random.randint(0, 100))
+)
 
 
 def get_argparse():
