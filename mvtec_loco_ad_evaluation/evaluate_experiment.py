@@ -12,79 +12,100 @@ import glob
 import json
 import os
 from typing import Optional, Iterable
-
+import cv2
 import numpy as np
 from tqdm import tqdm
 
 from src.aggregation import MetricsAggregator, ThresholdMetrics
 from src.image import GroundTruthMap, AnomalyMap, DefectsConfig
-from src.util import get_auc_for_max_fpr, listdir, set_niceness, \
-    compute_classification_auc_roc
+from src.util import (
+    get_auc_for_max_fpr,
+    listdir,
+    set_niceness,
+    compute_classification_auc_roc,
+)
 
-TIFF_EXTS = ['.tif', '.tiff', '.TIF', '.TIFF']
-OBJECT_NAMES = ['breakfast_box', 'juice_bottle', 'pushpins', 'screw_bag',
-                'splicing_connectors']
+
+def normalizeData(data):
+    return (data - np.min(data)) / (np.max(data) - np.min(data))
+
+
+TIFF_EXTS = [".tif", ".tiff", ".TIF", ".TIFF"]
+OBJECT_NAMES = [
+    "breakfast_box",
+    "juice_bottle",
+    "pushpins",
+    "screw_bag",
+    "splicing_connectors",
+]
 
 # The AU-sPRO is only computed up to a certain integration limit. Here, you
 # can specify the integration limits that should be evaluated.
-MAX_FPRS = [0.01, 0.05, 0.1, 0.3, 1.]
+MAX_FPRS = [0.01, 0.05, 0.1, 0.3, 1.0]
 
 
 def parse_arguments():
     """
-        Parse user arguments for the evaluation of a method on the MVTec LOCO AD
-        dataset.
+    Parse user arguments for the evaluation of a method on the MVTec LOCO AD
+    dataset.
 
-        returns:
-            Parsed user arguments.
+    returns:
+        Parsed user arguments.
     """
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        '--object_name',
+        "--object_name",
         choices=OBJECT_NAMES,
-        help='Name of the dataset object to be evaluated.')
+        help="Name of the dataset object to be evaluated.",
+    )
 
     parser.add_argument(
-        '--dataset_base_dir',
-        help='Path to the directory that contains the dataset images of the'
-             ' MVTec LOCO AD dataset.')
+        "--dataset_base_dir",
+        help="Path to the directory that contains the dataset images of the"
+        " MVTec LOCO AD dataset.",
+    )
 
     parser.add_argument(
-        '--anomaly_maps_dir',
+        "--anomaly_maps_dir",
         required=True,
-        help='Path to the anomaly maps directory of the evaluated method.')
+        help="Path to the anomaly maps directory of the evaluated method.",
+    )
 
     parser.add_argument(
-        '--output_dir',
+        "--output_dir",
         default=None,
-        help='Path to the directory to store evaluation results. If no output'
-             ' directory is specified, the results are not written to drive.')
+        help="Path to the directory to store evaluation results. If no output"
+        " directory is specified, the results are not written to drive.",
+    )
 
     parser.add_argument(
-        '--num_parallel_workers',
+        "--num_parallel_workers",
         default=None,
         type=optional_int,
-        help='If None (default), nothing will be parallelized across CPUs.'
-             ' Otherwise, the value denotes the number of CPUs to use for'
-             ' parallelism. A value of 1 will result in suboptimal performance'
-             ' compared to None.')
+        help="If None (default), nothing will be parallelized across CPUs."
+        " Otherwise, the value denotes the number of CPUs to use for"
+        " parallelism. A value of 1 will result in suboptimal performance"
+        " compared to None.",
+    )
 
     parser.add_argument(
-        '--curve_max_distance',
+        "--curve_max_distance",
         default=0.001,
         type=float,
-        help='Maximum distance between two points on the overall FPR-sPRO'
-             ' curve. Will be used for selecting anomaly thresholds.'
-             ' Decrease this value to increase the overall accuracy of'
-             ' results.')
+        help="Maximum distance between two points on the overall FPR-sPRO"
+        " curve. Will be used for selecting anomaly thresholds."
+        " Decrease this value to increase the overall accuracy of"
+        " results.",
+    )
 
     parser.add_argument(
-        '--niceness',
+        "--niceness",
         type=int,
         default=19,
         choices=list(range(20)),
-        help='UNIX niceness of all evaluation processes.')
+        help="UNIX niceness of all evaluation processes.",
+    )
 
     args = parser.parse_args()
 
@@ -98,70 +119,98 @@ def main():
 
     # Read the defects config file of the evaluated object.
     defects_config_path = os.path.join(
-        args.dataset_base_dir, args.object_name, 'defects_config.json')
+        args.dataset_base_dir, args.object_name, "defects_config.json"
+    )
     with open(defects_config_path) as defects_config_file:
         defects_list = json.load(defects_config_file)
     defects_config = DefectsConfig.create_from_list(defects_list)
 
     # Read the ground truth maps and the anomaly maps.
-    gt_dir = os.path.join(
-        args.dataset_base_dir, args.object_name, 'ground_truth')
+    gt_dir = os.path.join(args.dataset_base_dir, args.object_name, "ground_truth")
     anomaly_maps_test_dir = os.path.join(
-        args.anomaly_maps_dir, args.object_name, 'test')
+        args.anomaly_maps_dir, args.object_name, "test"
+    )
     gt_maps, anomaly_maps = read_maps(
         gt_dir=gt_dir,
         anomaly_maps_test_dir=anomaly_maps_test_dir,
-        defects_config=defects_config)
+        defects_config=defects_config,
+    )
+
+    # generate visual maps
+    subclass = args.object_name
+    visual_folder = f"visual_{subclass}/"
+    os.mkdir(visual_folder)
+    heatmap_alpha = 0.5
+
+    for file_info in anomaly_maps:
+        file_path = file_info.file_path
+        file_map = file_info.np_array  # shape: (h,w)
+        file_map = np.expand_dims(file_map, axis=2)  # shape: (h,w,1)
+
+        file_path_partition = file_path.split("/")
+        filename = file_path_partition[-1].split(".tiff")[0]
+        anomaly_type = file_path_partition[-2]
+
+        raw_img_path = os.path.join(
+            args.dataset_base_dir, subclass, "test", anomaly_type, filename + ".png"
+        )
+        raw_img = np.array(cv2.imread(raw_img_path, cv2.IMREAD_COLOR))
+
+        pre_mask = np.uint8(normalizeData(file_map) * 255)
+
+        heatmap = cv2.applyColorMap(pre_mask, cv2.COLORMAP_JET)
+        hmap_overlay_gt_img = heatmap * heatmap_alpha + raw_img * (1.0 - heatmap_alpha)
+
+        cv2.imwrite(
+            f"{visual_folder}/{anomaly_type}_{filename}_heatmap.jpg",
+            hmap_overlay_gt_img,
+        )
 
     # Collect relevant metrics based on the ground truth and anomaly maps.
     metrics_aggregator = MetricsAggregator(
         gt_maps=gt_maps,
         anomaly_maps=anomaly_maps,
         parallel_workers=args.num_parallel_workers,
-        parallel_niceness=args.niceness)
-    metrics = metrics_aggregator.run(
-        curve_max_distance=args.curve_max_distance)
+        parallel_niceness=args.niceness,
+    )
+    metrics = metrics_aggregator.run(curve_max_distance=args.curve_max_distance)
 
     # Fetch the anomaly localization results.
     localization_results = get_auc_spro_results(
-        metrics=metrics,
-        anomaly_maps_test_dir=anomaly_maps_test_dir)
+        metrics=metrics, anomaly_maps_test_dir=anomaly_maps_test_dir
+    )
 
     # Fetch the image-level anomaly detection results.
     classification_results = get_image_level_detection_metrics(
-        gt_maps=gt_maps,
-        anomaly_maps=anomaly_maps)
+        gt_maps=gt_maps, anomaly_maps=anomaly_maps
+    )
 
     # Create the dict to write to metrics.json.
     results = {
-        'localization': localization_results,
-        'classification': classification_results
+        "localization": localization_results,
+        "classification": classification_results,
     }
 
     # Write the results to the output directory.
     if args.output_dir is not None:
-        print(f'Writing results to {args.output_dir}')
+        print(f"Writing results to {args.output_dir}")
         os.makedirs(args.output_dir, exist_ok=True)
-        results_path = os.path.join(args.output_dir, 'metrics.json')
-        with open(results_path, 'w') as results_file:
+        results_path = os.path.join(args.output_dir, "metrics.json")
+        with open(results_path, "w") as results_file:
             json.dump(results, results_file, indent=4, sort_keys=True)
 
 
-def read_maps(gt_dir: str,
-              anomaly_maps_test_dir: str,
-              defects_config: DefectsConfig):
+def read_maps(gt_dir: str, anomaly_maps_test_dir: str, defects_config: DefectsConfig):
     """Read the ground truth and the anomaly maps."""
-    print('Reading ground truth and corresponding anomaly maps...')
+    print("Reading ground truth and corresponding anomaly maps...")
     gt_maps = []
     anomaly_maps = []
 
     # Search for available relative paths to ground truth maps and to
     # anomaly maps.
     gt_map_rel_paths = set(get_available_gt_map_rel_paths(gt_dir))
-    anomaly_rel_paths = list(
-        get_available_test_image_rel_paths(anomaly_maps_test_dir))
-    anomaly_rel_paths_no_ext = [os.path.splitext(p)[0]
-                                for p in anomaly_rel_paths]
+    anomaly_rel_paths = list(get_available_test_image_rel_paths(anomaly_maps_test_dir))
+    anomaly_rel_paths_no_ext = [os.path.splitext(p)[0] for p in anomaly_rel_paths]
     # Check that there are no duplicates with different file endings.
     assert len(set(anomaly_rel_paths_no_ext)) == len(anomaly_rel_paths_no_ext)
 
@@ -169,14 +218,15 @@ def read_maps(gt_dir: str,
     skipped_gt_maps = gt_map_rel_paths.difference(anomaly_rel_paths_no_ext)
     if len(skipped_gt_maps) > 0:
         raise OSError(
-            'These ground truth maps do not have corresponding anomaly'
-            f' maps: {sorted(skipped_gt_maps)}')
+            "These ground truth maps do not have corresponding anomaly"
+            f" maps: {sorted(skipped_gt_maps)}"
+        )
 
     # For every relative path, read the ground truth (if available) and the
     # anomaly map.
     for rel_path, rel_path_no_ext in tqdm(
-            zip(anomaly_rel_paths, anomaly_rel_paths_no_ext),
-            total=len(anomaly_rel_paths)):
+        zip(anomaly_rel_paths, anomaly_rel_paths_no_ext), total=len(anomaly_rel_paths)
+    ):
         anomaly_map_path = os.path.join(anomaly_maps_test_dir, rel_path)
         anomaly_map = AnomalyMap.read_from_tiff(anomaly_map_path)
         anomaly_maps.append(anomaly_map)
@@ -184,18 +234,18 @@ def read_maps(gt_dir: str,
         if rel_path_no_ext in gt_map_rel_paths:
             gt_map_path = os.path.join(gt_dir, rel_path_no_ext)
             gt_map = GroundTruthMap.read_from_png_dir(
-                png_dir=gt_map_path,
-                defects_config=defects_config)
+                png_dir=gt_map_path, defects_config=defects_config
+            )
             gt_maps.append(gt_map)
         else:
             # This must be a good image. Hence, the path must start with
             # "good/".
-            if not rel_path.startswith('good/'):
+            if not rel_path.startswith("good/"):
                 raise OSError(
-                    f'Anomaly map {rel_path} has no corresponding ground'
-                    ' truth map, so it must be a good image. Good images'
+                    f"Anomaly map {rel_path} has no corresponding ground"
+                    " truth map, so it must be a good image. Good images"
                     ' must have a relative path starting with "good/" '
-                    f' (relative to the test dir at {anomaly_maps_test_dir})'
+                    f" (relative to the test dir at {anomaly_maps_test_dir})"
                 )
             gt_maps.append(None)
 
@@ -211,9 +261,11 @@ def get_available_gt_map_rel_paths(gt_dir: str) -> Iterable[str]:
     The returned paths are the relative paths to the directories.
     """
     for defect_type_name in listdir(gt_dir):
-        file_complaint_str = ('Ground truth directory must not contain files'
-                              ' except for the .pngs nested in the single'
-                              ' image directories.')
+        file_complaint_str = (
+            "Ground truth directory must not contain files"
+            " except for the .pngs nested in the single"
+            " image directories."
+        )
 
         # Get the logical_anomalies and structural_anomalies subdirectories.
         defect_type_dir = os.path.join(gt_dir, defect_type_name)
@@ -221,12 +273,13 @@ def get_available_gt_map_rel_paths(gt_dir: str) -> Iterable[str]:
             raise OSError(file_complaint_str)
 
         # Raise if the directory name is not what we expect.
-        valid_defect_type_names = ['logical_anomalies', 'structural_anomalies']
+        valid_defect_type_names = ["logical_anomalies", "structural_anomalies"]
         if defect_type_name not in valid_defect_type_names:
             raise OSError(
-                f'Subdirectory of ground truth maps'
-                f' directory has name {defect_type_name}, but should be'
-                f' "logical_anomalies" or "structural_anomalies".')
+                f"Subdirectory of ground truth maps"
+                f" directory has name {defect_type_name}, but should be"
+                f' "logical_anomalies" or "structural_anomalies".'
+            )
 
         # Get the list of all non-empty image directories (000, 001, etc.).
         for image_dir_name in listdir(defect_type_dir):
@@ -235,10 +288,11 @@ def get_available_gt_map_rel_paths(gt_dir: str) -> Iterable[str]:
             if not os.path.isdir(image_dir_path):
                 raise OSError(file_complaint_str)
             # Image dir must contain pngs.
-            if len(glob.glob(os.path.join(image_dir_path, '*.png'))) == 0:
+            if len(glob.glob(os.path.join(image_dir_path, "*.png"))) == 0:
                 raise OSError(
-                    f'Ground truth directory of single image'
-                    f' at {image_dir_path} does not contain any pngs.')
+                    f"Ground truth directory of single image"
+                    f" at {image_dir_path} does not contain any pngs."
+                )
 
             # Yield the relative paths to the image subdirectory.
             yield os.path.join(defect_type_name, image_dir_name)
@@ -259,8 +313,7 @@ def get_available_test_image_rel_paths(test_images_dir: str) -> Iterable[str]:
             yield os.path.join(defect_dir_name, file_name)
 
 
-def get_auc_spro_results(metrics: ThresholdMetrics,
-                         anomaly_maps_test_dir: str):
+def get_auc_spro_results(metrics: ThresholdMetrics, anomaly_maps_test_dir: str):
     """Compute AUC sPRO values for all images, images in subdirectories and
     defect names.
     """
@@ -268,23 +321,24 @@ def get_auc_spro_results(metrics: ThresholdMetrics,
     auc_spro = get_auc_spros_per_subdir(
         metrics=metrics,
         anomaly_maps_test_dir=anomaly_maps_test_dir,
-        add_good_images=True)
+        add_good_images=True,
+    )
 
     # Compute the mean performance over logical and structural anomalies.
     mean_spros = dict()
-    for limit in auc_spro['structural_anomalies'].keys():
-        auc_spro_structural = auc_spro['structural_anomalies'][limit]
-        auc_spro_logical = auc_spro['logical_anomalies'][limit]
+    for limit in auc_spro["structural_anomalies"].keys():
+        auc_spro_structural = auc_spro["structural_anomalies"][limit]
+        auc_spro_logical = auc_spro["logical_anomalies"][limit]
         mean = 0.5 * (auc_spro_structural + auc_spro_logical)
         mean_spros[limit] = mean
-    auc_spro['mean'] = mean_spros
+    auc_spro["mean"] = mean_spros
 
-    return {'auc_spro': auc_spro}
+    return {"auc_spro": auc_spro}
 
 
-def get_auc_spros_per_defect_type(metrics: ThresholdMetrics,
-                                  defects_config: DefectsConfig,
-                                  add_good_images):
+def get_auc_spros_per_defect_type(
+    metrics: ThresholdMetrics, defects_config: DefectsConfig, add_good_images
+):
     """Compute the AUC sPRO for images by defect type.
 
     For each defect type, all ground truth maps that contain at least one
@@ -312,8 +366,9 @@ def get_auc_spros_per_defect_type(metrics: ThresholdMetrics,
                 continue
 
             # Get the defect types in the ground truth map.
-            defect_names_in_gt_map = \
-                set(c.defect_config.defect_name for c in gt_map.channels)
+            defect_names_in_gt_map = set(
+                c.defect_config.defect_name for c in gt_map.channels
+            )
 
             if defect_name in defect_names_in_gt_map:
                 reduced_anomaly_maps.append(anomaly_map)
@@ -321,14 +376,14 @@ def get_auc_spros_per_defect_type(metrics: ThresholdMetrics,
         # Reduce the threshold metrics and compute the AUC sPRO value.
         reduced_metrics = metrics.reduce_to_images(reduced_anomaly_maps)
         aucs_per_defect_type[defect_name] = get_auc_spros_for_metrics(
-            metrics=reduced_metrics,
-            filter_defect_names_for_spro=[defect_name])
+            metrics=reduced_metrics, filter_defect_names_for_spro=[defect_name]
+        )
     return aucs_per_defect_type
 
 
-def get_auc_spros_per_subdir(metrics: ThresholdMetrics,
-                             anomaly_maps_test_dir,
-                             add_good_images):
+def get_auc_spros_per_subdir(
+    metrics: ThresholdMetrics, anomaly_maps_test_dir, add_good_images
+):
     """Compute the AUC sPRO for images in subdirectories (usually "good",
     "structural_anomalies" and "logical_anomalies").
 
@@ -342,37 +397,41 @@ def get_auc_spros_per_subdir(metrics: ThresholdMetrics,
     good_images = []
     if add_good_images:
         # Include the good images for each subdir.
-        assert 'good' in subdir_names
-        good_subdir = os.path.join(anomaly_maps_test_dir, 'good')
+        assert "good" in subdir_names
+        good_subdir = os.path.join(anomaly_maps_test_dir, "good")
         good_subdir = os.path.realpath(good_subdir)
         good_images = [
-            a for a in metrics.anomaly_maps
-            if os.path.realpath(a.file_path).startswith(good_subdir)]
+            a
+            for a in metrics.anomaly_maps
+            if os.path.realpath(a.file_path).startswith(good_subdir)
+        ]
     # Regardless of add_good_images, we cannot compute an AUC sPRO value only
     # for the good images.
-    if 'good' in subdir_names:
-        subdir_names.remove('good')
+    if "good" in subdir_names:
+        subdir_names.remove("good")
 
     for subdir_name in subdir_names:
         subdir = os.path.join(anomaly_maps_test_dir, subdir_name)
         subdir = os.path.realpath(subdir)
         # Get all anomaly maps in here.
         subdir_anomaly_maps = [
-            a for a in metrics.anomaly_maps
-            if os.path.realpath(a.file_path).startswith(subdir)]
+            a
+            for a in metrics.anomaly_maps
+            if os.path.realpath(a.file_path).startswith(subdir)
+        ]
         if add_good_images:
             subdir_anomaly_maps += good_images
 
         subdir_metrics = metrics.reduce_to_images(subdir_anomaly_maps)
 
-        aucs_per_subdir[subdir_name] = get_auc_spros_for_metrics(
-            subdir_metrics)
+        aucs_per_subdir[subdir_name] = get_auc_spros_for_metrics(subdir_metrics)
     return aucs_per_subdir
 
 
 def get_auc_spros_for_metrics(
-        metrics: ThresholdMetrics,
-        filter_defect_names_for_spro: Optional[Iterable[str]] = None):
+    metrics: ThresholdMetrics,
+    filter_defect_names_for_spro: Optional[Iterable[str]] = None,
+):
     """Compute AUC sPRO values for a given ThresholdMetrics instance.
 
     Args:
@@ -389,11 +448,11 @@ def get_auc_spros_for_metrics(
             auc = None
         else:
             mean_spros = metrics.get_mean_spros(
-                filter_defect_names=filter_defect_names_for_spro)
-            auc = get_auc_for_max_fpr(fprs=fp_rates,
-                                      y_values=mean_spros,
-                                      max_fpr=max_fpr,
-                                      scale_to_one=True)
+                filter_defect_names=filter_defect_names_for_spro
+            )
+            auc = get_auc_for_max_fpr(
+                fprs=fp_rates, y_values=mean_spros, max_fpr=max_fpr, scale_to_one=True
+            )
         auc_spros[max_fpr] = auc
     return auc_spros
 
@@ -401,15 +460,16 @@ def get_auc_spros_for_metrics(
 def get_image_level_detection_metrics(gt_maps, anomaly_maps):
     """Main function for computing all image-level anomaly detection results."""
     per_image_results = get_image_level_detection_metrics_per_image(
-        gt_maps, anomaly_maps)
+        gt_maps, anomaly_maps
+    )
     auc_roc_classification = get_image_level_detection_metrics_aggregated(
-        per_image_results)
+        per_image_results
+    )
     return auc_roc_classification
 
 
 def get_image_level_detection_metrics_per_image(gt_maps, anomaly_maps):
-    """Computes the image-level anomaly scores for an anomaly map.
-    """
+    """Computes the image-level anomaly scores for an anomaly map."""
     per_image_results = []
     for gt_map, anomaly_map in zip(gt_maps, anomaly_maps):
         # Determine the image type (good, logical, or structural).
@@ -417,15 +477,15 @@ def get_image_level_detection_metrics_per_image(gt_maps, anomaly_maps):
         _, image_type = os.path.split(parent_dir_path)
 
         image_results = {
-            'file_path': anomaly_map.file_path,
-            'gt_contains_defect': gt_map is not None,
-            'anomaly_scores': {},
-            'image_type': image_type
+            "file_path": anomaly_map.file_path,
+            "gt_contains_defect": gt_map is not None,
+            "anomaly_scores": {},
+            "image_type": image_type,
         }
         # Compute the image-level anomaly score by taking the maximum of the
         # anomaly map.
         image_level_score = float(np.max(anomaly_map.np_array))
-        image_results['anomaly_scores']['max'] = image_level_score
+        image_results["anomaly_scores"]["max"] = image_level_score
         per_image_results.append(image_results)
 
     return per_image_results
@@ -438,47 +498,47 @@ def get_image_level_detection_metrics_aggregated(per_image_results):
          per_image_results: should be the result of
            get_image_level_detection_metrics_per_image
     """
-    agg_results = {'auc_roc': {}}
+    agg_results = {"auc_roc": {}}
     # Iterate through the different image-level score computation methods.
 
     # Collect image-level scores of good and anomalous images.
-    anomaly_scores = \
-        {'good': [], 'structural_anomalies': [], 'logical_anomalies': []}
+    anomaly_scores = {"good": [], "structural_anomalies": [], "logical_anomalies": []}
 
     # Iterate through the images and collect the information required for
     # computing the AUC-ROC.
     for image_result in per_image_results:
-        anomaly_scores[image_result['image_type']].append(
-            image_result['anomaly_scores']['max'])
+        anomaly_scores[image_result["image_type"]].append(
+            image_result["anomaly_scores"]["max"]
+        )
 
     # Compute auc-roc for structural and logical anomalies separately.
-    auc_roc_structural = \
-        compute_classification_auc_roc(
-            anomaly_scores['good'], anomaly_scores['structural_anomalies'])
+    auc_roc_structural = compute_classification_auc_roc(
+        anomaly_scores["good"], anomaly_scores["structural_anomalies"]
+    )
 
-    auc_roc_logical = \
-        compute_classification_auc_roc(
-            anomaly_scores['good'], anomaly_scores['logical_anomalies'])
+    auc_roc_logical = compute_classification_auc_roc(
+        anomaly_scores["good"], anomaly_scores["logical_anomalies"]
+    )
 
-    agg_results['auc_roc']['logical_anomalies'] = auc_roc_logical
-    agg_results['auc_roc']['structural_anomalies'] = auc_roc_structural
-    agg_results['auc_roc']['mean'] = \
-        0.5 * (auc_roc_logical + auc_roc_structural)
+    agg_results["auc_roc"]["logical_anomalies"] = auc_roc_logical
+    agg_results["auc_roc"]["structural_anomalies"] = auc_roc_structural
+    agg_results["auc_roc"]["mean"] = 0.5 * (auc_roc_logical + auc_roc_structural)
     return agg_results
 
 
 def optional_int(str_value: Optional[str]) -> Optional[int]:
     """Helper function for parsing optional integer arguments with argparse."""
-    if str_value is None or str_value.lower() == 'none':
+    if str_value is None or str_value.lower() == "none":
         return None
     else:
         try:
             return int(str_value)
         except ValueError:
             raise argparse.ArgumentTypeError(
-                'An optional integer argument was given the value'
-                f' {str_value}, but the value must be None or an integer.')
+                "An optional integer argument was given the value"
+                f" {str_value}, but the value must be None or an integer."
+            )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

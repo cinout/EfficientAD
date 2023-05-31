@@ -9,6 +9,7 @@ _ext
 *.dll
 *.egg-info/
 *.png
+*.jpg
 build/
 dist/
 wheels/
