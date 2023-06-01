@@ -115,7 +115,6 @@ def main():
     else:
         raise Exception("Unknown config.dataset")
 
-    # TODO: we need pretrain_penalty
     pretrain_penalty = True
     if config.imagenet_train_path == "none":
         pretrain_penalty = False
@@ -207,7 +206,6 @@ def main():
         student.cuda()
         autoencoder.cuda()
 
-    
     teacher_mean, teacher_std = teacher_normalization(teacher, train_loader)
 
     #### hack code here, remove later
