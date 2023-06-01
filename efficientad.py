@@ -66,7 +66,7 @@ def get_argparse():
         default="./datasets/loco",
         help="Downloaded Mvtec LOCO dataset",
     )
-    parser.add_argument("-t", "--train_steps", type=int, default=70)  # TODO: 70000
+    parser.add_argument("-t", "--train_steps", type=int, default=70000)  # TODO: 70000
     return parser.parse_args()
 
 
@@ -206,9 +206,10 @@ def main():
         student.cuda()
         autoencoder.cuda()
 
+    # TODO: uncomment
     teacher_mean, teacher_std = teacher_normalization(teacher, train_loader)
 
-    #### hack code here, remove later
+    #### TODO: hack code here, remove later
     # with open("teacher_mean.t", "rb") as f:
     #     teacher_mean = torch.load(f)
     # with open("teacher_std.t", "rb") as f:
@@ -394,7 +395,7 @@ def test(
 
         defect_class = os.path.basename(os.path.dirname(path))
         y_true_image = 0 if defect_class == "good" else 1
-        y_score_image = np.max(map_combined)
+        y_score_image = np.max(map_combined[0, 0].cpu().numpy())
         y_true.append(y_true_image)
         y_score.append(y_score_image)
 
@@ -415,6 +416,7 @@ def test(
             file = os.path.join(test_output_dir, defect_class, img_nm + ".tiff")
             tifffile.imwrite(file, map_combined)
 
+        exit()
     auc = roc_auc_score(y_true=y_true, y_score=y_score)
     return auc * 100
 
@@ -458,6 +460,7 @@ def predict(
     if q_ae_start is not None:
         map_ae = 0.1 * (map_ae - q_ae_start) / (q_ae_end - q_ae_start)
     map_combined = 0.5 * map_st + 0.5 * map_ae
+
     return map_combined, map_st, map_ae
 
 
