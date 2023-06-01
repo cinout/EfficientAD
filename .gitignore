@@ -10,6 +10,7 @@ _ext
 *.egg-info/
 *.png
 *.jpg
+*.t
 build/
 dist/
 wheels/

@@ -104,6 +104,10 @@ def main():
 
     config = get_argparse()
 
+    print(
+        "\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(config)).items()))
+    )
+
     if config.dataset == "mvtec_ad":
         dataset_path = config.mvtec_ad_path
     elif config.dataset == "mvtec_loco":
@@ -111,6 +115,7 @@ def main():
     else:
         raise Exception("Unknown config.dataset")
 
+    # TODO: we need pretrain_penalty
     pretrain_penalty = True
     if config.imagenet_train_path == "none":
         pretrain_penalty = False
@@ -181,11 +186,11 @@ def main():
 
     # create models
     if config.model_size == "small":
-        teacher = get_pdn_small(out_channels)
-        student = get_pdn_small(2 * out_channels)
+        teacher = get_pdn_small(out_channels, padding=True)
+        student = get_pdn_small(2 * out_channels, padding=True)
     elif config.model_size == "medium":
-        teacher = get_pdn_medium(out_channels)
-        student = get_pdn_medium(2 * out_channels)
+        teacher = get_pdn_medium(out_channels, padding=True)
+        student = get_pdn_medium(2 * out_channels, padding=True)
     else:
         raise Exception()
     state_dict = torch.load(config.weights, map_location="cpu")
@@ -202,16 +207,26 @@ def main():
         student.cuda()
         autoencoder.cuda()
 
+    
     teacher_mean, teacher_std = teacher_normalization(teacher, train_loader)
+
+    #### hack code here, remove later
+    # with open("teacher_mean.t", "rb") as f:
+    #     teacher_mean = torch.load(f)
+    # with open("teacher_std.t", "rb") as f:
+    #     teacher_std = torch.load(f)
 
     optimizer = torch.optim.Adam(
         itertools.chain(student.parameters(), autoencoder.parameters()),
         lr=1e-4,
         weight_decay=1e-5,
     )
+
+    # step_size is 66500
     scheduler = torch.optim.lr_scheduler.StepLR(
         optimizer, step_size=int(0.95 * config.train_steps), gamma=0.1
     )
+
     tqdm_obj = tqdm(range(config.train_steps))
     for iteration, (image_st, image_ae), image_penalty in zip(
         tqdm_obj, train_loader_infinite, penalty_loader_infinite
@@ -239,6 +254,7 @@ def main():
             loss_st = loss_hard
 
         ae_output = autoencoder(image_ae)
+
         with torch.no_grad():
             teacher_output_ae = teacher(image_ae)
             teacher_output_ae = (teacher_output_ae - teacher_mean) / teacher_std
@@ -257,50 +273,55 @@ def main():
         scheduler.step()
 
         if iteration % 200 == 0:
-            tqdm_obj.set_description("Current loss: {:.4f}  ".format(loss_total.item()))
-
-        if iteration % 1000 == 0:
-            torch.save(teacher, os.path.join(train_output_dir, "teacher_tmp.pth"))
-            torch.save(student, os.path.join(train_output_dir, "student_tmp.pth"))
-            torch.save(
-                autoencoder, os.path.join(train_output_dir, "autoencoder_tmp.pth")
+            print(
+                "Iteration: ",
+                iteration,
+                "Current loss: {:.4f}".format(loss_total.item()),
             )
+            # tqdm_obj.set_description("Current loss: {:.4f}  ".format(loss_total.item()))
 
-        if iteration % 10000 == 0 and iteration > 0:
-            # run intermediate evaluation
-            teacher.eval()
-            student.eval()
-            autoencoder.eval()
+        # if iteration % 1000 == 0:
+        #     torch.save(teacher, os.path.join(train_output_dir, "teacher_tmp.pth"))
+        #     torch.save(student, os.path.join(train_output_dir, "student_tmp.pth"))
+        #     torch.save(
+        #         autoencoder, os.path.join(train_output_dir, "autoencoder_tmp.pth")
+        #     )
 
-            q_st_start, q_st_end, q_ae_start, q_ae_end = map_normalization(
-                validation_loader=validation_loader,
-                teacher=teacher,
-                student=student,
-                autoencoder=autoencoder,
-                teacher_mean=teacher_mean,
-                teacher_std=teacher_std,
-                desc="Intermediate map normalization",
-            )
-            auc = test(
-                test_set=test_set,
-                teacher=teacher,
-                student=student,
-                autoencoder=autoencoder,
-                teacher_mean=teacher_mean,
-                teacher_std=teacher_std,
-                q_st_start=q_st_start,
-                q_st_end=q_st_end,
-                q_ae_start=q_ae_start,
-                q_ae_end=q_ae_end,
-                test_output_dir=None,
-                desc="Intermediate inference",
-            )
-            print("Intermediate image auc: {:.4f}".format(auc))
+        # if iteration % 10000 == 0 and iteration > 0:
+        #     # run intermediate evaluation
+        #     teacher.eval()
+        #     student.eval()
+        #     autoencoder.eval()
 
-            # teacher frozen
-            teacher.eval()
-            student.train()
-            autoencoder.train()
+        #     q_st_start, q_st_end, q_ae_start, q_ae_end = map_normalization(
+        #         validation_loader=validation_loader,
+        #         teacher=teacher,
+        #         student=student,
+        #         autoencoder=autoencoder,
+        #         teacher_mean=teacher_mean,
+        #         teacher_std=teacher_std,
+        #         desc="Intermediate map normalization",
+        #     )
+        #     auc = test(
+        #         test_set=test_set,
+        #         teacher=teacher,
+        #         student=student,
+        #         autoencoder=autoencoder,
+        #         teacher_mean=teacher_mean,
+        #         teacher_std=teacher_std,
+        #         q_st_start=q_st_start,
+        #         q_st_end=q_st_end,
+        #         q_ae_start=q_ae_start,
+        #         q_ae_end=q_ae_end,
+        #         test_output_dir=None,
+        #         desc="Intermediate inference",
+        #     )
+        #     print("Intermediate image auc: {:.4f}".format(auc))
+
+        #     # teacher frozen
+        #     teacher.eval()
+        #     student.train()
+        #     autoencoder.train()
 
     teacher.eval()
     student.eval()
@@ -373,10 +394,16 @@ def test(
             q_ae_end=q_ae_end,
         )
 
-        # TODO: I disabled the padding to test if it prevents evaluation error
+        y_true_image = 0 if defect_class == "good" else 1
+        y_score_image = np.max(map_combined)
+        y_true.append(y_true_image)
+        y_score.append(y_score_image)
+
         # map_combined = torch.nn.functional.pad(
         #     map_combined, (4, 4, 4, 4)
         # )  # pad last dim by (4, 4) and 2nd to last by (4, 4), the value in padding area is 0
+
+        # save into riff format
         map_combined = torch.nn.functional.interpolate(
             map_combined, (orig_height, orig_width), mode="bilinear"
         )
@@ -390,10 +417,6 @@ def test(
             file = os.path.join(test_output_dir, defect_class, img_nm + ".tiff")
             tifffile.imwrite(file, map_combined)
 
-        y_true_image = 0 if defect_class == "good" else 1
-        y_score_image = np.max(map_combined)
-        y_true.append(y_true_image)
-        y_score.append(y_score_image)
     auc = roc_auc_score(y_true=y_true, y_score=y_score)
     return auc * 100
 
@@ -417,12 +440,21 @@ def predict(
     autoencoder_output = autoencoder(image)
     map_st = torch.mean(
         (teacher_output - student_output[:, :out_channels]) ** 2, dim=1, keepdim=True
-    )
+    )  # shape: (bs, 1, h, w)
     map_ae = torch.mean(
         (autoencoder_output - student_output[:, out_channels:]) ** 2,
         dim=1,
         keepdim=True,
+    )  # shape: (bs, 1, h, w)
+
+    # upsample map_st and map_ae to 256*256
+    map_st = torch.nn.functional.interpolate(
+        map_st, (image_size, image_size), mode="bilinear"
     )
+    map_ae = torch.nn.functional.interpolate(
+        map_ae, (image_size, image_size), mode="bilinear"
+    )
+
     if q_st_start is not None:
         map_st = 0.1 * (map_st - q_st_start) / (q_st_end - q_st_start)
     if q_ae_start is not None:

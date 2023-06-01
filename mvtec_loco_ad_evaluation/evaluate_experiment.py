@@ -165,8 +165,8 @@ def main():
             f"{visual_folder}/{anomaly_type}_{filename}_heatmap.jpg",
             hmap_overlay_gt_img,
         )
-    
-    exit()
+
+    # exit()
 
     # Collect relevant metrics based on the ground truth and anomaly maps.
     metrics_aggregator = MetricsAggregator(

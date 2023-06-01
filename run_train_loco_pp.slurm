@@ -29,7 +29,7 @@ conda activate ds2
 set -e
 set -x
 
-python -u efficientad.py --dataset mvtec_loco --subdataset pushpins
+python -u efficientad.py --dataset mvtec_loco --subdataset pushpins --imagenet_train_path ./datasets/ILSVRC/Data/CLS-LOC/train
 
 ##Log this job's resource usage stats###
 my-job-stats -a -n -s

@@ -22,38 +22,45 @@ def get_autoencoder(out_channels=384):
                   padding=1),
         nn.ReLU(inplace=True),
         nn.Conv2d(in_channels=64, out_channels=64, kernel_size=8),
+        
         # decoder
         nn.Upsample(size=3, mode='bilinear'),
         nn.Conv2d(in_channels=64, out_channels=64, kernel_size=4, stride=1,
                   padding=2),
         nn.ReLU(inplace=True),
         nn.Dropout(0.2),
+
         nn.Upsample(size=8, mode='bilinear'),
         nn.Conv2d(in_channels=64, out_channels=64, kernel_size=4, stride=1,
                   padding=2),
         nn.ReLU(inplace=True),
         nn.Dropout(0.2),
+
         nn.Upsample(size=15, mode='bilinear'),
         nn.Conv2d(in_channels=64, out_channels=64, kernel_size=4, stride=1,
                   padding=2),
         nn.ReLU(inplace=True),
         nn.Dropout(0.2),
+
         nn.Upsample(size=32, mode='bilinear'),
         nn.Conv2d(in_channels=64, out_channels=64, kernel_size=4, stride=1,
                   padding=2),
         nn.ReLU(inplace=True),
         nn.Dropout(0.2),
+
         nn.Upsample(size=63, mode='bilinear'),
         nn.Conv2d(in_channels=64, out_channels=64, kernel_size=4, stride=1,
                   padding=2),
         nn.ReLU(inplace=True),
         nn.Dropout(0.2),
+
         nn.Upsample(size=127, mode='bilinear'),
         nn.Conv2d(in_channels=64, out_channels=64, kernel_size=4, stride=1,
                   padding=2),
         nn.ReLU(inplace=True),
         nn.Dropout(0.2),
-        nn.Upsample(size=56, mode='bilinear'),
+
+        nn.Upsample(size=64, mode='bilinear'),
         nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1,
                   padding=1),
         nn.ReLU(inplace=True),
