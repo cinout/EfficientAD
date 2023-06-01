@@ -166,8 +166,6 @@ def main():
             hmap_overlay_gt_img,
         )
 
-    # exit()
-
     # Collect relevant metrics based on the ground truth and anomaly maps.
     metrics_aggregator = MetricsAggregator(
         gt_maps=gt_maps,

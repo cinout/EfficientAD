@@ -416,7 +416,6 @@ def test(
             file = os.path.join(test_output_dir, defect_class, img_nm + ".tiff")
             tifffile.imwrite(file, map_combined)
 
-        exit()
     auc = roc_auc_score(y_true=y_true, y_score=y_score)
     return auc * 100
 
