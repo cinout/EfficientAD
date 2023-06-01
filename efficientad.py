@@ -66,7 +66,7 @@ def get_argparse():
         default="./datasets/loco",
         help="Downloaded Mvtec LOCO dataset",
     )
-    parser.add_argument("-t", "--train_steps", type=int, default=70000)
+    parser.add_argument("-t", "--train_steps", type=int, default=70)  # TODO: 70000
     return parser.parse_args()
 
 
@@ -392,6 +392,7 @@ def test(
             q_ae_end=q_ae_end,
         )
 
+        defect_class = os.path.basename(os.path.dirname(path))
         y_true_image = 0 if defect_class == "good" else 1
         y_score_image = np.max(map_combined)
         y_true.append(y_true_image)
@@ -407,7 +408,6 @@ def test(
         )
         map_combined = map_combined[0, 0].cpu().numpy()
 
-        defect_class = os.path.basename(os.path.dirname(path))
         if test_output_dir is not None:
             img_nm = os.path.split(path)[1].split(".")[0]
             if not os.path.exists(os.path.join(test_output_dir, defect_class)):
