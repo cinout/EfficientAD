@@ -151,21 +151,43 @@ def main():
         filename = file_path_partition[-1].split(".tiff")[0]
         anomaly_type = file_path_partition[-2]
 
-        raw_img_path = os.path.join(
-            args.dataset_base_dir, subclass, "test", anomaly_type, filename + ".png"
-        )
-        raw_img = np.array(cv2.imread(raw_img_path, cv2.IMREAD_COLOR))
+        # TODO: uncomment
+        # # get raw image
+        # raw_img_path = os.path.join(
+        #     args.dataset_base_dir, subclass, "test", anomaly_type, filename + ".png"
+        # )
+        # raw_img = np.array(cv2.imread(raw_img_path, cv2.IMREAD_COLOR))
 
-        pre_mask = np.uint8(normalizeData(file_map) * 255)
+        # # get heatmap
+        # pred_mask = np.uint8(normalizeData(file_map) * 255)
+        # heatmap = cv2.applyColorMap(pred_mask, cv2.COLORMAP_JET)
+        # hmap_overlay_gt_img = heatmap * heatmap_alpha + raw_img * (1.0 - heatmap_alpha)
 
-        heatmap = cv2.applyColorMap(pre_mask, cv2.COLORMAP_JET)
-        hmap_overlay_gt_img = heatmap * heatmap_alpha + raw_img * (1.0 - heatmap_alpha)
+        # cv2.imwrite(
+        #     f"{visual_folder}/{anomaly_type}_{filename}_heatmap.jpg",
+        #     hmap_overlay_gt_img,
+        # )
 
-        cv2.imwrite(
-            f"{visual_folder}/{anomaly_type}_{filename}_heatmap.jpg",
-            hmap_overlay_gt_img,
-        )
+        if anomaly_type == "structural":
+            # get structural gt mask
+            gt_mask_path = os.path.join(
+                args.dataset_base_dir,
+                subclass,
+                "ground_truth",
+                "structural_anomalies",
+                filename,
+                "000.png",
+            )
+            gt_mask = np.array(cv2.imread(gt_mask_path, cv2.IMREAD_GRAYSCALE))
+            cv2.imwrite(
+                f"{visual_folder}/{anomaly_type}_{filename}_gt.jpg",
+                gt_mask,
+            )
 
+            pass
+
+    # TODO: remove later
+    exit()
     # Collect relevant metrics based on the ground truth and anomaly maps.
     metrics_aggregator = MetricsAggregator(
         gt_maps=gt_maps,

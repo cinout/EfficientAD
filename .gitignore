@@ -16,6 +16,7 @@ dist/
 wheels/
 datasets/
 output*/
+.DS_store
 
 # pytorch/python/numpy formats
 *.pth
