@@ -168,7 +168,7 @@ def main():
         #     hmap_overlay_gt_img,
         # )
 
-        if anomaly_type == "structural":
+        if anomaly_type == "structural_anomalies":
             # get structural gt mask
             gt_mask_path = os.path.join(
                 args.dataset_base_dir,
@@ -183,8 +183,6 @@ def main():
                 f"{visual_folder}/{anomaly_type}_{filename}_gt.jpg",
                 gt_mask,
             )
-
-            pass
 
     # TODO: remove later
     exit()
