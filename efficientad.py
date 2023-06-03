@@ -66,7 +66,7 @@ def get_argparse():
         default="./datasets/loco",
         help="Downloaded Mvtec LOCO dataset",
     )
-    parser.add_argument("-t", "--train_steps", type=int, default=2000)  # TODO: 70000
+    parser.add_argument("-t", "--train_steps", type=int, default=100)  # TODO: 70000
     parser.add_argument("--note", type=str, default="")
     return parser.parse_args()
 
@@ -598,6 +598,11 @@ def predict(
     map_combined = (
         0.5 * (map_st_2 / 3.0 + map_st_3 / 3.0 + map_st_4 / 3.0) + 0.5 * map_ae
     )
+
+    print(torch.isnan(map_st_2).nonzero().squeeze())
+    print(torch.isnan(map_st_3).nonzero().squeeze())
+    print(torch.isnan(map_st_4).nonzero().squeeze())
+    exit()
 
     return map_combined, map_st_2, map_st_3, map_st_4, map_ae
 

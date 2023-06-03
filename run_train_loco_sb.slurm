@@ -33,4 +33,4 @@ python -u efficientad.py --dataset mvtec_loco --subdataset screw_bag --imagenet_
 
 ##Log this job's resource usage stats###
 my-job-stats -a -n -s
-##
+### TODO: time, note
