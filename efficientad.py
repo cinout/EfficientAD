@@ -310,7 +310,9 @@ def main():
             f">>> minmax teacher_output_st_3: {torch.min(teacher_output_st_3)} {torch.max(teacher_output_st_3)}"
         )
         sorted_value, _ = torch.sort(torch.flatten(teacher_output_st_3))
-        print(f">>> sorted teacher_output_st_3: {sorted_value}")
+        print(
+            f">>> sorted teacher_output_st_3: {sorted_value} {sorted_value[10]} {sorted_value[50]} {sorted_value[100]} {sorted_value[200]}"
+        )
 
         loss_hard_2 = torch.mean(distance_st_2[distance_st_2 >= d_hard_2])
         loss_hard_3 = torch.mean(distance_st_3[distance_st_3 >= d_hard_3])
