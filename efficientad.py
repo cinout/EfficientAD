@@ -285,8 +285,9 @@ def main():
                 image_penalty = image_penalty.cuda()
         with torch.no_grad():
             teacher_output_st_2, teacher_output_st_3, teacher_output_st_4 = teacher(
-                image_st
+                image_st,trackmode=True
             )
+            exit()
             teacher_output_st_2 = (teacher_output_st_2 - teacher_mean_2) / teacher_std_2
             teacher_output_st_3 = (teacher_output_st_3 - teacher_mean_3) / teacher_std_3
             teacher_output_st_4 = (teacher_output_st_4 - teacher_mean_4) / teacher_std_4
@@ -688,10 +689,7 @@ def teacher_normalization(teacher, train_loader):
         if on_gpu:
             train_image = train_image.cuda()
         teacher_output_2, teacher_output_3, teacher_output_4 = teacher(train_image)
-        print(teacher_output_3)
-        print(torch.min(teacher_output_3),torch.max(teacher_output_3))
-        # TODO: remove
-        exit()
+
         mean_output_2 = torch.mean(teacher_output_2, dim=[0, 2, 3])
         mean_output_3 = torch.mean(teacher_output_3, dim=[0, 2, 3])
         mean_output_4 = torch.mean(teacher_output_4, dim=[0, 2, 3])
