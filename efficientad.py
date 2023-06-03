@@ -11,7 +11,7 @@ import os
 import random
 from tqdm import tqdm
 from common import (
-    get_autoencoder,
+    Autoencoder,
     get_pdn_small,
     get_pdn_medium,
     ImageFolderWithoutTarget,
@@ -67,6 +67,7 @@ def get_argparse():
         help="Downloaded Mvtec LOCO dataset",
     )
     parser.add_argument("-t", "--train_steps", type=int, default=70000)  # TODO: 70000
+    parser.add_argument("--note",type=str,default="")
     return parser.parse_args()
 
 
@@ -103,6 +104,19 @@ def main():
     random.seed(seed)
 
     config = get_argparse()
+
+    if config.subdataset == "breakfast_box":
+        config.output_dir = config.output_dir + "_[bb]"
+    elif config.subdataset == "juice_bottle":
+        config.output_dir = config.output_dir + "_[jb]"
+    elif config.subdataset == "pushpins":
+        config.output_dir = config.output_dir + "_[pp]"
+    elif config.subdataset == "screw_bag":
+        config.output_dir = config.output_dir + "_[sb]"
+    elif config.subdataset == "splicing_connectors":
+        config.output_dir = config.output_dir + "_[sc]"
+    else:
+        raise ValueError(f"unknown subdataset name {config.subdataset}")
 
     print(
         "\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(config)).items()))
@@ -194,7 +208,8 @@ def main():
         raise Exception()
     state_dict = torch.load(config.weights, map_location="cpu")
     teacher.load_state_dict(state_dict)
-    autoencoder = get_autoencoder(out_channels)
+    # autoencoder = get_autoencoder(out_channels)
+    autoencoder = Autoencoder(out_channels=out_channels)
 
     # teacher frozen
     teacher.eval()

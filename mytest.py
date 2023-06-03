@@ -1,9 +1,12 @@
 import torch
 
-image_size = 20
-map_st = torch.randn((4, 1, 8, 8))
-print(map_st.shape)
-map_st = torch.nn.functional.interpolate(
-    map_st, (image_size, image_size), mode="bilinear"
-)
-print(map_st.shape)
+
+_num_embeddings = 10
+bhw = 8
+
+encoding_indices = torch.randint(0, 10, (bhw, 1))  # shape: (BHW, 1)
+encodings = torch.zeros(encoding_indices.shape[0], _num_embeddings)  # shape: (BHW, N)
+print(encodings)
+encodings.scatter_(1, encoding_indices, 1)
+print("=======")
+print(encodings)

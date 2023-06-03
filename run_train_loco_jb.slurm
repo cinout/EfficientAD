@@ -29,7 +29,7 @@ conda activate ds2
 set -e
 set -x
 
-python -u efficientad.py --dataset mvtec_loco --subdataset juice_bottle --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train
+python -u efficientad.py --dataset mvtec_loco --subdataset juice_bottle --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train --note "add code book to encoder"
 
 ##Log this job's resource usage stats###
 my-job-stats -a -n -s

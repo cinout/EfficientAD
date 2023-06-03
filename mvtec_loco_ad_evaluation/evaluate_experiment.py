@@ -151,22 +151,21 @@ def main():
         filename = file_path_partition[-1].split(".tiff")[0]
         anomaly_type = file_path_partition[-2]
 
-        # TODO: uncomment
-        # # get raw image
-        # raw_img_path = os.path.join(
-        #     args.dataset_base_dir, subclass, "test", anomaly_type, filename + ".png"
-        # )
-        # raw_img = np.array(cv2.imread(raw_img_path, cv2.IMREAD_COLOR))
+        # get raw image
+        raw_img_path = os.path.join(
+            args.dataset_base_dir, subclass, "test", anomaly_type, filename + ".png"
+        )
+        raw_img = np.array(cv2.imread(raw_img_path, cv2.IMREAD_COLOR))
 
-        # # get heatmap
-        # pred_mask = np.uint8(normalizeData(file_map) * 255)
-        # heatmap = cv2.applyColorMap(pred_mask, cv2.COLORMAP_JET)
-        # hmap_overlay_gt_img = heatmap * heatmap_alpha + raw_img * (1.0 - heatmap_alpha)
+        # get heatmap
+        pred_mask = np.uint8(normalizeData(file_map) * 255)
+        heatmap = cv2.applyColorMap(pred_mask, cv2.COLORMAP_JET)
+        hmap_overlay_gt_img = heatmap * heatmap_alpha + raw_img * (1.0 - heatmap_alpha)
 
-        # cv2.imwrite(
-        #     f"{visual_folder}/{anomaly_type}_{filename}_heatmap.jpg",
-        #     hmap_overlay_gt_img,
-        # )
+        cv2.imwrite(
+            f"{visual_folder}/{anomaly_type}_{filename}_heatmap.jpg",
+            hmap_overlay_gt_img,
+        )
 
         if anomaly_type == "structural_anomalies":
             # get structural gt mask
@@ -184,8 +183,6 @@ def main():
                 gt_mask,
             )
 
-    # TODO: remove later
-    exit()
     # Collect relevant metrics based on the ground truth and anomaly maps.
     metrics_aggregator = MetricsAggregator(
         gt_maps=gt_maps,
