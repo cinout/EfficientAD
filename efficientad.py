@@ -292,18 +292,27 @@ def main():
         student_output_st_2, student_output_st_3, student_output_st_4 = student(
             image_st
         )
+        print(f">>> student_output_st_2: {student_output_st_2}")
+        print(f">>> student_output_st_3: {student_output_st_3}")
+        print(f">>> student_output_st_4: {student_output_st_4}")
 
         distance_st_2 = (teacher_output_st_2 - student_output_st_2) ** 2
         distance_st_3 = (teacher_output_st_3 - student_output_st_3) ** 2
         distance_st_4 = (
             teacher_output_st_4 - student_output_st_4[:, :out_channels]
         ) ** 2
+        print(f">>> distance_st_2: {distance_st_2}")
+        print(f">>> distance_st_3: {distance_st_3}")
+        print(f">>> distance_st_4: {distance_st_4}")
         d_hard_2 = torch.quantile(distance_st_2, q=0.999)
         d_hard_3 = torch.quantile(distance_st_3, q=0.999)
         d_hard_4 = torch.quantile(distance_st_4, q=0.999)
         loss_hard_2 = torch.mean(distance_st_2[distance_st_2 >= d_hard_2])
         loss_hard_3 = torch.mean(distance_st_3[distance_st_3 >= d_hard_3])
         loss_hard_4 = torch.mean(distance_st_4[distance_st_4 >= d_hard_4])
+        print(f">>> loss_hard_2: {loss_hard_2}")
+        print(f">>> loss_hard_3: {loss_hard_3}")
+        print(f">>> loss_hard_4: {loss_hard_4}")
 
         if image_penalty is not None:
             student_output_penalty = student(image_penalty)[2][:, :out_channels]
@@ -328,8 +337,15 @@ def main():
         ]  # the second half of student outputs
         distance_ae = (teacher_output_ae_4 - ae_output) ** 2
         distance_stae = (ae_output - student_output_ae) ** 2
+        print(f">>> distance_ae: {distance_ae}")
+        print(f">>> distance_stae: {distance_stae}")
+
         loss_ae = torch.mean(distance_ae)
         loss_stae = torch.mean(distance_stae)
+        print(f">>> loss_st: {loss_st}")
+        print(f">>> loss_ae: {loss_ae}")
+        print(f">>> loss_stae: {loss_stae}")
+
         loss_total = loss_st + loss_ae + loss_stae
 
         optimizer.zero_grad()
@@ -554,11 +570,6 @@ def predict(
 
     autoencoder_output = autoencoder(image)
 
-    print(">>> student_output_2:")
-    print(student_output_2)
-    print(">>> autoencoder_output:")
-    print(autoencoder_output)
-
     map_st_2 = torch.mean(
         (teacher_output_2 - student_output_2) ** 2, dim=1, keepdim=True
     )
@@ -667,6 +678,15 @@ def map_normalization(
     q_st_end_4 = torch.quantile(maps_st_4, q=0.995)
     q_ae_start = torch.quantile(maps_ae, q=0.9)
     q_ae_end = torch.quantile(maps_ae, q=0.995)
+    # print(">>> q_st_end:")
+    # print(q_st_start_2)
+    # print(q_st_end_2)
+    # print(q_st_start_3)
+    # print(q_st_end_3)
+    # print(q_st_start_4)
+    # print(q_st_end_4)
+    # print(q_ae_start)
+    # print(q_ae_end)
     return (
         q_st_start_2,
         q_st_end_2,
