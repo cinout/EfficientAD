@@ -107,6 +107,8 @@ def parse_arguments():
         help="UNIX niceness of all evaluation processes.",
     )
 
+    parser.add_argument("--timestamp", type=str)
+
     args = parser.parse_args()
 
     return args
@@ -138,7 +140,8 @@ def main():
 
     # generate visual maps
     subclass = args.object_name
-    visual_folder = f"visual_{subclass}/"
+    timestamp = args.timestamp
+    visual_folder = f"visual_{timestamp}/"
     os.mkdir(visual_folder)
     heatmap_alpha = 0.5
 
