@@ -305,18 +305,12 @@ def main():
         d_hard_3 = torch.quantile(distance_st_3, q=0.999)
         d_hard_4 = torch.quantile(distance_st_4, q=0.999)
 
-        print(f">>> teacher_output_st_2: {teacher_output_st_2}")
-        print(
-            f">>> minmax teacher_output_st_2: {torch.min(teacher_output_st_2)} {torch.max(teacher_output_st_2)}"
-        )
         print(f">>> teacher_output_st_3: {teacher_output_st_3}")
         print(
             f">>> minmax teacher_output_st_3: {torch.min(teacher_output_st_3)} {torch.max(teacher_output_st_3)}"
         )
-        print(f">>> teacher_output_st_4: {teacher_output_st_4}")
-        print(
-            f">>> minmax teacher_output_st_4: {torch.min(teacher_output_st_4)} {torch.max(teacher_output_st_4)}"
-        )
+        sorted, _ = torch.sort(torch.flatten(teacher_output_st_3))
+        print(f">>> sorted teacher_output_st_3: {sorted}")
 
         loss_hard_2 = torch.mean(distance_st_2[distance_st_2 >= d_hard_2])
         loss_hard_3 = torch.mean(distance_st_3[distance_st_3 >= d_hard_3])
