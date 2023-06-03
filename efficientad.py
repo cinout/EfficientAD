@@ -285,8 +285,10 @@ def main():
                 image_penalty = image_penalty.cuda()
         with torch.no_grad():
             teacher_output_st_2, teacher_output_st_3, teacher_output_st_4 = teacher(
-                image_st,trackmode=True
+                image_st, trackmode=True
             )
+            print(teacher_output_st_3)
+            print(torch.min(teacher_output_st_3), torch.max(teacher_output_st_3))
             exit()
             teacher_output_st_2 = (teacher_output_st_2 - teacher_mean_2) / teacher_std_2
             teacher_output_st_3 = (teacher_output_st_3 - teacher_mean_3) / teacher_std_3
