@@ -211,6 +211,9 @@ def main():
         raise Exception()
     state_dict = torch.load(config.weights, map_location=device)
 
+    print("teacher before:", teacher.state_dict())
+    print(f">>> state_dict.items(): {state_dict.items()}")
+
     pretrained_model = {}
     for k, v in state_dict.items():
         if k == "0.weight":
@@ -232,8 +235,8 @@ def main():
         else:
             raise ValueError("unknown state_dict key")
 
-    teacher.load_state_dict(pretrained_model)
-    print(teacher)
+    teacher.load_state_dict(pretrained_model, strict=False)
+    print("teacher after:", teacher.state_dict())
 
     # autoencoder = get_autoencoder(out_channels)
     autoencoder = Autoencoder(out_channels=out_channels)
