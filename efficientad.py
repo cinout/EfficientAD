@@ -599,9 +599,9 @@ def predict(
         0.5 * (map_st_2 / 3.0 + map_st_3 / 3.0 + map_st_4 / 3.0) + 0.5 * map_ae
     )
 
-    print(torch.isnan(map_st_2).nonzero().squeeze())
-    print(torch.isnan(map_st_3).nonzero().squeeze())
-    print(torch.isnan(map_st_4).nonzero().squeeze())
+    print(~torch.isnan(map_st_2).nonzero().squeeze())
+    print(~torch.isnan(map_st_3).nonzero().squeeze())
+    print(~torch.isnan(map_st_4).nonzero().squeeze())
     exit()
 
     return map_combined, map_st_2, map_st_3, map_st_4, map_ae
