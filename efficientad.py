@@ -66,7 +66,7 @@ def get_argparse():
         default="./datasets/loco",
         help="Downloaded Mvtec LOCO dataset",
     )
-    parser.add_argument("-t", "--train_steps", type=int, default=100)  # TODO: 70000
+    parser.add_argument("-t", "--train_steps", type=int, default=70000)  # TODO: 70000
     parser.add_argument("--note", type=str, default="")
     return parser.parse_args()
 
@@ -287,26 +287,11 @@ def main():
             teacher_output_st_2, teacher_output_st_3, teacher_output_st_4 = teacher(
                 image_st, trackmode=True
             )
-            # print("==============teacher_output_st_3=============")
-            # print(teacher_output_st_3)
-            # print(torch.min(teacher_output_st_3), torch.max(teacher_output_st_3))
+
             teacher_output_st_2 = (teacher_output_st_2 - teacher_mean_2) / teacher_std_2
             teacher_output_st_3 = (teacher_output_st_3 - teacher_mean_3) / teacher_std_3
             teacher_output_st_4 = (teacher_output_st_4 - teacher_mean_4) / teacher_std_4
-            # print("==============teacher_std_2=============")
-            # print(teacher_std_2)
-            # print(torch.min(teacher_std_2), torch.max(teacher_std_2))
-            # print("==============teacher_std_3=============")
-            # print(teacher_std_3)
-            # print(torch.min(teacher_std_3), torch.max(teacher_std_3))
-            # print("==============teacher_std_4=============")
-            # print(teacher_std_4)
-            # print(torch.min(teacher_std_4), torch.max(teacher_std_4))
-            # print("==============teacher_output_st_3 (AGAIN)=============")
-            # print(teacher_output_st_3)
-            # print(torch.min(teacher_output_st_3), torch.max(teacher_output_st_3))
 
-            # exit()
         student_output_st_2, student_output_st_3, student_output_st_4 = student(
             image_st
         )
@@ -332,10 +317,10 @@ def main():
             student_output_penalty = student(image_penalty)[2][:, :out_channels]
             loss_penalty = torch.mean(student_output_penalty**2)
             loss_st = (
-                loss_hard_2 / 3.0 + loss_hard_3 / 3.0 + loss_hard_4 / 3.0 + loss_penalty
+                loss_hard_2 * 0.3 + loss_hard_3 * 0.3 + loss_hard_4 * 0.4 + loss_penalty
             )
         else:
-            loss_st = loss_hard_2 / 3.0 + loss_hard_3 / 3.0 + loss_hard_4 / 3.0
+            loss_st = loss_hard_2 * 0.3 + loss_hard_3 * 0.3 + loss_hard_4 * 0.4
 
         ae_output = autoencoder(image_ae)
 
@@ -621,7 +606,7 @@ def predict(
     if q_ae_start is not None:
         map_ae = 0.1 * (map_ae - q_ae_start) / (q_ae_end - q_ae_start)
     map_combined = (
-        0.5 * (map_st_2 / 3.0 + map_st_3 / 3.0 + map_st_4 / 3.0) + 0.5 * map_ae
+        0.5 * (map_st_2 * 0.3 + map_st_3 * 0.3 + map_st_4 * 0.4) + 0.5 * map_ae
     )
 
     return map_combined, map_st_2, map_st_3, map_st_4, map_ae
