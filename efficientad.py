@@ -12,7 +12,7 @@ import random
 from tqdm import tqdm
 from common import (
     Autoencoder,
-    get_pdn_small,
+    PDN_Small,
     get_pdn_medium,
     ImageFolderWithoutTarget,
     ImageFolderWithPath,
@@ -66,8 +66,8 @@ def get_argparse():
         default="./datasets/loco",
         help="Downloaded Mvtec LOCO dataset",
     )
-    parser.add_argument("-t", "--train_steps", type=int, default=70000)  # TODO: 70000
-    parser.add_argument("--note",type=str,default="")
+    parser.add_argument("-t", "--train_steps", type=int, default=100)  # TODO: 70000
+    parser.add_argument("--note", type=str, default="")
     return parser.parse_args()
 
 
@@ -199,15 +199,40 @@ def main():
 
     # create models
     if config.model_size == "small":
-        teacher = get_pdn_small(out_channels, padding=True)
-        student = get_pdn_small(2 * out_channels, padding=True)
+        teacher = PDN_Small(out_channels=out_channels, padding=True)
+        student = PDN_Small(out_channels=2 * out_channels, padding=True)
+        # teacher = get_pdn_small(out_channels, padding=True)
+        # student = get_pdn_small(2 * out_channels, padding=True)
     elif config.model_size == "medium":
         teacher = get_pdn_medium(out_channels, padding=True)
         student = get_pdn_medium(2 * out_channels, padding=True)
     else:
         raise Exception()
     state_dict = torch.load(config.weights, map_location="cpu")
-    teacher.load_state_dict(state_dict)
+
+    pretrained_model = {}
+    for k, v in state_dict.items():
+        if k == "0.weight":
+            pretrained_model["conv1.weight"] = v
+        elif k == "0.bias":
+            pretrained_model["conv1.bias"] = v
+        elif k == "3.weight":
+            pretrained_model["conv2.weight"] = v
+        elif k == "3.bias":
+            pretrained_model["conv2.bias"] = v
+        elif k == "6.weight":
+            pretrained_model["conv3.weight"] = v
+        elif k == "6.bias":
+            pretrained_model["conv3.bias"] = v
+        elif k == "8.weight":
+            pretrained_model["conv4.weight"] = v
+        elif k == "8.bias":
+            pretrained_model["conv4.bias"] = v
+        else:
+            raise ValueError("unknown state_dict key")
+
+    teacher.load_state_dict(pretrained_model)
+
     # autoencoder = get_autoencoder(out_channels)
     autoencoder = Autoencoder(out_channels=out_channels)
 
@@ -222,7 +247,14 @@ def main():
         autoencoder.cuda()
 
     # TODO: uncomment
-    teacher_mean, teacher_std = teacher_normalization(teacher, train_loader)
+    (
+        teacher_mean_2,
+        teacher_std_2,
+        teacher_mean_3,
+        teacher_std_3,
+        teacher_mean_4,
+        teacher_std_4,
+    ) = teacher_normalization(teacher, train_loader)
 
     #### TODO: hack code here, remove later
     # with open("teacher_mean.t", "rb") as f:
@@ -251,31 +283,50 @@ def main():
             if image_penalty is not None:
                 image_penalty = image_penalty.cuda()
         with torch.no_grad():
-            teacher_output_st = teacher(image_st)
-            teacher_output_st = (teacher_output_st - teacher_mean) / teacher_std
-        student_output_st = student(image_st)[
-            :, :out_channels
-        ]  # the first half of student outputs
-        distance_st = (teacher_output_st - student_output_st) ** 2
-        d_hard = torch.quantile(distance_st, q=0.999)
-        loss_hard = torch.mean(distance_st[distance_st >= d_hard])
+            teacher_output_st_2, teacher_output_st_3, teacher_output_st_4 = teacher(
+                image_st
+            )
+            teacher_output_st_2 = (teacher_output_st_2 - teacher_mean_2) / teacher_std_2
+            teacher_output_st_3 = (teacher_output_st_3 - teacher_mean_3) / teacher_std_3
+            teacher_output_st_4 = (teacher_output_st_4 - teacher_mean_4) / teacher_std_4
+        student_output_st_2, student_output_st_3, student_output_st_4 = student(
+            image_st
+        )
+
+        distance_st_2 = (teacher_output_st_2 - student_output_st_2) ** 2
+        distance_st_3 = (teacher_output_st_3 - student_output_st_3) ** 2
+        distance_st_4 = (
+            teacher_output_st_4 - student_output_st_4[:, :out_channels]
+        ) ** 2
+        d_hard_2 = torch.quantile(distance_st_2, q=0.999)
+        d_hard_3 = torch.quantile(distance_st_3, q=0.999)
+        d_hard_4 = torch.quantile(distance_st_4, q=0.999)
+        loss_hard_2 = torch.mean(distance_st_2[distance_st_2 >= d_hard_2])
+        loss_hard_3 = torch.mean(distance_st_3[distance_st_3 >= d_hard_3])
+        loss_hard_4 = torch.mean(distance_st_4[distance_st_4 >= d_hard_4])
 
         if image_penalty is not None:
-            student_output_penalty = student(image_penalty)[:, :out_channels]
+            student_output_penalty = student(image_penalty)[2][:, :out_channels]
             loss_penalty = torch.mean(student_output_penalty**2)
-            loss_st = loss_hard + loss_penalty
+            loss_st = (
+                loss_hard_2 / 3.0 + loss_hard_3 / 3.0 + loss_hard_4 / 3.0 + loss_penalty
+            )
         else:
-            loss_st = loss_hard
+            loss_st = loss_hard_2 / 3.0 + loss_hard_3 / 3.0 + loss_hard_4 / 3.0
 
         ae_output = autoencoder(image_ae)
 
         with torch.no_grad():
-            teacher_output_ae = teacher(image_ae)
-            teacher_output_ae = (teacher_output_ae - teacher_mean) / teacher_std
-        student_output_ae = student(image_ae)[
+            teacher_output_ae_2, teacher_output_ae_3, teacher_output_ae_4 = teacher(
+                image_ae
+            )
+            teacher_output_ae_2 = (teacher_output_ae_2 - teacher_mean_2) / teacher_std_2
+            teacher_output_ae_3 = (teacher_output_ae_3 - teacher_mean_3) / teacher_std_3
+            teacher_output_ae_4 = (teacher_output_ae_4 - teacher_mean_4) / teacher_std_4
+        student_output_ae = student(image_ae)[2][
             :, out_channels:
         ]  # the second half of student outputs
-        distance_ae = (teacher_output_ae - ae_output) ** 2
+        distance_ae = (teacher_output_ae_4 - ae_output) ** 2
         distance_stae = (ae_output - student_output_ae) ** 2
         loss_ae = torch.mean(distance_ae)
         loss_stae = torch.mean(distance_stae)
@@ -345,13 +396,26 @@ def main():
     torch.save(student, os.path.join(train_output_dir, "student_final.pth"))
     torch.save(autoencoder, os.path.join(train_output_dir, "autoencoder_final.pth"))
 
-    q_st_start, q_st_end, q_ae_start, q_ae_end = map_normalization(
+    (
+        q_st_start_2,
+        q_st_end_2,
+        q_st_start_3,
+        q_st_end_3,
+        q_st_start_4,
+        q_st_end_4,
+        q_ae_start,
+        q_ae_end,
+    ) = map_normalization(
         validation_loader=validation_loader,
         teacher=teacher,
         student=student,
         autoencoder=autoencoder,
-        teacher_mean=teacher_mean,
-        teacher_std=teacher_std,
+        teacher_mean_2=teacher_mean_2,
+        teacher_mean_3=teacher_mean_3,
+        teacher_mean_4=teacher_mean_4,
+        teacher_std_2=teacher_std_2,
+        teacher_std_3=teacher_std_3,
+        teacher_std_4=teacher_std_4,
         desc="Final map normalization",
     )
     auc = test(
@@ -359,10 +423,18 @@ def main():
         teacher=teacher,
         student=student,
         autoencoder=autoencoder,
-        teacher_mean=teacher_mean,
-        teacher_std=teacher_std,
-        q_st_start=q_st_start,
-        q_st_end=q_st_end,
+        teacher_mean_2=teacher_mean_2,
+        teacher_mean_3=teacher_mean_3,
+        teacher_mean_4=teacher_mean_4,
+        teacher_std_2=teacher_std_2,
+        teacher_std_3=teacher_std_3,
+        teacher_std_4=teacher_std_4,
+        q_st_start_2=q_st_start_2,
+        q_st_start_3=q_st_start_3,
+        q_st_start_4=q_st_start_4,
+        q_st_end_2=q_st_end_2,
+        q_st_end_3=q_st_end_3,
+        q_st_end_4=q_st_end_4,
         q_ae_start=q_ae_start,
         q_ae_end=q_ae_end,
         test_output_dir=test_output_dir,
@@ -377,10 +449,18 @@ def test(
     teacher,
     student,
     autoencoder,
-    teacher_mean,
-    teacher_std,
-    q_st_start,
-    q_st_end,
+    teacher_mean_2,
+    teacher_mean_3,
+    teacher_mean_4,
+    teacher_std_2,
+    teacher_std_3,
+    teacher_std_4,
+    q_st_start_2,
+    q_st_start_3,
+    q_st_start_4,
+    q_st_end_2,
+    q_st_end_3,
+    q_st_end_4,
     q_ae_start,
     q_ae_end,
     test_output_dir=None,
@@ -395,15 +475,24 @@ def test(
         image = image[None]
         if on_gpu:
             image = image.cuda()
-        map_combined, map_st, map_ae = predict(
+
+        map_combined, map_st_2, map_st_3, map_st_4, map_ae = predict(
             image=image,
             teacher=teacher,
             student=student,
             autoencoder=autoencoder,
-            teacher_mean=teacher_mean,
-            teacher_std=teacher_std,
-            q_st_start=q_st_start,
-            q_st_end=q_st_end,
+            teacher_mean_2=teacher_mean_2,
+            teacher_mean_3=teacher_mean_3,
+            teacher_mean_4=teacher_mean_4,
+            teacher_std_2=teacher_std_2,
+            teacher_std_3=teacher_std_3,
+            teacher_std_4=teacher_std_4,
+            q_st_start_2=q_st_start_2,
+            q_st_start_3=q_st_start_3,
+            q_st_start_4=q_st_start_4,
+            q_st_end_2=q_st_end_2,
+            q_st_end_3=q_st_end_3,
+            q_st_end_4=q_st_end_4,
             q_ae_start=q_ae_start,
             q_ae_end=q_ae_end,
         )
@@ -441,41 +530,76 @@ def predict(
     teacher,
     student,
     autoencoder,
-    teacher_mean,
-    teacher_std,
-    q_st_start=None,
-    q_st_end=None,
+    teacher_mean_2,
+    teacher_mean_3,
+    teacher_mean_4,
+    teacher_std_2,
+    teacher_std_3,
+    teacher_std_4,
+    q_st_start_2=None,
+    q_st_start_3=None,
+    q_st_start_4=None,
+    q_st_end_2=None,
+    q_st_end_3=None,
+    q_st_end_4=None,
     q_ae_start=None,
     q_ae_end=None,
 ):
-    teacher_output = teacher(image)
-    teacher_output = (teacher_output - teacher_mean) / teacher_std
-    student_output = student(image)
+    teacher_output_2, teacher_output_3, teacher_output_4 = teacher(image)
+    teacher_output_2 = (teacher_output_2 - teacher_mean_2) / teacher_std_2
+    teacher_output_3 = (teacher_output_3 - teacher_mean_3) / teacher_std_3
+    teacher_output_4 = (teacher_output_4 - teacher_mean_4) / teacher_std_4
+
+    student_output_2, student_output_3, student_output_4 = student(image)
+
     autoencoder_output = autoencoder(image)
-    map_st = torch.mean(
-        (teacher_output - student_output[:, :out_channels]) ** 2, dim=1, keepdim=True
+
+    map_st_2 = torch.mean(
+        (teacher_output_2 - student_output_2) ** 2, dim=1, keepdim=True
+    )
+    map_st_3 = torch.mean(
+        (teacher_output_3 - student_output_3) ** 2, dim=1, keepdim=True
+    )
+    map_st_4 = torch.mean(
+        (teacher_output_4 - student_output_4[:, :out_channels]) ** 2,
+        dim=1,
+        keepdim=True,
     )  # shape: (bs, 1, h, w)
+
     map_ae = torch.mean(
-        (autoencoder_output - student_output[:, out_channels:]) ** 2,
+        (autoencoder_output - student_output_4[:, out_channels:]) ** 2,
         dim=1,
         keepdim=True,
     )  # shape: (bs, 1, h, w)
 
     # upsample map_st and map_ae to 256*256
-    map_st = torch.nn.functional.interpolate(
-        map_st, (image_size, image_size), mode="bilinear"
+    map_st_2 = torch.nn.functional.interpolate(
+        map_st_2, (image_size, image_size), mode="bilinear"
+    )
+    map_st_3 = torch.nn.functional.interpolate(
+        map_st_3, (image_size, image_size), mode="bilinear"
+    )
+    map_st_4 = torch.nn.functional.interpolate(
+        map_st_4, (image_size, image_size), mode="bilinear"
     )
     map_ae = torch.nn.functional.interpolate(
         map_ae, (image_size, image_size), mode="bilinear"
     )
 
-    if q_st_start is not None:
-        map_st = 0.1 * (map_st - q_st_start) / (q_st_end - q_st_start)
+    if q_st_start_2 is not None:
+        map_st_2 = 0.1 * (map_st_2 - q_st_start_2) / (q_st_end_2 - q_st_start_2)
+    if q_st_start_3 is not None:
+        map_st_3 = 0.1 * (map_st_3 - q_st_start_3) / (q_st_end_3 - q_st_start_3)
+    if q_st_start_4 is not None:
+        map_st_4 = 0.1 * (map_st_4 - q_st_start_4) / (q_st_end_4 - q_st_start_4)
+
     if q_ae_start is not None:
         map_ae = 0.1 * (map_ae - q_ae_start) / (q_ae_end - q_ae_start)
-    map_combined = 0.5 * map_st + 0.5 * map_ae
+    map_combined = (
+        0.5 * (map_st_2 / 3.0 + map_st_3 / 3.0 + map_st_4 / 3.0) + 0.5 * map_ae
+    )
 
-    return map_combined, map_st, map_ae
+    return map_combined, map_st_2, map_st_3, map_st_4, map_ae
 
 
 @torch.no_grad()
@@ -484,60 +608,120 @@ def map_normalization(
     teacher,
     student,
     autoencoder,
-    teacher_mean,
-    teacher_std,
+    teacher_mean_2,
+    teacher_mean_3,
+    teacher_mean_4,
+    teacher_std_2,
+    teacher_std_3,
+    teacher_std_4,
     desc="Map normalization",
 ):
-    maps_st = []
+    maps_st_2 = []
+    maps_st_3 = []
+    maps_st_4 = []
     maps_ae = []
     # ignore augmented ae image
     for image, _ in tqdm(validation_loader, desc=desc):
         if on_gpu:
             image = image.cuda()
-        map_combined, map_st, map_ae = predict(
+        map_combined, map_st_2, map_st_3, map_st_4, map_ae = predict(
             image=image,
             teacher=teacher,
             student=student,
             autoencoder=autoencoder,
-            teacher_mean=teacher_mean,
-            teacher_std=teacher_std,
+            teacher_mean_2=teacher_mean_2,
+            teacher_mean_3=teacher_mean_3,
+            teacher_mean_4=teacher_mean_4,
+            teacher_std_2=teacher_std_2,
+            teacher_std_3=teacher_std_3,
+            teacher_std_4=teacher_std_4,
         )
-        maps_st.append(map_st)
+        maps_st_2.append(map_st_2)
+        maps_st_3.append(map_st_3)
+        maps_st_4.append(map_st_4)
         maps_ae.append(map_ae)
-    maps_st = torch.cat(maps_st)
+
+    maps_st_2 = torch.cat(maps_st_2)
+    maps_st_3 = torch.cat(maps_st_3)
+    maps_st_4 = torch.cat(maps_st_4)
     maps_ae = torch.cat(maps_ae)
-    q_st_start = torch.quantile(maps_st, q=0.9)
-    q_st_end = torch.quantile(maps_st, q=0.995)
+
+    q_st_start_2 = torch.quantile(maps_st_2, q=0.9)
+    q_st_end_2 = torch.quantile(maps_st_2, q=0.995)
+    q_st_start_3 = torch.quantile(maps_st_3, q=0.9)
+    q_st_end_3 = torch.quantile(maps_st_3, q=0.995)
+    q_st_start_4 = torch.quantile(maps_st_4, q=0.9)
+    q_st_end_4 = torch.quantile(maps_st_4, q=0.995)
     q_ae_start = torch.quantile(maps_ae, q=0.9)
     q_ae_end = torch.quantile(maps_ae, q=0.995)
-    return q_st_start, q_st_end, q_ae_start, q_ae_end
+    return (
+        q_st_start_2,
+        q_st_end_2,
+        q_st_start_3,
+        q_st_end_3,
+        q_st_start_4,
+        q_st_end_4,
+        q_ae_start,
+        q_ae_end,
+    )
 
 
 @torch.no_grad()
 def teacher_normalization(teacher, train_loader):
-    mean_outputs = []
+    mean_outputs_2 = []
+    mean_outputs_3 = []
+    mean_outputs_4 = []
     for train_image, _ in tqdm(train_loader, desc="Computing mean of features"):
         if on_gpu:
             train_image = train_image.cuda()
-        teacher_output = teacher(train_image)
-        mean_output = torch.mean(teacher_output, dim=[0, 2, 3])
-        mean_outputs.append(mean_output)
-    channel_mean = torch.mean(torch.stack(mean_outputs), dim=0)
-    channel_mean = channel_mean[None, :, None, None]
+        teacher_output_2, teacher_output_3, teacher_output_4 = teacher(train_image)
+        mean_output_2 = torch.mean(teacher_output_2, dim=[0, 2, 3])
+        mean_output_3 = torch.mean(teacher_output_3, dim=[0, 2, 3])
+        mean_output_4 = torch.mean(teacher_output_4, dim=[0, 2, 3])
+        mean_outputs_2.append(mean_output_2)
+        mean_outputs_3.append(mean_output_3)
+        mean_outputs_4.append(mean_output_4)
+    channel_mean_2 = torch.mean(torch.stack(mean_outputs_2), dim=0)
+    channel_mean_3 = torch.mean(torch.stack(mean_outputs_3), dim=0)
+    channel_mean_4 = torch.mean(torch.stack(mean_outputs_4), dim=0)
+    channel_mean_2 = channel_mean_2[None, :, None, None]
+    channel_mean_3 = channel_mean_3[None, :, None, None]
+    channel_mean_4 = channel_mean_4[None, :, None, None]
 
-    mean_distances = []
+    mean_distances_2 = []
+    mean_distances_3 = []
+    mean_distances_4 = []
     for train_image, _ in tqdm(train_loader, desc="Computing std of features"):
         if on_gpu:
             train_image = train_image.cuda()
-        teacher_output = teacher(train_image)
-        distance = (teacher_output - channel_mean) ** 2
-        mean_distance = torch.mean(distance, dim=[0, 2, 3])
-        mean_distances.append(mean_distance)
-    channel_var = torch.mean(torch.stack(mean_distances), dim=0)
-    channel_var = channel_var[None, :, None, None]
-    channel_std = torch.sqrt(channel_var)
+        teacher_output_2, teacher_output_3, teacher_output_4 = teacher(train_image)
+        distance_2 = (teacher_output_2 - channel_mean_2) ** 2
+        distance_3 = (teacher_output_3 - channel_mean_3) ** 2
+        distance_4 = (teacher_output_4 - channel_mean_4) ** 2
+        mean_distance_2 = torch.mean(distance_2, dim=[0, 2, 3])
+        mean_distance_3 = torch.mean(distance_3, dim=[0, 2, 3])
+        mean_distance_4 = torch.mean(distance_4, dim=[0, 2, 3])
+        mean_distances_2.append(mean_distance_2)
+        mean_distances_3.append(mean_distance_3)
+        mean_distances_4.append(mean_distance_4)
+    channel_var_2 = torch.mean(torch.stack(mean_distances_2), dim=0)
+    channel_var_3 = torch.mean(torch.stack(mean_distances_3), dim=0)
+    channel_var_4 = torch.mean(torch.stack(mean_distances_4), dim=0)
+    channel_var_2 = channel_var_2[None, :, None, None]
+    channel_var_3 = channel_var_3[None, :, None, None]
+    channel_var_4 = channel_var_4[None, :, None, None]
+    channel_std_2 = torch.sqrt(channel_var_2)
+    channel_std_3 = torch.sqrt(channel_var_3)
+    channel_std_4 = torch.sqrt(channel_var_4)
 
-    return channel_mean, channel_std
+    return (
+        channel_mean_2,
+        channel_std_2,
+        channel_mean_3,
+        channel_std_3,
+        channel_mean_4,
+        channel_std_4,
+    )
 
 
 if __name__ == "__main__":

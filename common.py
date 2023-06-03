@@ -211,9 +211,9 @@ class Autoencoder(nn.Module):
         )
 
         # TODO: check if it works
-        self.enc_vq1 = VectorQuantizerEMA(num_embeddings=32, embedding_dim=64)
-        self.enc_vq2 = VectorQuantizerEMA(num_embeddings=16, embedding_dim=64)
-        self.enc_vq3 = VectorQuantizerEMA(num_embeddings=8, embedding_dim=64)
+        # self.enc_vq1 = VectorQuantizerEMA(num_embeddings=32, embedding_dim=64)
+        # self.enc_vq2 = VectorQuantizerEMA(num_embeddings=16, embedding_dim=64)
+        # self.enc_vq3 = VectorQuantizerEMA(num_embeddings=8, embedding_dim=64)
 
     def forward(self, x):
         # encoder
@@ -225,15 +225,15 @@ class Autoencoder(nn.Module):
 
         x = self.enc_conv3(x)
         x = self.relu(x)  # shape: [1, 64, 32, 32]
-        x = self.enc_vq1(x)
+        # x = self.enc_vq1(x)
 
         x = self.enc_conv4(x)
         x = self.relu(x)  # shape: [1, 64, 16, 16]
-        x = self.enc_vq2(x)
+        # x = self.enc_vq2(x)
 
         x = self.enc_conv5(x)
         x = self.relu(x)  # shape: [1, 64, 8, 8]
-        x = self.enc_vq3(x)
+        # x = self.enc_vq3(x)
 
         x = self.enc_conv6(x)  # shape: [1, 64, 1, 1]
 
@@ -294,6 +294,42 @@ def get_pdn_small(out_channels=384, padding=False):
         nn.ReLU(inplace=True),
         nn.Conv2d(in_channels=256, out_channels=out_channels, kernel_size=4),
     )
+
+
+class PDN_Small(nn.Module):
+    def __init__(self, out_channels=384, padding=False) -> None:
+        super().__init__()
+        pad_mult = 1 if padding else 0
+        self.conv1 = nn.Conv2d(
+            in_channels=3, out_channels=128, kernel_size=4, padding=3 * pad_mult
+        )
+        self.relu = nn.ReLU(inplace=True)
+        self.avg1 = nn.AvgPool2d(kernel_size=2, stride=2, padding=1 * pad_mult)
+        self.conv2 = nn.Conv2d(
+            in_channels=128, out_channels=256, kernel_size=4, padding=3 * pad_mult
+        )
+        self.avg2 = nn.AvgPool2d(kernel_size=2, stride=2, padding=1 * pad_mult)
+        self.conv3 = nn.Conv2d(
+            in_channels=256, out_channels=256, kernel_size=3, padding=1 * pad_mult
+        )
+        self.conv4 = nn.Conv2d(
+            in_channels=256, out_channels=out_channels, kernel_size=4
+        )
+
+    def forward(self, x):
+        x1 = self.conv1(x)
+        x1 = self.relu(x1)
+        x1 = self.avg1(x1)
+
+        x2 = self.conv2(x1)
+        x2 = self.relu(x2)
+        x2 = self.avg2(x2)
+
+        x3 = self.conv3(x2)
+        x3 = self.relu(x3)
+
+        x4 = self.conv4(x3)
+        return x2, x3, x4
 
 
 def get_pdn_medium(out_channels=384, padding=False):
