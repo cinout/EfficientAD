@@ -307,10 +307,18 @@ def main():
             f">>> minmax distance_st_2: {torch.min(distance_st_2)} {torch.max(distance_st_2)}"
         )
         print(f">>> d_hard_2: {d_hard_2}")
+
+        print(
+            f">>> minmax teacher_output_st_3: {torch.min(teacher_output_st_3)} {torch.max(teacher_output_st_3)}"
+        )
+        print(
+            f">>> minmax student_output_st_3: {torch.min(student_output_st_3)} {torch.max(student_output_st_3)}"
+        )
         print(
             f">>> minmax distance_st_3: {torch.min(distance_st_3)} {torch.max(distance_st_3)}"
         )
         print(f">>> d_hard_3: {d_hard_3}")
+
         print(
             f">>> minmax distance_st_4: {torch.min(distance_st_4)} {torch.max(distance_st_4)}"
         )
