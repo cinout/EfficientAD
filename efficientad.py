@@ -256,14 +256,6 @@ def main():
         teacher_std_4,
     ) = teacher_normalization(teacher, train_loader)
 
-    # print(">>> teacher's mean and std:")
-    # print(teacher_mean_2)
-    # print(teacher_std_2)
-    # print(teacher_mean_3)
-    # print(teacher_std_3)
-    # print(teacher_mean_4)
-    # print(teacher_std_4)
-
     #### TODO: hack code here, remove later
     # with open("teacher_mean.t", "rb") as f:
     #     teacher_mean = torch.load(f)
@@ -562,17 +554,10 @@ def predict(
 
     autoencoder_output = autoencoder(image)
 
-    print(">>> teacher_output_2:")
-    print(teacher_output_2)
-
-    print(">>> teacher_mean_2:")
-    print(teacher_mean_2)
-
-    print(">>> teacher_std_2:")
-    print(teacher_std_2)
-
     print(">>> student_output_2:")
     print(student_output_2)
+    print(">>> autoencoder_output:")
+    print(autoencoder_output)
 
     map_st_2 = torch.mean(
         (teacher_output_2 - student_output_2) ** 2, dim=1, keepdim=True
