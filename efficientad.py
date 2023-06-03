@@ -292,9 +292,6 @@ def main():
         student_output_st_2, student_output_st_3, student_output_st_4 = student(
             image_st
         )
-        print(f">>> student_output_st_2: {student_output_st_2}")
-        print(f">>> student_output_st_3: {student_output_st_3}")
-        print(f">>> student_output_st_4: {student_output_st_4}")
 
         distance_st_2 = (teacher_output_st_2 - student_output_st_2) ** 2
         distance_st_3 = (teacher_output_st_3 - student_output_st_3) ** 2
@@ -302,34 +299,18 @@ def main():
         distance_st_4 = (
             teacher_output_st_4 - student_output_st_4[:, :out_channels]
         ) ** 2
-        print(f">>> distance_st_2: {distance_st_2}")
-        print(f">>> distance_st_3: {distance_st_3}")
-        print(f">>> teacher_output_st_3.isNan: {torch.isnan(teacher_output_st_3).nonzero().squeeze()}")
-        print(f">>> student_output_st_3.isNan: {torch.isnan(student_output_st_3).nonzero().squeeze()}")
-        print(f">>> distance_st_3.isNan: {torch.isnan(distance_st_3).nonzero().squeeze()}")
 
-        print(f">>> distance_st_4: {distance_st_4}")
         d_hard_2 = torch.quantile(distance_st_2, q=0.999)
         d_hard_3 = torch.quantile(distance_st_3, q=0.999)
         d_hard_4 = torch.quantile(distance_st_4, q=0.999)
-        print(f">>> d_hard_2: {d_hard_2}")
+        print(
+            f">>> minmax distance_st_3: {torch.min(distance_st_3)} {torch.max(distance_st_3)}"
+        )
         print(f">>> d_hard_3: {d_hard_3}")
-        print(f">>> d_hard_4: {d_hard_4}")
+
         loss_hard_2 = torch.mean(distance_st_2[distance_st_2 >= d_hard_2])
         loss_hard_3 = torch.mean(distance_st_3[distance_st_3 >= d_hard_3])
         loss_hard_4 = torch.mean(distance_st_4[distance_st_4 >= d_hard_4])
-        print(
-            f">>> distance_st_2 >= d_hard_2: {(distance_st_2 >= d_hard_2).nonzero().squeeze()}"
-        )
-        print(
-            f">>> distance_st_3 >= d_hard_3: {(distance_st_3 >= d_hard_3).nonzero().squeeze()}"
-        )
-        print(
-            f">>> distance_st_4 >= d_hard_4: {(distance_st_4 >= d_hard_4).nonzero().squeeze()}"
-        )
-        print(f">>> loss_hard_2: {loss_hard_2}")
-        print(f">>> loss_hard_3: {loss_hard_3}")
-        print(f">>> loss_hard_4: {loss_hard_4}")
 
         if image_penalty is not None:
             student_output_penalty = student(image_penalty)[2][:, :out_channels]
@@ -354,14 +335,9 @@ def main():
         ]  # the second half of student outputs
         distance_ae = (teacher_output_ae_4 - ae_output) ** 2
         distance_stae = (ae_output - student_output_ae) ** 2
-        print(f">>> distance_ae: {distance_ae}")
-        print(f">>> distance_stae: {distance_stae}")
 
         loss_ae = torch.mean(distance_ae)
         loss_stae = torch.mean(distance_stae)
-        print(f">>> loss_st: {loss_st}")
-        print(f">>> loss_ae: {loss_ae}")
-        print(f">>> loss_stae: {loss_stae}")
 
         loss_total = loss_st + loss_ae + loss_stae
 
@@ -599,14 +575,6 @@ def predict(
         keepdim=True,
     )  # shape: (bs, 1, h, w)
 
-    print(">>> show map_st[s]:")
-    print(map_st_2)
-    print(torch.isnan(map_st_2).nonzero().squeeze())
-    print(torch.isnan(map_st_3).nonzero().squeeze())
-    print(torch.isnan(map_st_4).nonzero().squeeze())
-
-    exit()
-
     map_ae = torch.mean(
         (autoencoder_output - student_output_4[:, out_channels:]) ** 2,
         dim=1,
@@ -695,15 +663,7 @@ def map_normalization(
     q_st_end_4 = torch.quantile(maps_st_4, q=0.995)
     q_ae_start = torch.quantile(maps_ae, q=0.9)
     q_ae_end = torch.quantile(maps_ae, q=0.995)
-    # print(">>> q_st_end:")
-    # print(q_st_start_2)
-    # print(q_st_end_2)
-    # print(q_st_start_3)
-    # print(q_st_end_3)
-    # print(q_st_start_4)
-    # print(q_st_end_4)
-    # print(q_ae_start)
-    # print(q_ae_end)
+
     return (
         q_st_start_2,
         q_st_end_2,
