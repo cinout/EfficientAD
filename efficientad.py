@@ -303,26 +303,19 @@ def main():
         d_hard_2 = torch.quantile(distance_st_2, q=0.999)
         d_hard_3 = torch.quantile(distance_st_3, q=0.999)
         d_hard_4 = torch.quantile(distance_st_4, q=0.999)
-        print(
-            f">>> minmax distance_st_2: {torch.min(distance_st_2)} {torch.max(distance_st_2)}"
-        )
-        print(f">>> d_hard_2: {d_hard_2}")
 
+        print(f">>> teacher_output_st_2: {teacher_output_st_2}")
+        print(
+            f">>> minmax teacher_output_st_2: {torch.min(teacher_output_st_2)} {torch.max(teacher_output_st_2)}"
+        )
+        print(f">>> teacher_output_st_3: {teacher_output_st_3}")
         print(
             f">>> minmax teacher_output_st_3: {torch.min(teacher_output_st_3)} {torch.max(teacher_output_st_3)}"
         )
+        print(f">>> teacher_output_st_4: {teacher_output_st_4}")
         print(
-            f">>> minmax student_output_st_3: {torch.min(student_output_st_3)} {torch.max(student_output_st_3)}"
+            f">>> minmax teacher_output_st_4: {torch.min(teacher_output_st_4)} {torch.max(teacher_output_st_4)}"
         )
-        print(
-            f">>> minmax distance_st_3: {torch.min(distance_st_3)} {torch.max(distance_st_3)}"
-        )
-        print(f">>> d_hard_3: {d_hard_3}")
-
-        print(
-            f">>> minmax distance_st_4: {torch.min(distance_st_4)} {torch.max(distance_st_4)}"
-        )
-        print(f">>> d_hard_4: {d_hard_4}")
 
         loss_hard_2 = torch.mean(distance_st_2[distance_st_2 >= d_hard_2])
         loss_hard_3 = torch.mean(distance_st_3[distance_st_3 >= d_hard_3])
