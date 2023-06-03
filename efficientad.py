@@ -298,11 +298,16 @@ def main():
 
         distance_st_2 = (teacher_output_st_2 - student_output_st_2) ** 2
         distance_st_3 = (teacher_output_st_3 - student_output_st_3) ** 2
+
         distance_st_4 = (
             teacher_output_st_4 - student_output_st_4[:, :out_channels]
         ) ** 2
         print(f">>> distance_st_2: {distance_st_2}")
         print(f">>> distance_st_3: {distance_st_3}")
+        print(f">>> teacher_output_st_3.isNan: {torch.isnan(teacher_output_st_3).nonzero().squeeze()}")
+        print(f">>> student_output_st_3.isNan: {torch.isnan(student_output_st_3).nonzero().squeeze()}")
+        print(f">>> distance_st_3.isNan: {torch.isnan(distance_st_3).nonzero().squeeze()}")
+
         print(f">>> distance_st_4: {distance_st_4}")
         d_hard_2 = torch.quantile(distance_st_2, q=0.999)
         d_hard_3 = torch.quantile(distance_st_3, q=0.999)
@@ -313,9 +318,15 @@ def main():
         loss_hard_2 = torch.mean(distance_st_2[distance_st_2 >= d_hard_2])
         loss_hard_3 = torch.mean(distance_st_3[distance_st_3 >= d_hard_3])
         loss_hard_4 = torch.mean(distance_st_4[distance_st_4 >= d_hard_4])
-        print(f">>> distance_st_2 >= d_hard_2: {(distance_st_2 >= d_hard_2).nonzero().squeeze()}")
-        print(f">>> distance_st_3 >= d_hard_3: {(distance_st_3 >= d_hard_3).nonzero().squeeze()}")
-        print(f">>> distance_st_4 >= d_hard_4: {(distance_st_4 >= d_hard_4).nonzero().squeeze()}")
+        print(
+            f">>> distance_st_2 >= d_hard_2: {(distance_st_2 >= d_hard_2).nonzero().squeeze()}"
+        )
+        print(
+            f">>> distance_st_3 >= d_hard_3: {(distance_st_3 >= d_hard_3).nonzero().squeeze()}"
+        )
+        print(
+            f">>> distance_st_4 >= d_hard_4: {(distance_st_4 >= d_hard_4).nonzero().squeeze()}"
+        )
         print(f">>> loss_hard_2: {loss_hard_2}")
         print(f">>> loss_hard_3: {loss_hard_3}")
         print(f">>> loss_hard_4: {loss_hard_4}")
