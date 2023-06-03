@@ -287,12 +287,23 @@ def main():
             teacher_output_st_2, teacher_output_st_3, teacher_output_st_4 = teacher(
                 image_st, trackmode=True
             )
+            print("==============teacher_output_st_3=============")
             print(teacher_output_st_3)
             print(torch.min(teacher_output_st_3), torch.max(teacher_output_st_3))
-            exit()
             teacher_output_st_2 = (teacher_output_st_2 - teacher_mean_2) / teacher_std_2
             teacher_output_st_3 = (teacher_output_st_3 - teacher_mean_3) / teacher_std_3
             teacher_output_st_4 = (teacher_output_st_4 - teacher_mean_4) / teacher_std_4
+            print("==============teacher_mean_3=============")
+            print(teacher_mean_3)
+            print(torch.min(teacher_mean_3), torch.max(teacher_mean_3))
+            print("==============teacher_std_3=============")
+            print(teacher_std_3)
+            print(torch.min(teacher_std_3), torch.max(teacher_std_3))
+            print("==============teacher_output_st_3 (AGAIN)=============")
+            print(teacher_output_st_3)
+            print(torch.min(teacher_output_st_3), torch.max(teacher_output_st_3))
+            
+            exit()
         student_output_st_2, student_output_st_3, student_output_st_4 = student(
             image_st
         )
@@ -308,10 +319,7 @@ def main():
         d_hard_3 = torch.quantile(distance_st_3, q=0.999)
         d_hard_4 = torch.quantile(distance_st_4, q=0.999)
 
-        # print(f">>> teacher_output_st_3: {teacher_output_st_3}")
-        print(
-            f">>> minmax teacher_output_st_3: {torch.min(teacher_output_st_3)} {torch.max(teacher_output_st_3)}"
-        )
+   
         sorted_value, _ = torch.sort(torch.flatten(teacher_output_st_3))
 
         loss_hard_2 = torch.mean(distance_st_2[distance_st_2 >= d_hard_2])

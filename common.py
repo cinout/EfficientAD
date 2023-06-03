@@ -324,35 +324,18 @@ class PDN_Small(nn.Module):
 
     def forward(self, x, trackmode=False):
         x1 = self.conv1(x)
-        if trackmode:
-            print(">>> A")
         x1 = self.relu1(x1)
-        if trackmode:
-            print(">>> B")
         x1 = self.avg1(x1)
-        if trackmode:
-            print(">>> C")
 
         x2 = self.conv2(x1)
-        if trackmode:
-            print(">>> D")
         x2 = self.relu2(x2)
-        if trackmode:
-            print(">>> E")
         x2 = self.avg2(x2)
-        if trackmode:
-            print(">>> F")
 
         x3 = self.conv3(x2)
-        if trackmode:
-            print(">>> G")
         x3 = self.relu3(x3)
-        if trackmode:
-            print(">>> H")
 
         x4 = self.conv4(x3)
-        if trackmode:
-            print(">>> I")
+
         return x2, x3, x4
 
 
