@@ -66,7 +66,7 @@ def get_argparse():
         default="./datasets/loco",
         help="Downloaded Mvtec LOCO dataset",
     )
-    parser.add_argument("-t", "--train_steps", type=int, default=100)  # TODO: 70000
+    parser.add_argument("-t", "--train_steps", type=int, default=2000)  # TODO: 70000
     parser.add_argument("--note", type=str, default="")
     return parser.parse_args()
 
