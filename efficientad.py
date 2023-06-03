@@ -211,9 +211,6 @@ def main():
         raise Exception()
     state_dict = torch.load(config.weights, map_location=device)
 
-    print("teacher before:", teacher.state_dict())
-    print(f">>> state_dict.items(): {state_dict.items()}")
-
     pretrained_model = {}
     for k, v in state_dict.items():
         if k == "0.weight":
@@ -236,7 +233,6 @@ def main():
             raise ValueError("unknown state_dict key")
 
     teacher.load_state_dict(pretrained_model, strict=False)
-    print("teacher after:", teacher.state_dict())
 
     # autoencoder = get_autoencoder(out_channels)
     autoencoder = Autoencoder(out_channels=out_channels)
@@ -692,6 +688,10 @@ def teacher_normalization(teacher, train_loader):
         if on_gpu:
             train_image = train_image.cuda()
         teacher_output_2, teacher_output_3, teacher_output_4 = teacher(train_image)
+        print(teacher_output_3)
+        print(torch.min(teacher_output_3),torch.max(teacher_output_3))
+        # TODO: remove
+        exit()
         mean_output_2 = torch.mean(teacher_output_2, dim=[0, 2, 3])
         mean_output_3 = torch.mean(teacher_output_3, dim=[0, 2, 3])
         mean_output_4 = torch.mean(teacher_output_4, dim=[0, 2, 3])
