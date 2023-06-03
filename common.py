@@ -300,18 +300,23 @@ class PDN_Small(nn.Module):
     def __init__(self, out_channels=384, padding=False) -> None:
         super().__init__()
         pad_mult = 1 if padding else 0
+
         self.conv1 = nn.Conv2d(
             in_channels=3, out_channels=128, kernel_size=4, padding=3 * pad_mult
         )
-        self.relu = nn.ReLU(inplace=True)
+        self.relu1 = nn.ReLU(inplace=True)
         self.avg1 = nn.AvgPool2d(kernel_size=2, stride=2, padding=1 * pad_mult)
+
         self.conv2 = nn.Conv2d(
             in_channels=128, out_channels=256, kernel_size=4, padding=3 * pad_mult
         )
+        self.relu2 = nn.ReLU(inplace=True)
         self.avg2 = nn.AvgPool2d(kernel_size=2, stride=2, padding=1 * pad_mult)
+
         self.conv3 = nn.Conv2d(
             in_channels=256, out_channels=256, kernel_size=3, padding=1 * pad_mult
         )
+        self.relu3 = nn.ReLU(inplace=True)
 
         self.conv4 = nn.Conv2d(
             in_channels=256, out_channels=out_channels, kernel_size=4
@@ -319,15 +324,15 @@ class PDN_Small(nn.Module):
 
     def forward(self, x):
         x1 = self.conv1(x)
-        x1 = self.relu(x1)
+        x1 = self.relu1(x1)
         x1 = self.avg1(x1)
 
         x2 = self.conv2(x1)
-        x2 = self.relu(x2)
+        x2 = self.relu2(x2)
         x2 = self.avg2(x2)
 
         x3 = self.conv3(x2)
-        x3 = self.relu(x3)
+        x3 = self.relu3(x3)
 
         x4 = self.conv4(x3)
         return x2, x3, x4
