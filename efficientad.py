@@ -311,7 +311,7 @@ def main():
         )
         sorted_value, _ = torch.sort(torch.flatten(teacher_output_st_3))
         print(
-            f">>> sorted teacher_output_st_3: {sorted_value} {sorted_value[10]} {sorted_value[50]} {sorted_value[100]} {sorted_value[200]}"
+            f">>> sorted teacher_output_st_3: {sorted_value} {sorted_value[10]} {sorted_value[50]} {sorted_value[100]} {sorted_value[200]} {sorted_value[500]} {sorted_value[1000]} {sorted_value[2000]}"
         )
 
         loss_hard_2 = torch.mean(distance_st_2[distance_st_2 >= d_hard_2])
