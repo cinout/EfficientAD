@@ -74,6 +74,7 @@ def get_argparse():
 # constants
 seed = 42
 on_gpu = torch.cuda.is_available()
+device = "cuda" if on_gpu else "cpu"
 out_channels = 384
 image_size = 256
 
@@ -208,7 +209,7 @@ def main():
         student = get_pdn_medium(2 * out_channels, padding=True)
     else:
         raise Exception()
-    state_dict = torch.load(config.weights, map_location="cpu")
+    state_dict = torch.load(config.weights, map_location=device)
 
     pretrained_model = {}
     for k, v in state_dict.items():

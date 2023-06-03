@@ -312,7 +312,7 @@ class PDN_Small(nn.Module):
         self.conv3 = nn.Conv2d(
             in_channels=256, out_channels=256, kernel_size=3, padding=1 * pad_mult
         )
-        self.avg3 = nn.AvgPool2d(kernel_size=2, stride=2, padding=1 * pad_mult)
+
         self.conv4 = nn.Conv2d(
             in_channels=256, out_channels=out_channels, kernel_size=4
         )
@@ -328,7 +328,6 @@ class PDN_Small(nn.Module):
 
         x3 = self.conv3(x2)
         x3 = self.relu(x3)
-        x3 = self.avg3(x3)
 
         x4 = self.conv4(x3)
         return x2, x3, x4
