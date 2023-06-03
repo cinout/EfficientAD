@@ -256,6 +256,14 @@ def main():
         teacher_std_4,
     ) = teacher_normalization(teacher, train_loader)
 
+    print(">>> teacher's mean and std:")
+    print(teacher_mean_2)
+    print(teacher_std_2)
+    print(teacher_mean_3)
+    print(teacher_std_3)
+    print(teacher_mean_4)
+    print(teacher_std_4)
+
     #### TODO: hack code here, remove later
     # with open("teacher_mean.t", "rb") as f:
     #     teacher_mean = torch.load(f)
@@ -599,10 +607,10 @@ def predict(
         0.5 * (map_st_2 / 3.0 + map_st_3 / 3.0 + map_st_4 / 3.0) + 0.5 * map_ae
     )
 
-    print(~torch.isnan(map_st_2).nonzero().squeeze())
-    print(~torch.isnan(map_st_3).nonzero().squeeze())
-    print(~torch.isnan(map_st_4).nonzero().squeeze())
-    exit()
+    print(">>> show map_st[s]:")
+    print((torch.isnan(map_st_2)==False).nonzero().squeeze())
+    print((torch.isnan(map_st_3)==False).nonzero().squeeze())
+    print((torch.isnan(map_st_4)==False).nonzero().squeeze())
 
     return map_combined, map_st_2, map_st_3, map_st_4, map_ae
 
