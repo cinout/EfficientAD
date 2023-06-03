@@ -287,26 +287,26 @@ def main():
             teacher_output_st_2, teacher_output_st_3, teacher_output_st_4 = teacher(
                 image_st, trackmode=True
             )
-            print("==============teacher_output_st_3=============")
-            print(teacher_output_st_3)
-            print(torch.min(teacher_output_st_3), torch.max(teacher_output_st_3))
+            # print("==============teacher_output_st_3=============")
+            # print(teacher_output_st_3)
+            # print(torch.min(teacher_output_st_3), torch.max(teacher_output_st_3))
             teacher_output_st_2 = (teacher_output_st_2 - teacher_mean_2) / teacher_std_2
             teacher_output_st_3 = (teacher_output_st_3 - teacher_mean_3) / teacher_std_3
             teacher_output_st_4 = (teacher_output_st_4 - teacher_mean_4) / teacher_std_4
-            print("==============teacher_std_2=============")
-            print(teacher_std_2)
-            print(torch.min(teacher_std_2), torch.max(teacher_std_2))
-            print("==============teacher_std_3=============")
-            print(teacher_std_3)
-            print(torch.min(teacher_std_3), torch.max(teacher_std_3))
-            print("==============teacher_std_4=============")
-            print(teacher_std_4)
-            print(torch.min(teacher_std_4), torch.max(teacher_std_4))
-            print("==============teacher_output_st_3 (AGAIN)=============")
-            print(teacher_output_st_3)
-            print(torch.min(teacher_output_st_3), torch.max(teacher_output_st_3))
+            # print("==============teacher_std_2=============")
+            # print(teacher_std_2)
+            # print(torch.min(teacher_std_2), torch.max(teacher_std_2))
+            # print("==============teacher_std_3=============")
+            # print(teacher_std_3)
+            # print(torch.min(teacher_std_3), torch.max(teacher_std_3))
+            # print("==============teacher_std_4=============")
+            # print(teacher_std_4)
+            # print(torch.min(teacher_std_4), torch.max(teacher_std_4))
+            # print("==============teacher_output_st_3 (AGAIN)=============")
+            # print(teacher_output_st_3)
+            # print(torch.min(teacher_output_st_3), torch.max(teacher_output_st_3))
 
-            exit()
+            # exit()
         student_output_st_2, student_output_st_3, student_output_st_4 = student(
             image_st
         )
