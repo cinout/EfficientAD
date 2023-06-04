@@ -3,9 +3,9 @@ import torch.nn as nn
 
 relu = nn.ReLU(inplace=False)
 x1 = torch.randn((5, 3))
-print(x1)
 
-x2 = relu(x1)
+
+x2 = torch.mean(x1)
 print(x1)
 print(x2)
 
