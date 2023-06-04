@@ -287,7 +287,7 @@ def main():
             teacher_output_st_2, teacher_output_st_3, teacher_output_st_4 = teacher(
                 image_st, trackmode=True
             )
-
+            # TODO: uncomment
             print("===============teacher_output_st_2===============")
             print(torch.min(teacher_output_st_2), torch.max(teacher_output_st_2))
             print(torch.min(teacher_std_2), torch.max(teacher_std_2))
