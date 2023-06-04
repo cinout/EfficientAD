@@ -1,10 +1,13 @@
 import torch
 import torch.nn as nn
 
-a = torch.randint(0, 100, (3, 4, 5))
-print(a)
-sorted, _ = torch.sort(torch.flatten(a))
-print(sorted)
+relu = nn.ReLU(inplace=False)
+x1 = torch.randn((5, 3))
+print(x1)
+
+x2 = relu(x1)
+print(x1)
+print(x2)
 
 # a = torch.tensor([torch.inf, -torch.inf])
 # print(a)

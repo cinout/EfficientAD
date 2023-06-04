@@ -152,7 +152,7 @@ class VectorQuantizerEMA(nn.Module):
 class Autoencoder(nn.Module):
     def __init__(self, out_channels=384) -> None:
         super().__init__()
-        self.relu = nn.ReLU(inplace=True)
+        self.relu = nn.ReLU()
 
         self.enc_conv1 = nn.Conv2d(
             in_channels=3, out_channels=32, kernel_size=4, stride=2, padding=1
@@ -304,19 +304,19 @@ class PDN_Small(nn.Module):
         self.conv1 = nn.Conv2d(
             in_channels=3, out_channels=128, kernel_size=4, padding=3 * pad_mult
         )
-        self.relu1 = nn.ReLU(inplace=True)
+        self.relu1 = nn.ReLU()
         self.avg1 = nn.AvgPool2d(kernel_size=2, stride=2, padding=1 * pad_mult)
 
         self.conv2 = nn.Conv2d(
             in_channels=128, out_channels=256, kernel_size=4, padding=3 * pad_mult
         )
-        self.relu2 = nn.ReLU(inplace=True)
+        self.relu2 = nn.ReLU()
         self.avg2 = nn.AvgPool2d(kernel_size=2, stride=2, padding=1 * pad_mult)
 
         self.conv3 = nn.Conv2d(
             in_channels=256, out_channels=256, kernel_size=3, padding=1 * pad_mult
         )
-        self.relu3 = nn.ReLU(inplace=True)
+        self.relu3 = nn.ReLU()
 
         self.conv4 = nn.Conv2d(
             in_channels=256, out_channels=out_channels, kernel_size=4

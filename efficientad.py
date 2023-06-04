@@ -66,7 +66,7 @@ def get_argparse():
         default="./datasets/loco",
         help="Downloaded Mvtec LOCO dataset",
     )
-    parser.add_argument("-t", "--train_steps", type=int, default=70000)  # TODO: 70000
+    parser.add_argument("-t", "--train_steps", type=int, default=100)  # TODO: 70000
     parser.add_argument("--note", type=str, default="")
     return parser.parse_args()
 
@@ -306,8 +306,6 @@ def main():
         d_hard_2 = torch.quantile(distance_st_2, q=0.999)
         d_hard_3 = torch.quantile(distance_st_3, q=0.999)
         d_hard_4 = torch.quantile(distance_st_4, q=0.999)
-
-        sorted_value, _ = torch.sort(torch.flatten(teacher_output_st_3))
 
         loss_hard_2 = torch.mean(distance_st_2[distance_st_2 >= d_hard_2])
         loss_hard_3 = torch.mean(distance_st_3[distance_st_3 >= d_hard_3])
@@ -726,15 +724,15 @@ def teacher_normalization(teacher, train_loader):
     channel_std_3 = torch.sqrt(channel_var_3)
     channel_std_4 = torch.sqrt(channel_var_4)
 
-    eps = 1e-5
+    # eps = 1e-5
 
     return (
         channel_mean_2,
-        channel_std_2 + eps,
+        channel_std_2,
         channel_mean_3,
-        channel_std_3 + eps,
+        channel_std_3,
         channel_mean_4,
-        channel_std_4 + eps,
+        channel_std_4,
     )
 
 
