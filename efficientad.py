@@ -288,6 +288,16 @@ def main():
                 image_st, trackmode=True
             )
 
+            print("===============teacher_output_st_2===============")
+            print(torch.min(teacher_output_st_2), torch.max(teacher_output_st_2))
+            print(torch.min(teacher_std_2), torch.max(teacher_std_2))
+            print("===============teacher_output_st_3===============")
+            print(torch.min(teacher_output_st_3), torch.max(teacher_output_st_3))
+            print(torch.min(teacher_std_3), torch.max(teacher_std_3))
+            print("===============teacher_output_st_4===============")
+            print(torch.min(teacher_output_st_4), torch.max(teacher_output_st_4))
+            print(torch.min(teacher_std_4), torch.max(teacher_std_4))
+            exit()
             teacher_output_st_2 = (teacher_output_st_2 - teacher_mean_2) / teacher_std_2
             teacher_output_st_3 = (teacher_output_st_3 - teacher_mean_3) / teacher_std_3
             teacher_output_st_4 = (teacher_output_st_4 - teacher_mean_4) / teacher_std_4
