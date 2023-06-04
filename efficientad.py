@@ -287,17 +287,17 @@ def main():
             teacher_output_st_2, teacher_output_st_3, teacher_output_st_4 = teacher(
                 image_st, trackmode=True
             )
-            # TODO: uncomment
-            print("===============teacher_output_st_2===============")
-            print(torch.min(teacher_output_st_2), torch.max(teacher_output_st_2))
-            print(torch.min(teacher_std_2), torch.max(teacher_std_2))
-            print("===============teacher_output_st_3===============")
-            print(torch.min(teacher_output_st_3), torch.max(teacher_output_st_3))
-            print(torch.min(teacher_std_3), torch.max(teacher_std_3))
-            print("===============teacher_output_st_4===============")
-            print(torch.min(teacher_output_st_4), torch.max(teacher_output_st_4))
-            print(torch.min(teacher_std_4), torch.max(teacher_std_4))
-            exit()
+            # # TODO: uncomment
+            # print("===============teacher_output_st_2===============")
+            # print(torch.min(teacher_output_st_2), torch.max(teacher_output_st_2))
+            # print(torch.min(teacher_std_2), torch.max(teacher_std_2))
+            # print("===============teacher_output_st_3===============")
+            # print(torch.min(teacher_output_st_3), torch.max(teacher_output_st_3))
+            # print(torch.min(teacher_std_3), torch.max(teacher_std_3))
+            # print("===============teacher_output_st_4===============")
+            # print(torch.min(teacher_output_st_4), torch.max(teacher_output_st_4))
+            # print(torch.min(teacher_std_4), torch.max(teacher_std_4))
+            # exit()
             teacher_output_st_2 = (teacher_output_st_2 - teacher_mean_2) / teacher_std_2
             teacher_output_st_3 = (teacher_output_st_3 - teacher_mean_3) / teacher_std_3
             teacher_output_st_4 = (teacher_output_st_4 - teacher_mean_4) / teacher_std_4
@@ -734,7 +734,11 @@ def teacher_normalization(teacher, train_loader):
     channel_std_3 = torch.sqrt(channel_var_3)
     channel_std_4 = torch.sqrt(channel_var_4)
 
-    # eps = 1e-5
+    # TODO: hack code
+    eps = 1e-3
+    channel_std_2[channel_std_2==0] = eps
+    channel_std_3[channel_std_3==0] = eps
+    channel_std_4[channel_std_4==0] = eps
 
     return (
         channel_mean_2,
