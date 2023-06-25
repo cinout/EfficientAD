@@ -210,10 +210,10 @@ class Autoencoder(nn.Module):
             padding=1,
         )
 
-        # TODO: check if it works
-        self.enc_vq1 = VectorQuantizerEMA(num_embeddings=32, embedding_dim=64)
-        self.enc_vq2 = VectorQuantizerEMA(num_embeddings=16, embedding_dim=64)
-        self.enc_vq3 = VectorQuantizerEMA(num_embeddings=8, embedding_dim=64)
+        # # TODO: check if it works
+        # self.enc_vq1 = VectorQuantizerEMA(num_embeddings=32, embedding_dim=64)
+        # self.enc_vq2 = VectorQuantizerEMA(num_embeddings=16, embedding_dim=64)
+        # self.enc_vq3 = VectorQuantizerEMA(num_embeddings=8, embedding_dim=64)
 
     def forward(self, x):
         # encoder
@@ -225,15 +225,15 @@ class Autoencoder(nn.Module):
 
         x = self.enc_conv3(x)
         x = self.relu(x)  # shape: [1, 64, 32, 32]
-        x = self.enc_vq1(x)
+        # x = self.enc_vq1(x)
 
         x = self.enc_conv4(x)
         x = self.relu(x)  # shape: [1, 64, 16, 16]
-        x = self.enc_vq2(x)
+        # x = self.enc_vq2(x)
 
         x = self.enc_conv5(x)
         x = self.relu(x)  # shape: [1, 64, 8, 8]
-        x = self.enc_vq3(x)
+        # x = self.enc_vq3(x)
 
         x = self.enc_conv6(x)  # shape: [1, 64, 1, 1]
 
