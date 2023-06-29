@@ -13,6 +13,7 @@ from tqdm import tqdm
 from common import (
     Autoencoder,
     get_pdn_small,
+    PDN_Small,
     get_pdn_medium,
     ImageFolderWithoutTarget,
     ImageFolderWithPath,
@@ -67,7 +68,7 @@ def get_argparse():
         help="Downloaded Mvtec LOCO dataset",
     )
     parser.add_argument("-t", "--train_steps", type=int, default=70000)  # TODO: 70000
-    parser.add_argument("--note",type=str,default="")
+    parser.add_argument("--note", type=str, default="")
     return parser.parse_args()
 
 
@@ -199,8 +200,10 @@ def main():
 
     # create models
     if config.model_size == "small":
-        teacher = get_pdn_small(out_channels, padding=True)
-        student = get_pdn_small(2 * out_channels, padding=True)
+        teacher = PDN_Small(out_channels=out_channels, padding=True)
+        student = PDN_Small(out_channels=2 * out_channels, padding=True)
+        # teacher = get_pdn_small(out_channels, padding=True)
+        # student = get_pdn_small(2 * out_channels, padding=True)
     elif config.model_size == "medium":
         teacher = get_pdn_medium(out_channels, padding=True)
         student = get_pdn_medium(2 * out_channels, padding=True)

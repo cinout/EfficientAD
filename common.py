@@ -296,6 +296,49 @@ def get_pdn_small(out_channels=384, padding=False):
     )
 
 
+class PDN_Small(nn.Module):
+    def __init__(self, out_channels=384, padding=False) -> None:
+        super().__init__()
+        pad_mult = 1 if padding else 0
+
+        self.conv1 = nn.Conv2d(
+            in_channels=3, out_channels=128, kernel_size=4, padding=3 * pad_mult
+        )
+        self.relu1 = nn.ReLU()
+        self.avg1 = nn.AvgPool2d(kernel_size=2, stride=2, padding=1 * pad_mult)
+
+        self.conv2 = nn.Conv2d(
+            in_channels=128, out_channels=256, kernel_size=4, padding=3 * pad_mult
+        )
+        self.relu2 = nn.ReLU()
+        self.avg2 = nn.AvgPool2d(kernel_size=2, stride=2, padding=1 * pad_mult)
+
+        self.conv3 = nn.Conv2d(
+            in_channels=256, out_channels=256, kernel_size=3, padding=1 * pad_mult
+        )
+        self.relu3 = nn.ReLU()
+
+        self.conv4 = nn.Conv2d(
+            in_channels=256, out_channels=out_channels, kernel_size=4
+        )
+
+    def forward(self, x):
+        x1 = self.conv1(x)
+
+        x2 = self.relu1(x1)
+        x2 = self.avg1(x2)
+        x2 = self.conv2(x2)
+
+        x3 = self.relu2(x2)
+        x3 = self.avg2(x3)
+        x3 = self.conv3(x3)
+
+        x4 = self.relu3(x3)
+        x4 = self.conv4(x4)
+
+        return x4
+
+
 def get_pdn_medium(out_channels=384, padding=False):
     pad_mult = 1 if padding else 0
     return nn.Sequential(
