@@ -212,9 +212,9 @@ def main():
     state_dict = torch.load(config.weights, map_location="cpu")
     pretrained_teacher_model = {}
     for k, v in state_dict.items():
-        if k == "O.weight":
+        if k == "0.weight":
             pretrained_teacher_model["conv1.weight"] = v
-        elif k == "O.bias":
+        elif k == "0.bias":
             pretrained_teacher_model["conv1.bias"] = v
         elif k == "3.weight":
             pretrained_teacher_model["conv2.weight"] = v
