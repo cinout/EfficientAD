@@ -229,7 +229,7 @@ def main():
         elif k == "8.bias":
             pretrained_teacher_model["conv4.bias"] = v
         else:
-            raise ValueError("unknown state_ dict key")
+            raise ValueError(f"unknown state_dict key {k}")
     teacher.load_state_dict(pretrained_teacher_model, strict=False)
     # teacher.load_state_dict(state_dict)
     # autoencoder = get_autoencoder(out_channels)
