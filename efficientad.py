@@ -210,7 +210,28 @@ def main():
     else:
         raise Exception()
     state_dict = torch.load(config.weights, map_location="cpu")
-    teacher.load_state_dict(state_dict)
+    pretrained_teacher_model = {}
+    for k, v in state_dict.items():
+        if k == "O.weight":
+            pretrained_teacher_model["conv1.weight"] = v
+        elif k == "O.bias":
+            pretrained_teacher_model["conv1.bias"] = v
+        elif k == "3.weight":
+            pretrained_teacher_model["conv2.weight"] = v
+        elif k == "3.bias":
+            pretrained_teacher_model["conv2.bias"] = v
+        elif k == "6.weight":
+            pretrained_teacher_model["conv3.weight"] = v
+        elif k == "6.bias":
+            pretrained_teacher_model["conv3.bias"] = v
+        elif k == "8.weight":
+            pretrained_teacher_model["conv4.weight"] = v
+        elif k == "8.bias":
+            pretrained_teacher_model["conv4.bias"] = v
+        else:
+            raise ValueError("unknown state_ dict key")
+    teacher.load_state_dict(pretrained_teacher_model, strict=False)
+    # teacher.load_state_dict(state_dict)
     # autoencoder = get_autoencoder(out_channels)
     autoencoder = Autoencoder(out_channels=out_channels)
 
