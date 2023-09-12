@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH --partition=physical
+#SBATCH --partition=cascade
 
 #SBATCH --job-name="eval_sc"
 #SBATCH --account=punim1623

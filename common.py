@@ -179,7 +179,9 @@ class Autoencoder(nn.Module):
         self.dec_up4 = nn.Upsample(size=32, mode="bilinear")
         self.dec_up5 = nn.Upsample(size=63, mode="bilinear")
         self.dec_up6 = nn.Upsample(size=127, mode="bilinear")
-        self.dec_up7 = nn.Upsample(size=64, mode="bilinear")
+        self.dec_up7 = nn.Upsample(
+            size=64, mode="bilinear"
+        )  # size=64 if padding==True else size=64-8
 
         self.dec_conv1 = nn.Conv2d(
             in_channels=64, out_channels=64, kernel_size=4, stride=1, padding=2

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH --partition=physical
+#SBATCH --partition=cascade
 
 #SBATCH --job-name="eval_bb"
 #SBATCH --account=punim1623
@@ -20,7 +20,7 @@ module purge
 eval "$(conda shell.bash hook)"
 conda activate ds2
 
-timestamp="20230603_122315_49_92_[bb]"
+timestamp="20230912_143313_41_5_[bb]"
 
 python -u mvtec_loco_ad_evaluation/evaluate_experiment.py \
   --object_name "breakfast_box" \
