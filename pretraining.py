@@ -26,22 +26,23 @@ def get_argparse():
         description="What the program does",
         epilog="Text at the bottom of help",
     )
-    parser.add_argument("-o", "--output_folder", default="output/pretraining/")
+    parser.add_argument("-o", "--output_folder", default="my_pretraining/")
     return parser.parse_args()
 
 
 # variables
 model_size = "small"
-imagenet_train_path = "./ILSVRC/Data/CLS-LOC/train"
+imagenet_train_path = "./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train"
 seed = 42
 on_gpu = torch.cuda.is_available()
 device = "cuda" if on_gpu else "cpu"
 
 # constants
-out_channels = 384
+out_channels = 384  # TODO: update accordingly
 grayscale_transform = transforms.RandomGrayscale(0.1)  # apply same to both
 extractor_transform = transforms.Compose(
     [
+        # TODO: change input size so that output is 64*64
         transforms.Resize((512, 512)),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
@@ -70,10 +71,12 @@ def main():
 
     os.makedirs(config.output_folder)
 
+    # TODO: change backbone
     backbone = torchvision.models.wide_resnet101_2(
         weights=Wide_ResNet101_2_Weights.IMAGENET1K_V1
     )
-
+    
+    # TODO: read code to understand FeatureExtractor
     extractor = FeatureExtractor(
         backbone=backbone,
         layers_to_extract_from=["layer2", "layer3"],

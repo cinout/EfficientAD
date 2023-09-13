@@ -246,6 +246,7 @@ def main():
         autoencoder.cuda()
 
     # TODO: uncomment
+    # TODO: should we update the teacher_mean, teacher_std on the fly? Different for each batch
     teacher_mean, teacher_std = teacher_normalization(teacher, train_loader)
 
     #### TODO: hack code here, remove later
