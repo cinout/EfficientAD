@@ -84,7 +84,7 @@ def main():
 
     config = get_argparse()
 
-    os.makedirs(config.output_folder)
+    os.makedirs(config.output_folder,exist_ok=True)
 
     if config.network == "wide_resnet101_2":
         from torchvision.models import Wide_ResNet101_2_Weights
