@@ -84,7 +84,7 @@ def main():
 
     config = get_argparse()
 
-    os.makedirs(config.output_folder,exist_ok=True)
+    os.makedirs(config.output_folder, exist_ok=True)
 
     if config.network == "wide_resnet101_2":
         from torchvision.models import Wide_ResNet101_2_Weights
@@ -105,7 +105,7 @@ def main():
     elif config.network == "vit":
         # TODO: vit
         from urllib.request import urlretrieve
-        from ViT_pytorch.models.modeling import VisionTransformer, CONFIGS
+        from models.modeling import VisionTransformer, CONFIGS
 
         os.makedirs("vit_model_checkpoints", exist_ok=True)
         if not os.path.isfile("vit_model_checkpoints/ViT-B_16-224.npz"):
@@ -166,6 +166,7 @@ def main():
 
         tqdm_obj.set_description(f"{(loss.item())}")
 
+        # TODO: update the names
         if iteration % 10000 == 0:
             torch.save(
                 pdn,
