@@ -33,12 +33,21 @@ def get_argparse():
         type=str,
         default="wide_resnet101_2",
     )
+    parser.add_argument(
+        "--pdn_size",
+        choices=["small", "medium"],
+        type=str,
+        default="small",
+    )
+    parser.add_argument(
+        "--imagenet_train_path",
+        type=str,
+        default="./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train",
+    )
     return parser.parse_args()
 
 
 # variables
-model_size = "small"
-imagenet_train_path = "./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train"
 seed = 42
 on_gpu = torch.cuda.is_available()
 device = "cuda" if on_gpu else "cpu"
@@ -90,14 +99,16 @@ def main():
         input_shape=(3, 512, 512),  # TODO: change input size so that output is 64*64
     )
 
-    if model_size == "small":
+    if config.model_size == "small":
         pdn = get_pdn_small(out_channels, padding=True)
-    elif model_size == "medium":
+    elif config.model_size == "medium":
         pdn = get_pdn_medium(out_channels, padding=True)
     else:
         raise Exception()
 
-    train_set = ImageFolderWithoutTarget(imagenet_train_path, transform=train_transform)
+    train_set = ImageFolderWithoutTarget(
+        config.imagenet_train_path, transform=train_transform
+    )
     train_loader = DataLoader(
         train_set, batch_size=16, shuffle=True, num_workers=7, pin_memory=True
     )
@@ -132,20 +143,26 @@ def main():
 
         if iteration % 10000 == 0:
             torch.save(
-                pdn, os.path.join(config.output_folder, f"teacher_{model_size}_tmp.pth")
+                pdn,
+                os.path.join(
+                    config.output_folder, f"teacher_{config.model_size}_tmp.pth"
+                ),
             )
             torch.save(
                 pdn.state_dict(),
                 os.path.join(
-                    config.output_folder, f"teacher_{model_size}_tmp_state.pth"
+                    config.output_folder, f"teacher_{config.model_size}_tmp_state.pth"
                 ),
             )
     torch.save(
-        pdn, os.path.join(config.output_folder, f"teacher_{model_size}_final.pth")
+        pdn,
+        os.path.join(config.output_folder, f"teacher_{config.model_size}_final.pth"),
     )
     torch.save(
         pdn.state_dict(),
-        os.path.join(config.output_folder, f"teacher_{model_size}_final_state.pth"),
+        os.path.join(
+            config.output_folder, f"teacher_{config.model_size}_final_state.pth"
+        ),
     )
 
 
