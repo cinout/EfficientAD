@@ -122,9 +122,7 @@ def main():
 
         extractor = torch.nn.Sequential(
             *[model.transformer.embeddings, model.transformer.encoder]
-        ) # TODO: find the right layer of extractor
-
-        
+        )  # TODO: find the right layer of extractor
 
     if config.model_size == "small":
         pdn = get_pdn_small(out_channels, padding=True)
@@ -203,7 +201,7 @@ def feature_normalization(extractor, train_loader, steps=10000):
             if on_gpu:
                 image_fe = image_fe.cuda()
             output = extractor.embed(image_fe)
-            print(output.shape)
+            print(f"output.shape: {output.shape}")
             exit()
             mean_output = torch.mean(output, dim=[0, 2, 3])
             mean_outputs.append(mean_output)
