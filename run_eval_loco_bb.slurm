@@ -18,7 +18,7 @@
 module purge
 
 eval "$(conda shell.bash hook)"
-conda activate efficient
+conda activate ds2
 
 timestamp="20230912_143313_41_5_[bb]"
 

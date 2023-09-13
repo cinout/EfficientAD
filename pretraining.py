@@ -27,6 +27,12 @@ def get_argparse():
         epilog="Text at the bottom of help",
     )
     parser.add_argument("-o", "--output_folder", default="my_pretraining/")
+    parser.add_argument(
+        "--network",
+        choices=["wide_resnet101_2", "vit"],
+        type=str,
+        default="wide_resnet101_2",
+    )
     return parser.parse_args()
 
 
@@ -75,13 +81,13 @@ def main():
     backbone = torchvision.models.wide_resnet101_2(
         weights=Wide_ResNet101_2_Weights.IMAGENET1K_V1
     )
-    
+
     # TODO: read code to understand FeatureExtractor
     extractor = FeatureExtractor(
         backbone=backbone,
         layers_to_extract_from=["layer2", "layer3"],
         device=device,
-        input_shape=(3, 512, 512), # TODO: change input size so that output is 64*64
+        input_shape=(3, 512, 512),  # TODO: change input size so that output is 64*64
     )
 
     if model_size == "small":
@@ -111,8 +117,8 @@ def main():
     tqdm_obj = tqdm(range(60000))
     for iteration, (image_fe, image_pdn) in zip(tqdm_obj, train_loader):
         if on_gpu:
-            image_fe = image_fe.cuda() # for extractor
-            image_pdn = image_pdn.cuda() # for pdn teacher
+            image_fe = image_fe.cuda()  # for extractor
+            image_pdn = image_pdn.cuda()  # for pdn teacher
         target = extractor.embed(image_fe)
         target = (target - channel_mean) / channel_std
         prediction = pdn(image_pdn)
@@ -193,22 +199,24 @@ class FeatureExtractor(torch.nn.Module):
         self.layers_to_extract_from = layers_to_extract_from
         self.device = device
         self.input_shape = input_shape
+        # TODO: read to understand PatchMaker
         self.patch_maker = PatchMaker(3, stride=1)
         self.forward_modules = torch.nn.ModuleDict({})
 
+        # TODO: read to understand NetworkFeatureAggregator
         feature_aggregator = NetworkFeatureAggregator(
             self.backbone, self.layers_to_extract_from, self.device
         )
         feature_dimensions = feature_aggregator.feature_dimensions(input_shape)
         self.forward_modules["feature_aggregator"] = feature_aggregator
 
+        # TODO: read to understand Preprocessing
         preprocessing = Preprocessing(feature_dimensions, 1024)
         self.forward_modules["preprocessing"] = preprocessing
 
+        # TODO: read to understand Aggregator
         preadapt_aggregator = Aggregator(target_dim=out_channels)
-
         _ = preadapt_aggregator.to(self.device)
-
         self.forward_modules["preadapt_aggregator"] = preadapt_aggregator
 
         self.forward_modules.eval()

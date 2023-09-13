@@ -24,12 +24,12 @@
 module purge
 
 eval "$(conda shell.bash hook)"
-conda activate efficient
+conda activate ds2
 
 set -e
 set -x
 
-python -u pretraining.py
+python -u pretraining.py --network "vit"
 
 ##Log this job's resource usage stats###
 my-job-stats -a -n -s

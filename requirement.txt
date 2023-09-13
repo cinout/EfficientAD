@@ -1,0 +1,9 @@
+python>=3.9
+pytorch 
+torchvision
+tqdm
+scikit-learn
+tabulate
+
+tifffile
+cv2

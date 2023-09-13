@@ -24,7 +24,7 @@
 module purge
 
 eval "$(conda shell.bash hook)"
-conda activate efficient
+conda activate ds2
 
 set -e
 set -x
