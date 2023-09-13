@@ -81,7 +81,7 @@ def main():
         backbone=backbone,
         layers_to_extract_from=["layer2", "layer3"],
         device=device,
-        input_shape=(3, 512, 512),
+        input_shape=(3, 512, 512), # TODO: change input size so that output is 64*64
     )
 
     if model_size == "small":
@@ -97,6 +97,7 @@ def main():
     )
     train_loader = InfiniteDataloader(train_loader)
 
+    # TODO: read code to understand feature_normalization()
     channel_mean, channel_std = feature_normalization(
         extractor=extractor, train_loader=train_loader
     )
@@ -110,8 +111,8 @@ def main():
     tqdm_obj = tqdm(range(60000))
     for iteration, (image_fe, image_pdn) in zip(tqdm_obj, train_loader):
         if on_gpu:
-            image_fe = image_fe.cuda()
-            image_pdn = image_pdn.cuda()
+            image_fe = image_fe.cuda() # for extractor
+            image_pdn = image_pdn.cuda() # for pdn teacher
         target = extractor.embed(image_fe)
         target = (target - channel_mean) / channel_std
         prediction = pdn(image_pdn)
