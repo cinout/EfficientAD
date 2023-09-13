@@ -103,7 +103,7 @@ def main():
             ),  # TODO: change input size so that output is 64*64
         )
     elif config.network == "vit":
-        # TODO: vit
+        # vit
         from urllib.request import urlretrieve
         from models.modeling import VisionTransformer, CONFIGS
 
@@ -120,9 +120,11 @@ def main():
         )
         model.load_from(np.load("vit_model_checkpoints/ViT-B_16-224.npz"))
 
-        print(model)
-        print("well-done!")
-        exit()
+        extractor = torch.nn.Sequential(
+            *[model.transformer.embeddings, model.transformer.encoder]
+        ) # TODO: find the right layer of extractor
+
+        
 
     if config.model_size == "small":
         pdn = get_pdn_small(out_channels, padding=True)
@@ -201,6 +203,8 @@ def feature_normalization(extractor, train_loader, steps=10000):
             if on_gpu:
                 image_fe = image_fe.cuda()
             output = extractor.embed(image_fe)
+            print(output.shape)
+            exit()
             mean_output = torch.mean(output, dim=[0, 2, 3])
             mean_outputs.append(mean_output)
             normalization_count += len(image_fe)
