@@ -10,7 +10,6 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from torchvision import transforms
-from torchvision.models import Wide_ResNet101_2_Weights
 from tqdm import tqdm
 from common import (
     get_pdn_small,
@@ -55,14 +54,7 @@ device = "cuda" if on_gpu else "cpu"
 # constants
 out_channels = 384  # TODO: update accordingly
 grayscale_transform = transforms.RandomGrayscale(0.1)  # apply same to both
-extractor_transform = transforms.Compose(
-    [
-        # TODO: change input size so that output is 64*64
-        transforms.Resize((512, 512)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    ]
-)
+
 pdn_transform = transforms.Compose(
     [
         transforms.Resize((256, 256)),
@@ -74,6 +66,14 @@ pdn_transform = transforms.Compose(
 
 def train_transform(image):
     image = grayscale_transform(image)
+    extractor_transform = transforms.Compose(
+        [
+            # TODO: change input size so that output is 64*64
+            transforms.Resize((512, 512)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ]
+    )
     return extractor_transform(image), pdn_transform(image)
 
 
@@ -86,18 +86,43 @@ def main():
 
     os.makedirs(config.output_folder)
 
-    # TODO: change backbone
-    backbone = torchvision.models.wide_resnet101_2(
-        weights=Wide_ResNet101_2_Weights.IMAGENET1K_V1
-    )
+    if config.network == "wide_resnet101_2":
+        from torchvision.models import Wide_ResNet101_2_Weights
 
-    # TODO: read code to understand FeatureExtractor
-    extractor = FeatureExtractor(
-        backbone=backbone,
-        layers_to_extract_from=["layer2", "layer3"],
-        device=device,
-        input_shape=(3, 512, 512),  # TODO: change input size so that output is 64*64
-    )
+        backbone = torchvision.models.wide_resnet101_2(
+            weights=Wide_ResNet101_2_Weights.IMAGENET1K_V1
+        )
+        extractor = FeatureExtractor(
+            backbone=backbone,
+            layers_to_extract_from=["layer2", "layer3"],
+            device=device,
+            input_shape=(
+                3,
+                512,
+                512,
+            ),  # TODO: change input size so that output is 64*64
+        )
+    elif config.network == "vit":
+        # TODO: vit
+        from urllib.request import urlretrieve
+        from ViT_pytorch.models.modeling import VisionTransformer, CONFIGS
+
+        os.makedirs("vit_model_checkpoints", exist_ok=True)
+        if not os.path.isfile("vit_model_checkpoints/ViT-B_16-224.npz"):
+            urlretrieve(
+                "https://storage.googleapis.com/vit_models/imagenet21k+imagenet2012/ViT-B_16-224.npz",
+                "vit_model_checkpoints/ViT-B_16-224.npz",
+            )
+
+        config = CONFIGS["ViT-B_16"]
+        model = VisionTransformer(
+            config, num_classes=1000, zero_head=False, img_size=224, vis=True
+        )
+        model.load_from(np.load("vit_model_checkpoints/ViT-B_16-224.npz"))
+
+        print(model)
+        print("well-done!")
+        exit()
 
     if config.model_size == "small":
         pdn = get_pdn_small(out_channels, padding=True)
@@ -216,22 +241,19 @@ class FeatureExtractor(torch.nn.Module):
         self.layers_to_extract_from = layers_to_extract_from
         self.device = device
         self.input_shape = input_shape
-        # TODO: read to understand PatchMaker
+
         self.patch_maker = PatchMaker(3, stride=1)
         self.forward_modules = torch.nn.ModuleDict({})
 
-        # TODO: read to understand NetworkFeatureAggregator
         feature_aggregator = NetworkFeatureAggregator(
             self.backbone, self.layers_to_extract_from, self.device
         )
         feature_dimensions = feature_aggregator.feature_dimensions(input_shape)
         self.forward_modules["feature_aggregator"] = feature_aggregator
 
-        # TODO: read to understand Preprocessing
         preprocessing = Preprocessing(feature_dimensions, 1024)
         self.forward_modules["preprocessing"] = preprocessing
 
-        # TODO: read to understand Aggregator
         preadapt_aggregator = Aggregator(target_dim=out_channels)
         _ = preadapt_aggregator.to(self.device)
         self.forward_modules["preadapt_aggregator"] = preadapt_aggregator
