@@ -135,6 +135,7 @@ def main():
         extractor = torch.nn.Sequential(
             *[model.transformer.embeddings, model.transformer.encoder]
         )
+        extractor.eval()
         input_transform_func = train_transform_1024
         out_channels = 768
         suffix = "vit_b16"

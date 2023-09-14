@@ -69,7 +69,7 @@ def get_argparse():
         default="./datasets/loco",
         help="Downloaded Mvtec LOCO dataset",
     )
-    parser.add_argument("-t", "--train_steps", type=int, default=70000)  # TODO: 70000
+    parser.add_argument("-t", "--train_steps", type=int, default=70000)
     parser.add_argument("--note", type=str, default="")
     return parser.parse_args()
 
@@ -247,15 +247,8 @@ def main():
         student.cuda()
         autoencoder.cuda()
 
-    # TODO: uncomment
     # TODO: should we update the teacher_mean, teacher_std on the fly? Different for each batch
     teacher_mean, teacher_std = teacher_normalization(teacher, train_loader)
-
-    #### TODO: hack code here, remove later
-    # with open("teacher_mean.t", "rb") as f:
-    #     teacher_mean = torch.load(f)
-    # with open("teacher_std.t", "rb") as f:
-    #     teacher_std = torch.load(f)
 
     optimizer = torch.optim.Adam(
         itertools.chain(student.parameters(), autoencoder.parameters()),
