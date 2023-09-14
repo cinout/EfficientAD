@@ -82,11 +82,11 @@ def main():
     np.random.seed(seed)
     random.seed(seed)
 
-    config = get_argparse()
+    args = get_argparse()
 
-    os.makedirs(config.output_folder, exist_ok=True)
+    os.makedirs(args.output_folder, exist_ok=True)
 
-    if config.network == "wide_resnet101_2":
+    if args.network == "wide_resnet101_2":
         from torchvision.models import Wide_ResNet101_2_Weights
 
         backbone = torchvision.models.wide_resnet101_2(
@@ -102,7 +102,7 @@ def main():
                 512,
             ),  # TODO: change input size so that output is 64*64
         )
-    elif config.network == "vit":
+    elif args.network == "vit":
         # vit
         from urllib.request import urlretrieve
         from models.modeling import VisionTransformer, CONFIGS
@@ -124,15 +124,15 @@ def main():
             *[model.transformer.embeddings, model.transformer.encoder]
         )  # TODO: find the right layer of extractor
 
-    if config.pdn_size == "small":
+    if args.pdn_size == "small":
         pdn = get_pdn_small(out_channels, padding=True)
-    elif config.pdn_size == "medium":
+    elif args.pdn_size == "medium":
         pdn = get_pdn_medium(out_channels, padding=True)
     else:
         raise Exception()
 
     train_set = ImageFolderWithoutTarget(
-        config.imagenet_train_path, transform=train_transform
+        args.imagenet_train_path, transform=train_transform
     )
     train_loader = DataLoader(
         train_set, batch_size=16, shuffle=True, num_workers=7, pin_memory=True
@@ -170,25 +170,21 @@ def main():
         if iteration % 10000 == 0:
             torch.save(
                 pdn,
-                os.path.join(
-                    config.output_folder, f"teacher_{config.pdn_size}_tmp.pth"
-                ),
+                os.path.join(args.output_folder, f"teacher_{args.pdn_size}_tmp.pth"),
             )
             torch.save(
                 pdn.state_dict(),
                 os.path.join(
-                    config.output_folder, f"teacher_{config.pdn_size}_tmp_state.pth"
+                    args.output_folder, f"teacher_{args.pdn_size}_tmp_state.pth"
                 ),
             )
     torch.save(
         pdn,
-        os.path.join(config.output_folder, f"teacher_{config.pdn_size}_final.pth"),
+        os.path.join(args.output_folder, f"teacher_{args.pdn_size}_final.pth"),
     )
     torch.save(
         pdn.state_dict(),
-        os.path.join(
-            config.output_folder, f"teacher_{config.pdn_size}_final_state.pth"
-        ),
+        os.path.join(args.output_folder, f"teacher_{args.pdn_size}_final_state.pth"),
     )
 
 
