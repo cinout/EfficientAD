@@ -69,7 +69,6 @@ def get_argparse():
         default="./datasets/loco",
         help="Downloaded Mvtec LOCO dataset",
     )
-    # TODO:
     parser.add_argument(
         "--pretrained_network",
         choices=["wide_resnet101_2", "vit"],
@@ -85,7 +84,6 @@ def get_argparse():
 # constants
 seed = 42
 on_gpu = torch.cuda.is_available()
-out_channels = 384  # TODO: update
 image_size = 256
 
 # data loading
@@ -207,6 +205,11 @@ def main():
         penalty_loader_infinite = InfiniteDataloader(penalty_loader)
     else:
         penalty_loader_infinite = itertools.repeat(None)
+
+    if config.pretrained_network == "wide_resnet101_2":
+        out_channels = 384
+    elif config.pretrained_network == "vit":
+        out_channels = 768
 
     # create models
     if config.model_size == "small":
@@ -378,6 +381,7 @@ def main():
     torch.save(autoencoder, os.path.join(train_output_dir, "autoencoder_final.pth"))
 
     q_st_start, q_st_end, q_ae_start, q_ae_end = map_normalization(
+        out_channels=out_channels,
         validation_loader=validation_loader,
         teacher=teacher,
         student=student,
@@ -387,6 +391,7 @@ def main():
         desc="Final map normalization",
     )
     auc = test(
+        out_channels=out_channels,
         test_set=test_set,
         teacher=teacher,
         student=student,
@@ -405,6 +410,7 @@ def main():
 
 @torch.no_grad()
 def test(
+    out_channels,
     test_set,
     teacher,
     student,
@@ -428,6 +434,7 @@ def test(
         if on_gpu:
             image = image.cuda()
         map_combined, map_st, map_ae = predict(
+            out_channels=out_channels,
             image=image,
             teacher=teacher,
             student=student,
@@ -469,6 +476,7 @@ def test(
 
 @torch.no_grad()
 def predict(
+    out_channels,
     image,
     teacher,
     student,
@@ -512,6 +520,7 @@ def predict(
 
 @torch.no_grad()
 def map_normalization(
+    out_channels,
     validation_loader,
     teacher,
     student,
@@ -527,6 +536,7 @@ def map_normalization(
         if on_gpu:
             image = image.cuda()
         map_combined, map_st, map_ae = predict(
+            out_channels=out_channels,
             image=image,
             teacher=teacher,
             student=student,

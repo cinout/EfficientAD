@@ -29,8 +29,14 @@ conda activate ds2
 set -e
 set -x
 
-python -u efficientad.py --dataset mvtec_loco --subdataset breakfast_box --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train --note "debug test"
-
+python -u efficientad.py \
+  --pretrained_network vit \
+  --weights pretrained_w_20230914_235012_63_23/teacher_small_vit_b16.pth\
+  --dataset mvtec_loco \
+  --subdataset breakfast_box \
+  --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
+  --note "[pretrained] vit [weights] comp bs16size512"
+# FIXME: update weights, pretrained_network, note
 ##Log this job's resource usage stats###
 my-job-stats -a -n -s
 ##
