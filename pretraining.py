@@ -92,7 +92,7 @@ def get_argparse():
 seed = 42
 on_gpu = torch.cuda.is_available()
 device = "cuda" if on_gpu else "cpu"
-batch_size = 8  # TODO: update (default: 16)
+batch_size = 16  # TODO: update (default: 16)
 exp_map_size = 64
 
 
@@ -253,9 +253,10 @@ def main(args):
             H = int(math.sqrt(N))
             W = int(math.sqrt(N))
             target = target.transpose(1, 2).view(B, C, H, W)
-            # target = torch.nn.functional.interpolate(
-            #     target, (exp_map_size, exp_map_size), mode="bilinear"
-            # )  # TODO: update (uncomment when input size is NOT 1024)
+            if H != exp_map_size:
+                target = torch.nn.functional.interpolate(
+                    target, (exp_map_size, exp_map_size), mode="bilinear"
+                )
 
         target = (target - channel_mean) / channel_std
         prediction = pdn(image_pdn)
@@ -313,9 +314,11 @@ def feature_normalization(args, extractor, train_loader, steps=10000):
                 H = int(math.sqrt(N))
                 W = int(math.sqrt(N))
                 output = output.transpose(1, 2).view(B, C, H, W)
-                # output = torch.nn.functional.interpolate(
-                #     output, (exp_map_size, exp_map_size), mode="bilinear"
-                # ) # TODO: update
+                if H != exp_map_size:
+                    output = torch.nn.functional.interpolate(
+                        output, (exp_map_size, exp_map_size), mode="bilinear"
+                    )
+              
 
             mean_output = torch.mean(output, dim=[0, 2, 3])
             mean_outputs.append(mean_output)
@@ -344,9 +347,10 @@ def feature_normalization(args, extractor, train_loader, steps=10000):
                 H = int(math.sqrt(N))
                 W = int(math.sqrt(N))
                 output = output.transpose(1, 2).view(B, C, H, W)
-                # output = torch.nn.functional.interpolate(
-                #     output, (exp_map_size, exp_map_size), mode="bilinear"
-                # ) # TODO: update
+                if H != exp_map_size:
+                    output = torch.nn.functional.interpolate(
+                        output, (exp_map_size, exp_map_size), mode="bilinear"
+                    )
 
             distance = (output - channel_mean) ** 2
             mean_distance = torch.mean(distance, dim=[0, 2, 3])

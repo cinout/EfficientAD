@@ -11,18 +11,18 @@
 
 #SBATCH --job-name="disti"
 #SBATCH --account=punim1623
-#SBATCH --time=0-00:10:00
+#SBATCH --time=0-00:20:00
 
 #SBATCH --nodes=1
-#SBATCH --ntasks-per-node=2
-#SBATCH --gres=gpu:2
+#SBATCH --ntasks-per-node=4
+#SBATCH --gres=gpu:4
 
 ### "ntasks-per-node" should have same value as "res=gpu:"
 
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=40G
 
-export WORLD_SIZE=2   ####TODO: update world size: nodes x ntasks-per-node
+export WORLD_SIZE=4   ####TODO: update world size: nodes x ntasks-per-node
 export MASTER_PORT=12340
 
 echo ">>> NODELIST="${SLURM_NODELIST}
