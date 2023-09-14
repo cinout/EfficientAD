@@ -124,9 +124,9 @@ def main():
             *[model.transformer.embeddings, model.transformer.encoder]
         )  # TODO: find the right layer of extractor
 
-    if config.model_size == "small":
+    if config.pdn_size == "small":
         pdn = get_pdn_small(out_channels, padding=True)
-    elif config.model_size == "medium":
+    elif config.pdn_size == "medium":
         pdn = get_pdn_medium(out_channels, padding=True)
     else:
         raise Exception()
@@ -171,23 +171,23 @@ def main():
             torch.save(
                 pdn,
                 os.path.join(
-                    config.output_folder, f"teacher_{config.model_size}_tmp.pth"
+                    config.output_folder, f"teacher_{config.pdn_size}_tmp.pth"
                 ),
             )
             torch.save(
                 pdn.state_dict(),
                 os.path.join(
-                    config.output_folder, f"teacher_{config.model_size}_tmp_state.pth"
+                    config.output_folder, f"teacher_{config.pdn_size}_tmp_state.pth"
                 ),
             )
     torch.save(
         pdn,
-        os.path.join(config.output_folder, f"teacher_{config.model_size}_final.pth"),
+        os.path.join(config.output_folder, f"teacher_{config.pdn_size}_final.pth"),
     )
     torch.save(
         pdn.state_dict(),
         os.path.join(
-            config.output_folder, f"teacher_{config.model_size}_final_state.pth"
+            config.output_folder, f"teacher_{config.pdn_size}_final_state.pth"
         ),
     )
 
