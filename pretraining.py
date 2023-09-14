@@ -92,7 +92,7 @@ def get_argparse():
 seed = 42
 on_gpu = torch.cuda.is_available()
 device = "cuda" if on_gpu else "cpu"
-batch_size = 16  # TODO: update (default: 16)
+batch_size = 8  # TODO: update (default: 16)
 exp_map_size = 64
 
 
@@ -255,7 +255,7 @@ def main(args):
             target = target.transpose(1, 2).view(B, C, H, W)
             # target = torch.nn.functional.interpolate(
             #     target, (exp_map_size, exp_map_size), mode="bilinear"
-            # )  # TODO: update
+            # )  # TODO: update (uncomment when input size is NOT 1024)
 
         target = (target - channel_mean) / channel_std
         prediction = pdn(image_pdn)
