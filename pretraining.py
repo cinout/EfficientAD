@@ -23,7 +23,7 @@ from common import (
 from functools import partial
 from torch.utils.data.distributed import DistributedSampler
 import torch.distributed as dist
-import torch.nn.parallel.DistributedDataParallel as DDP
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 
 def get_argparse():
