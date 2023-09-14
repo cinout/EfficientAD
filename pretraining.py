@@ -131,7 +131,7 @@ def main(args):
     random.seed(seed)
 
     if dist.get_rank() == 0:
-        os.makedirs(args.output_folder, exist_ok=True)
+        os.makedirs(args.output_folder)
 
     if args.network == "wide_resnet101_2":
         from torchvision.models import Wide_ResNet101_2_Weights
