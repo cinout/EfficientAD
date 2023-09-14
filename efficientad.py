@@ -222,9 +222,10 @@ def main():
         student = get_pdn_medium(2 * out_channels, padding=True)
     else:
         raise Exception()
-    state_dict = torch.load(config.weights, map_location="cpu")
+    
 
     if config.pretrained_network == "wide_resnet101_2":
+        state_dict = torch.load(config.weights, map_location="cpu")
         pretrained_teacher_model = {}
         for k, v in state_dict.items():
             if k == "0.weight":
@@ -247,6 +248,7 @@ def main():
                 raise ValueError(f"unknown state_dict key {k}")
         teacher.load_state_dict(pretrained_teacher_model, strict=False)
     elif config.pretrained_network == "vit":
+        state_dict = torch.load(config.weights, map_location="gpu")
         teacher.load_state_dict(state_dict)
 
     # autoencoder = get_autoencoder(out_channels)
