@@ -17,6 +17,7 @@ wheels/
 datasets/
 output*/
 .DS_store
+*checkpoints*
 
 # pytorch/python/numpy formats
 *.pth

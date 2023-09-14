@@ -77,7 +77,7 @@ def get_argparse():
 # constants
 seed = 42
 on_gpu = torch.cuda.is_available()
-out_channels = 384
+out_channels = 384  # TODO: update
 image_size = 256
 
 # data loading

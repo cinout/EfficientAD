@@ -1,5 +1,6 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+import math
 import torchvision
 import argparse
 import os
@@ -12,11 +13,13 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 from tqdm import tqdm
 from common import (
+    PDN_Small,
     get_pdn_small,
     get_pdn_medium,
     ImageFolderWithoutTarget,
     InfiniteDataloader,
 )
+from functools import partial
 
 
 def get_argparse():
@@ -51,30 +54,28 @@ seed = 42
 on_gpu = torch.cuda.is_available()
 device = "cuda" if on_gpu else "cpu"
 
-# constants
-out_channels = 384  # TODO: update accordingly
-grayscale_transform = transforms.RandomGrayscale(0.1)  # apply same to both
 
-pdn_transform = transforms.Compose(
-    [
-        transforms.Resize((256, 256)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    ]
-)
-
-
-def train_transform(image):
-    image = grayscale_transform(image)
+def train_transform(image, size):
+    image = transforms.RandomGrayscale(0.1)(image)
     extractor_transform = transforms.Compose(
         [
-            # TODO: change input size so that output is 64*64
-            transforms.Resize((512, 512)),
+            transforms.Resize((size, size)),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ]
-    )
+    )  # for pretrained model
+    pdn_transform = transforms.Compose(
+        [
+            transforms.Resize((256, 256)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ]
+    )  # for pdn teacher
     return extractor_transform(image), pdn_transform(image)
+
+
+train_transform_512 = partial(train_transform, size=512)
+train_transform_1024 = partial(train_transform, size=1024)
 
 
 def main():
@@ -92,7 +93,9 @@ def main():
         backbone = torchvision.models.wide_resnet101_2(
             weights=Wide_ResNet101_2_Weights.IMAGENET1K_V1
         )
+        out_channels = 384
         extractor = FeatureExtractor(
+            out_channels=out_channels,
             backbone=backbone,
             layers_to_extract_from=["layer2", "layer3"],
             device=device,
@@ -100,8 +103,11 @@ def main():
                 3,
                 512,
                 512,
-            ),  # TODO: change input size so that output is 64*64
+            ),
         )
+        input_transform_func = train_transform_512
+        suffix = "wres101_2"
+
     elif args.network == "vit":
         # vit
         from urllib.request import urlretrieve
@@ -116,34 +122,41 @@ def main():
 
         config = CONFIGS["ViT-B_16"]
         model = VisionTransformer(
-            config, num_classes=1000, zero_head=False, img_size=224, vis=True
+            config,
+            num_classes=1000,
+            zero_head=False,
+            img_size=1024,
+            vis=True,
         )
         model.load_from(np.load("vit_model_checkpoints/ViT-B_16-224.npz"))
-        
+
         model.to(device)
 
         extractor = torch.nn.Sequential(
             *[model.transformer.embeddings, model.transformer.encoder]
-        )  # TODO: find the right layer of extractor
+        )
+        input_transform_func = train_transform_1024
+        out_channels = 768
+        suffix = "vit_b16"
 
     if args.pdn_size == "small":
-        pdn = get_pdn_small(out_channels, padding=True)
+        # pdn = get_pdn_small(out_channels, padding=True)
+        pdn = PDN_Small(out_channels=out_channels, padding=True)
     elif args.pdn_size == "medium":
         pdn = get_pdn_medium(out_channels, padding=True)
     else:
         raise Exception()
 
     train_set = ImageFolderWithoutTarget(
-        args.imagenet_train_path, transform=train_transform
+        args.imagenet_train_path, transform=input_transform_func
     )
     train_loader = DataLoader(
         train_set, batch_size=16, shuffle=True, num_workers=7, pin_memory=True
     )
     train_loader = InfiniteDataloader(train_loader)
 
-    # TODO: read code to understand feature_normalization()
     channel_mean, channel_std = feature_normalization(
-        extractor=extractor, train_loader=train_loader
+        args, extractor=extractor, train_loader=train_loader
     )
 
     pdn.train()
@@ -157,7 +170,17 @@ def main():
         if on_gpu:
             image_fe = image_fe.cuda()  # for extractor
             image_pdn = image_pdn.cuda()  # for pdn teacher
-        target = extractor.embed(image_fe)
+
+        if args.network == "wide_resnet101_2":
+            target = extractor.embed(image_fe)
+        elif args.network == "vit":
+            target = extractor(image_fe)[0]
+            output = output[:, 1:, :]
+            B, N, C = output.shape
+            H = int(math.sqrt(N))
+            W = int(math.sqrt(N))
+            output = output.transpose(1, 2).view(B, C, H, W)
+
         target = (target - channel_mean) / channel_std
         prediction = pdn(image_pdn)
         loss = torch.mean((target - prediction) ** 2)
@@ -168,39 +191,49 @@ def main():
 
         tqdm_obj.set_description(f"{(loss.item())}")
 
-        # TODO: update the names
         if iteration % 10000 == 0:
             torch.save(
                 pdn,
-                os.path.join(args.output_folder, f"teacher_{args.pdn_size}_tmp.pth"),
+                os.path.join(
+                    args.output_folder, f"tmp_teacher_{args.pdn_size}_{suffix}.pth"
+                ),
             )
             torch.save(
                 pdn.state_dict(),
                 os.path.join(
-                    args.output_folder, f"teacher_{args.pdn_size}_tmp_state.pth"
+                    args.output_folder,
+                    f"tmp_teacher_{args.pdn_size}_state_{suffix}.pth",
                 ),
             )
     torch.save(
         pdn,
-        os.path.join(args.output_folder, f"teacher_{args.pdn_size}_final.pth"),
+        os.path.join(args.output_folder, f"teacher_{args.pdn_size}_{suffix}.pth"),
     )
     torch.save(
         pdn.state_dict(),
-        os.path.join(args.output_folder, f"teacher_{args.pdn_size}_final_state.pth"),
+        os.path.join(args.output_folder, f"teacher_{args.pdn_size}_state_{suffix}.pth"),
     )
 
 
 @torch.no_grad()
-def feature_normalization(extractor, train_loader, steps=10000):
+def feature_normalization(args, extractor, train_loader, steps=10000):
     mean_outputs = []
     normalization_count = 0
     with tqdm(desc="Computing mean of features", total=steps) as pbar:
         for image_fe, _ in train_loader:
             if on_gpu:
-                image_fe = image_fe.cuda()
-            output = extractor(image_fe)
-            print(f"output.shape: {output.shape}")
-            exit()
+                image_fe = image_fe.cuda()  # shape: (16, 3, 512, 512)
+
+            if args.network == "wide_resnet101_2":
+                output = extractor.embed(image_fe)
+            elif args.network == "vit":
+                output = extractor(image_fe)[0]
+                output = output[:, 1:, :]
+                B, N, C = output.shape
+                H = int(math.sqrt(N))
+                W = int(math.sqrt(N))
+                output = output.transpose(1, 2).view(B, C, H, W)
+
             mean_output = torch.mean(output, dim=[0, 2, 3])
             mean_outputs.append(mean_output)
             normalization_count += len(image_fe)
@@ -218,7 +251,17 @@ def feature_normalization(extractor, train_loader, steps=10000):
         for image_fe, _ in train_loader:
             if on_gpu:
                 image_fe = image_fe.cuda()
-            output = extractor.embed(image_fe)
+
+            if args.network == "wide_resnet101_2":
+                output = extractor.embed(image_fe)
+            elif args.network == "vit":
+                output = extractor(image_fe)[0]
+                output = output[:, 1:, :]
+                B, N, C = output.shape
+                H = int(math.sqrt(N))
+                W = int(math.sqrt(N))
+                output = output.transpose(1, 2).view(B, C, H, W)
+
             distance = (output - channel_mean) ** 2
             mean_distance = torch.mean(distance, dim=[0, 2, 3])
             mean_distances.append(mean_distance)
@@ -236,7 +279,9 @@ def feature_normalization(extractor, train_loader, steps=10000):
 
 
 class FeatureExtractor(torch.nn.Module):
-    def __init__(self, backbone, layers_to_extract_from, device, input_shape):
+    def __init__(
+        self, out_channels, backbone, layers_to_extract_from, device, input_shape
+    ):
         super(FeatureExtractor, self).__init__()
         self.backbone = backbone.to(device)
         self.layers_to_extract_from = layers_to_extract_from

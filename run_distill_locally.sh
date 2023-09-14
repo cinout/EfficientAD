@@ -1,0 +1,1 @@
+python -u pretraining.py --network "vit"
