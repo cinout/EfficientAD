@@ -38,7 +38,10 @@ conda activate ds2
 set -e
 set -x
 
-srun python -u pretraining.py --network "vit"
+srun python -u pretraining.py \
+  --network "vit" \
+  --batch_size 4  \
+  --extractor_input_size 512 \
 
 ##Log this job's resource usage stats###
 my-job-stats -a -n -s

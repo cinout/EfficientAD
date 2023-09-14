@@ -24,6 +24,7 @@ from functools import partial
 from torch.utils.data.distributed import DistributedSampler
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
+from datetime import datetime
 
 
 def get_argparse():
@@ -49,6 +50,16 @@ def get_argparse():
         "--imagenet_train_path",
         type=str,
         default="./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train",
+    )
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=16,
+    )
+    parser.add_argument(
+        "--extractor_input_size",
+        type=int,
+        default=1024,
     )
 
     # ---- SLURM and DDP args ---- #
@@ -92,7 +103,6 @@ def get_argparse():
 seed = 42
 on_gpu = torch.cuda.is_available()
 device = "cuda" if on_gpu else "cpu"
-batch_size = 4  # TODO: update (default: 16)
 exp_map_size = 64
 
 
@@ -113,10 +123,6 @@ def train_transform(image, size):
         ]
     )  # for pdn teacher
     return extractor_transform(image), pdn_transform(image)
-
-
-train_transform_512 = partial(train_transform, size=512)
-train_transform_1024 = partial(train_transform, size=1024)
 
 
 def main(args):
@@ -167,7 +173,7 @@ def main(args):
             config,
             num_classes=1000,
             zero_head=False,
-            img_size=512,  # TODO: update
+            img_size=args.extractor_input_size,
             vis=True,
         )
         model.load_from(np.load("vit_model_checkpoints/ViT-B_16-224.npz"))
@@ -176,7 +182,7 @@ def main(args):
             *[model.transformer.embeddings, model.transformer.encoder]
         )
         extractor.eval()
-        input_transform_func = train_transform_512  # TODO: update
+        input_transform_func = partial(train_transform, size=args.extractor_input_size)
         out_channels = 768
         suffix = "vit_b16"
 
@@ -211,7 +217,7 @@ def main(args):
         train_sampler = DistributedSampler(train_set, shuffle=True)
         train_loader = DataLoader(
             train_set,
-            batch_size=batch_size,
+            batch_size=args.batch_size,
             shuffle=False,
             # num_workers=7,
             pin_memory=True,
@@ -221,7 +227,7 @@ def main(args):
     else:
         train_loader = DataLoader(
             train_set,
-            batch_size=batch_size,
+            batch_size=args.batch_size,
             shuffle=True,
             num_workers=7,
             pin_memory=True,
@@ -647,4 +653,18 @@ if __name__ == "__main__":
             builtins.print = print_pass
 
     print(devices_names)
+    if dist.get_rank() == 0:
+        timestamp = (
+            datetime.now().strftime("%Y%m%d_%H%M%S")
+            + "_"
+            + str(random.randint(0, 100))
+            + "_"
+            + str(random.randint(0, 100))
+        )
+        args.output_folder = args.output_folder + "_" + timestamp
+
+    options_str = "\n".join(
+        "%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items())
+    )
+    print(options_str)
     main(args)
