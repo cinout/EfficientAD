@@ -212,7 +212,6 @@ class Autoencoder(nn.Module):
             padding=1,
         )
 
-        # # TODO: check if it works
         # self.enc_vq1 = VectorQuantizerEMA(num_embeddings=32, embedding_dim=64)
         # self.enc_vq2 = VectorQuantizerEMA(num_embeddings=16, embedding_dim=64)
         # self.enc_vq3 = VectorQuantizerEMA(num_embeddings=8, embedding_dim=64)
