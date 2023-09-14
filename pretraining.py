@@ -592,6 +592,9 @@ class LastLayerToExtractReachedException(Exception):
 if __name__ == "__main__":
     args = get_argparse()
 
+    devices_names = f"{[torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())]}"
+
+
     if "WORLD_SIZE" in os.environ:
         args.world_size = int(os.environ["WORLD_SIZE"])
 
@@ -623,4 +626,5 @@ if __name__ == "__main__":
 
             builtins.print = print_pass
 
+    print(devices_names)
     main(args)
