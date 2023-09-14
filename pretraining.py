@@ -196,7 +196,7 @@ def feature_normalization(extractor, train_loader, steps=10000):
         for image_fe, _ in train_loader:
             if on_gpu:
                 image_fe = image_fe.cuda()
-            output = extractor.embed(image_fe)
+            output = extractor(image_fe)
             print(f"output.shape: {output.shape}")
             exit()
             mean_output = torch.mean(output, dim=[0, 2, 3])
