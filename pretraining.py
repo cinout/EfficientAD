@@ -1,5 +1,6 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+import builtins
 import math
 import torchvision
 import argparse
@@ -20,6 +21,9 @@ from common import (
     InfiniteDataloader,
 )
 from functools import partial
+from torch.utils.data.distributed import DistributedSampler
+import torch.distributed as dist
+import torch.nn.parallel.DistributedDataParallel as DDP
 
 
 def get_argparse():
@@ -45,6 +49,41 @@ def get_argparse():
         "--imagenet_train_path",
         type=str,
         default="./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train",
+    )
+
+    # ---- SLURM and DDP args ---- #
+    parser.add_argument(
+        "--world_size",
+        default=-1,
+        type=int,
+        help="number of processes for distributed training",
+    )
+    parser.add_argument(
+        "--global_rank",
+        default=-1,
+        type=int,
+        help="global rank for distributed training",
+    )
+    parser.add_argument(
+        "--local_rank",
+        default=-1,
+        type=int,
+        help="local rank for torch.distributed.launch training",
+    )
+    parser.add_argument(
+        "--gpu",
+        default=None,
+        type=int,
+        help="local rank for slurm training (c.f. local_rank)",
+    )
+    parser.add_argument(
+        "--dist_url",
+        default="env://",
+        type=str,
+        help="url used to set up distributed training",
+    )
+    parser.add_argument(
+        "--dist_backend", default="nccl", type=str, help="distributed backend"
     )
     return parser.parse_args()
 
@@ -78,14 +117,13 @@ train_transform_512 = partial(train_transform, size=512)
 train_transform_1024 = partial(train_transform, size=1024)
 
 
-def main():
+def main(args):
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
 
-    args = get_argparse()
-
-    os.makedirs(args.output_folder, exist_ok=True)
+    if dist.get_rank() == 0:
+        os.makedirs(args.output_folder, exist_ok=True)
 
     if args.network == "wide_resnet101_2":
         from torchvision.models import Wide_ResNet101_2_Weights
@@ -113,7 +151,9 @@ def main():
         from urllib.request import urlretrieve
         from models.modeling import VisionTransformer, CONFIGS
 
-        os.makedirs("vit_model_checkpoints", exist_ok=True)
+        if dist.get_rank() == 0:
+            os.makedirs("vit_model_checkpoints", exist_ok=True)
+
         if not os.path.isfile("vit_model_checkpoints/ViT-B_16-224.npz"):
             urlretrieve(
                 "https://storage.googleapis.com/vit_models/imagenet21k+imagenet2012/ViT-B_16-224.npz",
@@ -130,8 +170,6 @@ def main():
         )
         model.load_from(np.load("vit_model_checkpoints/ViT-B_16-224.npz"))
 
-        model.to(device)
-
         extractor = torch.nn.Sequential(
             *[model.transformer.embeddings, model.transformer.encoder]
         )
@@ -147,27 +185,55 @@ def main():
         pdn = get_pdn_medium(out_channels, padding=True)
     else:
         raise Exception()
+    pdn.train()
+
+    if args.distributed:
+        if args.gpu is None:
+            extractor.cuda()
+            extractor = DDP(extractor)
+            pdn.cuda()
+            pdn = DDP(pdn)
+        else:
+            extractor.cuda(args.gpu)
+            extractor = DDP(extractor, device_ids=[args.gpu])
+            pdn.cuda(args.gpu)
+            pdn = DDP(pdn, device_ids=[args.gpu])
+    else:
+        extractor.to(device)
+        pdn.to(device)
 
     train_set = ImageFolderWithoutTarget(
         args.imagenet_train_path, transform=input_transform_func
     )
-    train_loader = DataLoader(
-        train_set, batch_size=16, shuffle=True, num_workers=7, pin_memory=True
-    )
+    if args.distributed:
+        train_sampler = DistributedSampler(train_set, shuffle=True)
+        train_loader = DataLoader(
+            train_set,
+            batch_size=16,
+            shuffle=False,
+            # num_workers=7,
+            pin_memory=True,
+            sampler=train_sampler,
+            drop_last=True,
+        )
+    else:
+        train_loader = DataLoader(
+            train_set, batch_size=16, shuffle=True, num_workers=7, pin_memory=True
+        )
     train_loader = InfiniteDataloader(train_loader)
 
     channel_mean, channel_std = feature_normalization(
         args, extractor=extractor, train_loader=train_loader
     )
 
-    pdn.train()
-    if on_gpu:
-        pdn = pdn.cuda()
-
     optimizer = torch.optim.Adam(pdn.parameters(), lr=1e-4, weight_decay=1e-5)
 
     tqdm_obj = tqdm(range(60000))
     for iteration, (image_fe, image_pdn) in zip(tqdm_obj, train_loader):
+        # if isinstance(train_loader.sampler, DistributedSampler):
+        # 		# calling the set_epoch() method at the beginning of each epoch before creating the DataLoader iterator is necessary to make shuffling work properly across multiple epochs. Otherwise, the same ordering will be always used.
+        #     train_loader.sampler.set_epoch(iteration)
+
         if on_gpu:
             image_fe = image_fe.cuda()  # for extractor
             image_pdn = image_pdn.cuda()  # for pdn teacher
@@ -193,27 +259,31 @@ def main():
         tqdm_obj.set_description(f"{(loss.item())}")
 
         if iteration % 10000 == 0:
-            torch.save(
-                pdn,
-                os.path.join(
-                    args.output_folder, f"tmp_teacher_{args.pdn_size}_{suffix}.pth"
-                ),
-            )
-            torch.save(
-                pdn.state_dict(),
-                os.path.join(
-                    args.output_folder,
-                    f"tmp_teacher_{args.pdn_size}_state_{suffix}.pth",
-                ),
-            )
-    torch.save(
-        pdn,
-        os.path.join(args.output_folder, f"teacher_{args.pdn_size}_{suffix}.pth"),
-    )
-    torch.save(
-        pdn.state_dict(),
-        os.path.join(args.output_folder, f"teacher_{args.pdn_size}_state_{suffix}.pth"),
-    )
+            if dist.get_rank() == 0:
+                torch.save(
+                    pdn,
+                    os.path.join(
+                        args.output_folder, f"tmp_teacher_{args.pdn_size}_{suffix}.pth"
+                    ),
+                )
+                torch.save(
+                    pdn.state_dict(),
+                    os.path.join(
+                        args.output_folder,
+                        f"tmp_teacher_{args.pdn_size}_state_{suffix}.pth",
+                    ),
+                )
+    if dist.get_rank() == 0:
+        torch.save(
+            pdn,
+            os.path.join(args.output_folder, f"teacher_{args.pdn_size}_{suffix}.pth"),
+        )
+        torch.save(
+            pdn.state_dict(),
+            os.path.join(
+                args.output_folder, f"teacher_{args.pdn_size}_state_{suffix}.pth"
+            ),
+        )
 
 
 @torch.no_grad()
@@ -520,4 +590,37 @@ class LastLayerToExtractReachedException(Exception):
 
 
 if __name__ == "__main__":
-    main()
+    args = get_argparse()
+
+    if "WORLD_SIZE" in os.environ:
+        args.world_size = int(os.environ["WORLD_SIZE"])
+
+    args.distributed = args.world_size > 1
+    ngpus_per_node = torch.cuda.device_count()
+    torch.backends.cudnn.benchmark = True
+
+    if args.distributed:
+        if args.local_rank != -1:  # for torch.distributed.launch
+            args.global_rank = args.local_rank
+            args.gpu = args.local_rank
+        elif "SLURM_PROCID" in os.environ:  # for slurm scheduler
+            args.global_rank = int(os.environ["SLURM_PROCID"])
+            args.gpu = args.global_rank % ngpus_per_node
+        dist.init_process_group(
+            backend=args.dist_backend,
+            init_method=args.dist_url,
+            world_size=args.world_size,
+            rank=args.global_rank,
+        )
+        if args.gpu is not None:
+            torch.cuda.set_device(args.gpu)
+
+        # suppress printing if not on master gpu
+        if args.global_rank != 0:
+
+            def print_pass(*args):
+                pass
+
+            builtins.print = print_pass
+
+    main(args)

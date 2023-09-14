@@ -180,8 +180,6 @@ class Embeddings(nn.Module):
         x = x.transpose(-1, -2)
         x = torch.cat((cls_tokens, x), dim=1)
 
-        # x.shape: (16, 1025, 768), where 1025 = 1+ 32*32, where 32 = 512/16
-        # self.position_embeddings.shape: (1, 1025, 768), where
         embeddings = x + self.position_embeddings
         embeddings = self.dropout(embeddings)
         return embeddings
@@ -291,7 +289,7 @@ class Transformer(nn.Module):
         super(Transformer, self).__init__()
         self.embeddings = Embeddings(
             config, img_size=img_size
-        )  # shape: (16, 1025, 768), the first item in 1025 is cls_embed
+        )  # shape: (16, 1025, c), the first item in 1025 is cls_embed
         self.encoder = Encoder(config, vis)
 
     def forward(self, input_ids):

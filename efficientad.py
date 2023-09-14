@@ -69,6 +69,14 @@ def get_argparse():
         default="./datasets/loco",
         help="Downloaded Mvtec LOCO dataset",
     )
+    # TODO:
+    parser.add_argument(
+        "--pretrained_network",
+        choices=["wide_resnet101_2", "vit"],
+        type=str,
+        default="wide_resnet101_2",
+    )
+
     parser.add_argument("-t", "--train_steps", type=int, default=70000)
     parser.add_argument("--note", type=str, default="")
     return parser.parse_args()
@@ -212,28 +220,32 @@ def main():
     else:
         raise Exception()
     state_dict = torch.load(config.weights, map_location="cpu")
-    pretrained_teacher_model = {}
-    for k, v in state_dict.items():
-        if k == "0.weight":
-            pretrained_teacher_model["conv1.weight"] = v
-        elif k == "0.bias":
-            pretrained_teacher_model["conv1.bias"] = v
-        elif k == "3.weight":
-            pretrained_teacher_model["conv2.weight"] = v
-        elif k == "3.bias":
-            pretrained_teacher_model["conv2.bias"] = v
-        elif k == "6.weight":
-            pretrained_teacher_model["conv3.weight"] = v
-        elif k == "6.bias":
-            pretrained_teacher_model["conv3.bias"] = v
-        elif k == "8.weight":
-            pretrained_teacher_model["conv4.weight"] = v
-        elif k == "8.bias":
-            pretrained_teacher_model["conv4.bias"] = v
-        else:
-            raise ValueError(f"unknown state_dict key {k}")
-    teacher.load_state_dict(pretrained_teacher_model, strict=False)
-    # teacher.load_state_dict(state_dict)
+
+    if config.pretrained_network == "wide_resnet101_2":
+        pretrained_teacher_model = {}
+        for k, v in state_dict.items():
+            if k == "0.weight":
+                pretrained_teacher_model["conv1.weight"] = v
+            elif k == "0.bias":
+                pretrained_teacher_model["conv1.bias"] = v
+            elif k == "3.weight":
+                pretrained_teacher_model["conv2.weight"] = v
+            elif k == "3.bias":
+                pretrained_teacher_model["conv2.bias"] = v
+            elif k == "6.weight":
+                pretrained_teacher_model["conv3.weight"] = v
+            elif k == "6.bias":
+                pretrained_teacher_model["conv3.bias"] = v
+            elif k == "8.weight":
+                pretrained_teacher_model["conv4.weight"] = v
+            elif k == "8.bias":
+                pretrained_teacher_model["conv4.bias"] = v
+            else:
+                raise ValueError(f"unknown state_dict key {k}")
+        teacher.load_state_dict(pretrained_teacher_model, strict=False)
+    elif config.pretrained_network == "vit":
+        teacher.load_state_dict(state_dict)
+
     # autoencoder = get_autoencoder(out_channels)
     autoencoder = Autoencoder(out_channels=out_channels)
 
@@ -247,7 +259,7 @@ def main():
         student.cuda()
         autoencoder.cuda()
 
-    # TODO: should we update the teacher_mean, teacher_std on the fly? Different for each batch
+    # FIXME: should we update the teacher_mean, teacher_std on the fly? Different for each batch
     teacher_mean, teacher_std = teacher_normalization(teacher, train_loader)
 
     optimizer = torch.optim.Adam(
