@@ -118,7 +118,9 @@ def main():
         model = VisionTransformer(
             config, num_classes=1000, zero_head=False, img_size=224, vis=True
         )
-        model.load_from(np.load("vit_model_checkpoints/ViT-B_16-224.npz")).to(device)
+        model.load_from(np.load("vit_model_checkpoints/ViT-B_16-224.npz"))
+        
+        model.to(device)
 
         extractor = torch.nn.Sequential(
             *[model.transformer.embeddings, model.transformer.encoder]
