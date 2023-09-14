@@ -92,6 +92,8 @@ def get_argparse():
 seed = 42
 on_gpu = torch.cuda.is_available()
 device = "cuda" if on_gpu else "cpu"
+batch_size = 8  # TODO: update (default: 16)
+exp_map_size = 64
 
 
 def train_transform(image, size):
@@ -165,7 +167,7 @@ def main(args):
             config,
             num_classes=1000,
             zero_head=False,
-            img_size=1024,
+            img_size=512,  # TODO: update
             vis=True,
         )
         model.load_from(np.load("vit_model_checkpoints/ViT-B_16-224.npz"))
@@ -174,7 +176,7 @@ def main(args):
             *[model.transformer.embeddings, model.transformer.encoder]
         )
         extractor.eval()
-        input_transform_func = train_transform_1024
+        input_transform_func = train_transform_512  # TODO: update
         out_channels = 768
         suffix = "vit_b16"
 
@@ -209,7 +211,7 @@ def main(args):
         train_sampler = DistributedSampler(train_set, shuffle=True)
         train_loader = DataLoader(
             train_set,
-            batch_size=16,
+            batch_size=batch_size,
             shuffle=False,
             # num_workers=7,
             pin_memory=True,
@@ -218,7 +220,11 @@ def main(args):
         )
     else:
         train_loader = DataLoader(
-            train_set, batch_size=16, shuffle=True, num_workers=7, pin_memory=True
+            train_set,
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=7,
+            pin_memory=True,
         )
     train_loader = InfiniteDataloader(train_loader)
 
@@ -247,6 +253,9 @@ def main(args):
             H = int(math.sqrt(N))
             W = int(math.sqrt(N))
             output = output.transpose(1, 2).view(B, C, H, W)
+            output = torch.nn.functional.interpolate(
+                output, (exp_map_size, exp_map_size), mode="bilinear"
+            )
 
         target = (target - channel_mean) / channel_std
         prediction = pdn(image_pdn)
@@ -304,6 +313,9 @@ def feature_normalization(args, extractor, train_loader, steps=10000):
                 H = int(math.sqrt(N))
                 W = int(math.sqrt(N))
                 output = output.transpose(1, 2).view(B, C, H, W)
+                output = torch.nn.functional.interpolate(
+                    output, (exp_map_size, exp_map_size), mode="bilinear"
+                )
 
             mean_output = torch.mean(output, dim=[0, 2, 3])
             mean_outputs.append(mean_output)
@@ -332,6 +344,9 @@ def feature_normalization(args, extractor, train_loader, steps=10000):
                 H = int(math.sqrt(N))
                 W = int(math.sqrt(N))
                 output = output.transpose(1, 2).view(B, C, H, W)
+                output = torch.nn.functional.interpolate(
+                    output, (exp_map_size, exp_map_size), mode="bilinear"
+                )
 
             distance = (output - channel_mean) ** 2
             mean_distance = torch.mean(distance, dim=[0, 2, 3])
@@ -358,6 +373,7 @@ class FeatureExtractor(torch.nn.Module):
         self.layers_to_extract_from = layers_to_extract_from
         self.device = device
         self.input_shape = input_shape
+        self.out_channels=out_channels
 
         self.patch_maker = PatchMaker(3, stride=1)
         self.forward_modules = torch.nn.ModuleDict({})
@@ -422,7 +438,7 @@ class FeatureExtractor(torch.nn.Module):
         # sized features, these are brought into the correct form here.
         features = self.forward_modules["preprocessing"](features)
         features = self.forward_modules["preadapt_aggregator"](features)
-        features = torch.reshape(features, (-1, 64, 64, out_channels))
+        features = torch.reshape(features, (-1, 64, 64, self.out_channels))
         features = torch.permute(features, (0, 3, 1, 2))
 
         return features
@@ -592,8 +608,9 @@ class LastLayerToExtractReachedException(Exception):
 if __name__ == "__main__":
     args = get_argparse()
 
-    devices_names = f"{[torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())]}"
-
+    devices_names = (
+        f"{[torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())]}"
+    )
 
     if "WORLD_SIZE" in os.environ:
         args.world_size = int(os.environ["WORLD_SIZE"])
