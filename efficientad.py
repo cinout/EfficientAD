@@ -248,7 +248,7 @@ def main():
                 raise ValueError(f"unknown state_dict key {k}")
         teacher.load_state_dict(pretrained_teacher_model, strict=False)
     elif config.pretrained_network == "vit":
-        state_dict = torch.load(config.weights, map_location="gpu")
+        state_dict = torch.load(config.weights, map_location="cuda")
         teacher.load_state_dict(state_dict)
 
     # autoencoder = get_autoencoder(out_channels)
