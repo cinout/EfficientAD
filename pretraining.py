@@ -248,13 +248,13 @@ def main(args):
             target = extractor.embed(image_fe)
         elif args.network == "vit":
             target = extractor(image_fe)[0]
-            output = output[:, 1:, :]
-            B, N, C = output.shape
+            target = target[:, 1:, :]
+            B, N, C = target.shape
             H = int(math.sqrt(N))
             W = int(math.sqrt(N))
-            output = output.transpose(1, 2).view(B, C, H, W)
-            # output = torch.nn.functional.interpolate(
-            #     output, (exp_map_size, exp_map_size), mode="bilinear"
+            target = target.transpose(1, 2).view(B, C, H, W)
+            # target = torch.nn.functional.interpolate(
+            #     target, (exp_map_size, exp_map_size), mode="bilinear"
             # )  # TODO: update
 
         target = (target - channel_mean) / channel_std
