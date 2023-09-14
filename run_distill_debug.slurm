@@ -1,28 +1,28 @@
 #!/bin/bash
 
-#SBATCH --partition=gpu-a100
+###SBATCH --partition=gpu-a100
 
 ###SBATCH --partition=feit-gpu-a100
 ###SBATCH --qos=feit
 
-###SBATCH --partition=deeplearn
-###SBATCH --qos=gpgpudeeplearn
-###SBATCH --constraint=dlg4|dlg5
+#SBATCH --partition=deeplearn
+#SBATCH --qos=gpgpudeeplearn
+#SBATCH --constraint=dlg3|dlg4|dlg5
 
 #SBATCH --job-name="disti"
 #SBATCH --account=punim1623
 #SBATCH --time=0-00:20:00
 
 #SBATCH --nodes=1
-#SBATCH --ntasks-per-node=4
-#SBATCH --gres=gpu:4
+#SBATCH --ntasks-per-node=2
+#SBATCH --gres=gpu:2
 
 ### "ntasks-per-node" should have same value as "res=gpu:"
 
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=40G
 
-export WORLD_SIZE=4   ####TODO: update world size: nodes x ntasks-per-node
+export WORLD_SIZE=2  #### update world size: nodes x ntasks-per-node
 export MASTER_PORT=12340
 
 echo ">>> NODELIST="${SLURM_NODELIST}
