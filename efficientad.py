@@ -249,7 +249,27 @@ def main():
         teacher.load_state_dict(pretrained_teacher_model, strict=False)
     elif config.pretrained_network == "vit":
         state_dict = torch.load(config.weights, map_location="cuda")
-        teacher.load_state_dict(state_dict)
+        pretrained_teacher_model = {}
+        for k, v in state_dict.items():
+            if k == "module.conv1.weight":
+                pretrained_teacher_model["conv1.weight"] = v
+            elif k == "module.conv1.bias":
+                pretrained_teacher_model["conv1.bias"] = v
+            elif k == "module.conv2.weight":
+                pretrained_teacher_model["conv2.weight"] = v
+            elif k == "module.conv2.bias":
+                pretrained_teacher_model["conv2.bias"] = v
+            elif k == "module.conv3.weight":
+                pretrained_teacher_model["conv3.weight"] = v
+            elif k == "module.conv3.bias":
+                pretrained_teacher_model["conv3.bias"] = v
+            elif k == "module.conv4.weight":
+                pretrained_teacher_model["conv4.weight"] = v
+            elif k == "module.conv4.bias":
+                pretrained_teacher_model["conv4.bias"] = v
+            else:
+                raise ValueError(f"unknown state_dict key {k}")
+        teacher.load_state_dict(pretrained_teacher_model, strict=False)
 
     # autoencoder = get_autoencoder(out_channels)
     autoencoder = Autoencoder(out_channels=out_channels)
