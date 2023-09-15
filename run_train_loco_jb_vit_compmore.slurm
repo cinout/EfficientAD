@@ -9,7 +9,7 @@
 #SBATCH --qos=gpgpudeeplearn
 #SBATCH --constraint=dlg3|dlg4|dlg5
 
-#SBATCH --job-name="train_sb"
+#SBATCH --job-name="train_jb"
 #SBATCH --account=punim1623
 #SBATCH --time=0-05:00:00
 
@@ -29,8 +29,14 @@ conda activate ds2
 set -e
 set -x
 
-python -u efficientad.py --dataset mvtec_loco --subdataset screw_bag --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train --note "add code book to encoder"
-
+python -u efficientad.py \
+  --pretrained_network vit \
+  --weights pretrained_w_20230915_003332_55_38/teacher_small_state_vit_b16.pth\
+  --dataset mvtec_loco \
+  --subdataset juice_bottle \
+  --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
+  --note "[pretrained] vit [weights] compmore bs8size512"
+# FIXME: update weights, pretrained_network, note
 ##Log this job's resource usage stats###
 my-job-stats -a -n -s
 ##
