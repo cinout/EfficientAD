@@ -276,12 +276,12 @@ def main(args):
 
         if iteration % 10000 == 0:
             if dist.get_rank() == 0:
-                torch.save(
-                    pdn,
-                    os.path.join(
-                        args.output_folder, f"tmp_teacher_{args.pdn_size}_{suffix}.pth"
-                    ),
-                )
+                # torch.save(
+                #     pdn,
+                #     os.path.join(
+                #         args.output_folder, f"tmp_teacher_{args.pdn_size}_{suffix}.pth"
+                #     ),
+                # )
                 torch.save(
                     pdn.state_dict(),
                     os.path.join(
@@ -290,10 +290,10 @@ def main(args):
                     ),
                 )
     if dist.get_rank() == 0:
-        torch.save(
-            pdn,
-            os.path.join(args.output_folder, f"teacher_{args.pdn_size}_{suffix}.pth"),
-        )
+        # torch.save(
+        #     pdn,
+        #     os.path.join(args.output_folder, f"teacher_{args.pdn_size}_{suffix}.pth"),
+        # )
         torch.save(
             pdn.state_dict(),
             os.path.join(
