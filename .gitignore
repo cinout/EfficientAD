@@ -19,6 +19,7 @@ output*/
 .DS_store
 *checkpoints*
 archive/
+pretrained_*
 
 # pytorch/python/numpy formats
 *.pth
