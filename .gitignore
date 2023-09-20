@@ -18,6 +18,7 @@ datasets/
 output*/
 .DS_store
 *checkpoints*
+archive/
 
 # pytorch/python/numpy formats
 *.pth

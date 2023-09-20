@@ -2,6 +2,5 @@ import math
 import torch
 
 
-A = B = math.sqrt(1024)
-print(A)
-print(type(A))
+for i in range(1, 2):
+    print(i)

@@ -130,7 +130,7 @@ def main(args):
     np.random.seed(seed)
     random.seed(seed)
 
-    if dist.get_rank() == 0:
+    if not on_gpu or dist.get_rank() == 0:
         os.makedirs(args.output_folder)
 
     if args.network == "wide_resnet101_2":
@@ -140,6 +140,7 @@ def main(args):
             weights=Wide_ResNet101_2_Weights.IMAGENET1K_V1
         )
         out_channels = 384
+
         extractor = FeatureExtractor(
             out_channels=out_channels,
             backbone=backbone,
@@ -151,7 +152,7 @@ def main(args):
                 512,
             ),
         )
-        input_transform_func = train_transform_512
+        input_transform_func = partial(train_transform, size=512)
         suffix = "wres101_2"
 
     elif args.network == "vit":
@@ -381,17 +382,22 @@ class FeatureExtractor(torch.nn.Module):
         self.backbone = backbone.to(device)
         self.layers_to_extract_from = layers_to_extract_from
         self.device = device
-        self.input_shape = input_shape
-        self.out_channels = out_channels
+        self.input_shape = input_shape  # (3, 512, 512)
+        self.out_channels = out_channels  # 384
 
-        self.patch_maker = PatchMaker(3, stride=1)
         self.forward_modules = torch.nn.ModuleDict({})
 
+        # aggregate features from different layers of pretrained model
         feature_aggregator = NetworkFeatureAggregator(
             self.backbone, self.layers_to_extract_from, self.device
         )
-        feature_dimensions = feature_aggregator.feature_dimensions(input_shape)
+        feature_dimensions = feature_aggregator.feature_dimensions(
+            input_shape
+        )  # channel dims: [512, 1024]
         self.forward_modules["feature_aggregator"] = feature_aggregator
+
+        # use padding to include neighborhood, and upsample smaller features to the largest
+        self.patch_maker = PatchMaker(3, stride=1)  # modify features
 
         preprocessing = Preprocessing(feature_dimensions, 1024)
         self.forward_modules["preprocessing"] = preprocessing
@@ -407,48 +413,76 @@ class FeatureExtractor(torch.nn.Module):
         """Returns feature embeddings for images."""
 
         _ = self.forward_modules["feature_aggregator"].eval()
-        features = self.forward_modules["feature_aggregator"](images)
-
-        features = [features[layer] for layer in self.layers_to_extract_from]
-
+        features = self.forward_modules["feature_aggregator"](
+            images
+        )  # {"layer2": tensor, "layer3": tensor}
+        features = [
+            features[layer] for layer in self.layers_to_extract_from
+        ]  # features[0].shape: [bs, 512, 64, 64], features[1].shape: [bs, 1024, 32, 32]
         features = [
             self.patch_maker.patchify(x, return_spatial_info=True) for x in features
         ]
-        patch_shapes = [x[1] for x in features]
-        features = [x[0] for x in features]
+
+        patch_shapes = [x[1] for x in features]  # [[64, 64], [32, 32]]
+        features = [
+            x[0] for x in features
+        ]  # unfolded_features[], two elements, each.shape: [bs, #patches=h*w, c, 3, 3]
         ref_num_patches = patch_shapes[0]
 
         for i in range(1, len(features)):
+            # i is only 1, for upsampling feature map
             _features = features[i]
             patch_dims = patch_shapes[i]
 
             _features = _features.reshape(
                 _features.shape[0], patch_dims[0], patch_dims[1], *_features.shape[2:]
-            )
-            _features = _features.permute(0, -3, -2, -1, 1, 2)
+            )  # [4, 32, 32, 1024, 3, 3]
+
+            _features = _features.permute(
+                0, -3, -2, -1, 1, 2
+            )  # [4, 1024, 3, 3, 32, 32]
+
             perm_base_shape = _features.shape
-            _features = _features.reshape(-1, *_features.shape[-2:])
+            _features = _features.reshape(-1, *_features.shape[-2:])  # [36864, 32, 32]
+
+            # upsample feature map to the largest size
             _features = F.interpolate(
                 _features.unsqueeze(1),
                 size=(ref_num_patches[0], ref_num_patches[1]),
                 mode="bilinear",
                 align_corners=False,
-            )
-            _features = _features.squeeze(1)
+            )  # [36864, 1, 64, 64]
+
+            _features = _features.squeeze(1)  # [36864, 64, 64]
+
             _features = _features.reshape(
                 *perm_base_shape[:-2], ref_num_patches[0], ref_num_patches[1]
-            )
-            _features = _features.permute(0, -2, -1, 1, 2, 3)
-            _features = _features.reshape(len(_features), -1, *_features.shape[-3:])
+            )  # [4, 1024, 3, 3, 64, 64]
+
+            _features = _features.permute(0, -2, -1, 1, 2, 3)  # [4, 64, 64, 1024, 3, 3]
+
+            _features = _features.reshape(
+                len(_features), -1, *_features.shape[-3:]
+            )  # [4, 4096, 1024, 3, 3]
+
             features[i] = _features
-        features = [x.reshape(-1, *x.shape[-3:]) for x in features]
+
+        features = [
+            x.reshape(-1, *x.shape[-3:]) for x in features
+        ]  # each with shape: (bs*h*w, c, 3, 3), where h and w are the largest size
 
         # As different feature backbones & patching provide differently
         # sized features, these are brought into the correct form here.
-        features = self.forward_modules["preprocessing"](features)
-        features = self.forward_modules["preadapt_aggregator"](features)
-        features = torch.reshape(features, (-1, 64, 64, self.out_channels))
-        features = torch.permute(features, (0, 3, 1, 2))
+        features = self.forward_modules["preprocessing"](
+            features
+        )  # shape: (bs*h*w, 2, output_dim==1024)
+        features = self.forward_modules["preadapt_aggregator"](
+            features
+        )  # (bs*h*w, 384)
+        features = torch.reshape(
+            features, (-1, 64, 64, self.out_channels)
+        )  # (bs, h, w, 384)
+        features = torch.permute(features, (0, 3, 1, 2))  # (bs, 384, h, w)
 
         return features
 
@@ -472,16 +506,34 @@ class PatchMaker:
             kernel_size=self.patchsize, stride=self.stride, padding=padding, dilation=1
         )
         unfolded_features = unfolder(features)
-        number_of_total_patches = []
+        """
+        features.shape: torch.Size([4, 512, 64, 64])
+        unfolded_features.shape: torch.Size([4, 4608, 4096])
+        ----
+        features.shape: torch.Size([4, 1024, 32, 32]) (1024*3*3)
+        unfolded_features.shape: torch.Size([4, 9216, 1024]) 
+        """
+        number_of_total_patches = []  # [64, 64] or [32, 32]
         for s in features.shape[-2:]:
             n_patches = (
                 s + 2 * padding - 1 * (self.patchsize - 1) - 1
             ) / self.stride + 1
             number_of_total_patches.append(int(n_patches))
+
         unfolded_features = unfolded_features.reshape(
             *features.shape[:2], self.patchsize, self.patchsize, -1
         )
+        """
+        unfolded_features.shape: torch.Size([4, 512, 3, 3, 4096])
+        ----
+        unfolded_features.shape: torch.Size([4, 1024, 3, 3, 1024])
+        """
         unfolded_features = unfolded_features.permute(0, 4, 1, 2, 3)
+        """
+        unfolded_features.shape: torch.Size([4, 4096, 512, 3, 3])
+        ----
+        unfolded_features.shape: torch.Size([4, 1024, 1024, 3, 3])
+        """
 
         if return_spatial_info:
             return unfolded_features, number_of_total_patches
@@ -503,6 +555,7 @@ class Preprocessing(torch.nn.Module):
         _features = []
         for module, feature in zip(self.preprocessing_modules, features):
             _features.append(module(feature))
+        # _features[x].shape: (bs*h*w, output_dim)
         return torch.stack(_features, dim=1)
 
 
@@ -512,7 +565,9 @@ class MeanMapper(torch.nn.Module):
         self.preprocessing_dim = preprocessing_dim
 
     def forward(self, features):
+        # features.shape: (bs*h*w, c, 3, 3)
         features = features.reshape(len(features), 1, -1)
+        # features.shape: (bs*h*w, 1, c*3*3)
         return F.adaptive_avg_pool1d(features, self.preprocessing_dim).squeeze(1)
 
 
@@ -653,7 +708,7 @@ if __name__ == "__main__":
             builtins.print = print_pass
 
     print(devices_names)
-    if dist.get_rank() == 0:
+    if not on_gpu or dist.get_rank() == 0:
         timestamp = (
             datetime.now().strftime("%Y%m%d_%H%M%S")
             + "_"
@@ -667,4 +722,5 @@ if __name__ == "__main__":
         "%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items())
     )
     print(options_str)
+    print("----------------------")
     main(args)

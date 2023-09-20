@@ -1,1 +1,2 @@
-python -u pretraining.py --network "vit"
+python -u pretraining.py \
+  --batch_size 4 \
