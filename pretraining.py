@@ -33,7 +33,7 @@ def get_argparse():
         description="What the program does",
         epilog="Text at the bottom of help",
     )
-    parser.add_argument("-o", "--output_folder", default="pretrained_w")
+    parser.add_argument("-o", "--output_folder", default="pretrained_pdn/pretrained_pdn")
     parser.add_argument(
         "--network",
         choices=["wide_resnet101_2", "vit"],

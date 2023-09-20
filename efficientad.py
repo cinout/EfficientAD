@@ -42,12 +42,12 @@ def get_argparse():
         default="bottle",
         help="One of 15 sub-datasets of Mvtec AD or 5" + "sub-datasets of Mvtec LOCO",
     )
-    parser.add_argument("-o", "--output_dir", default=f"output_{timestamp}")
+    parser.add_argument("-o", "--output_dir", default=f"outputs/output_{timestamp}")
     parser.add_argument(
         "-m", "--model_size", default="small", choices=["small", "medium"]
     )
     parser.add_argument(
-        "-w", "--weights", default="models_wide_resnet101_2/teacher_small.pth"
+        "-w", "--weights", default="pretrained_pdn/pretrained_pdn_wide_resnet101_2/teacher_small.pth"
     )
     parser.add_argument(
         "-i",
@@ -222,7 +222,6 @@ def main():
         student = get_pdn_medium(2 * out_channels, padding=True)
     else:
         raise Exception()
-    
 
     if config.pretrained_network == "wide_resnet101_2":
         state_dict = torch.load(config.weights, map_location="cpu")
