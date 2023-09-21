@@ -109,6 +109,28 @@ device = "cuda" if on_gpu else "cpu"
 exp_map_size = 64
 
 
+def process_pvt_features(out_channels=384):
+    features = features[1:]  # 2 elements
+    _, _, target_size, _ = features[0].shape
+    for i in range(1, len(features)):
+        # i is only 1, for upsampling feature map
+        _features = features[i]
+        _features = F.interpolate(
+            _features,
+            size=(target_size, target_size),
+            mode="bilinear",
+        )
+        features[i] = _features
+    features = torch.cat(features, dim=1)  # shape: [bs, 128+320, 64, 64]
+    bs, c_size, h, w = features.shape
+    features = features.reshape(bs, c_size, -1)
+    features = features.transpose(1, 2)  # shape: [bs, h*w, c]
+    features = F.adaptive_avg_pool1d(features, out_channels)
+    features = features.transpose(1, 2)
+    features = features.reshape(bs, out_channels, h, w)
+    return features
+
+
 def train_transform(image, size):
     image = transforms.RandomGrayscale(0.1)(image)
     extractor_transform = transforms.Compose(
@@ -170,14 +192,11 @@ def main(args):
             else:
                 continue
 
-        model = pvt_v2_b2_li(pretrained=False)
-        model.load_state_dict(pretrained_weights)
-        model.eval()
+        extractor = pvt_v2_b2_li(pretrained=False)
+        extractor.load_state_dict(pretrained_weights)
+        extractor.eval()
 
         out_channels = 384
-
-        extractor = PvtExtractor(model=model, out_channels=out_channels)
-
         input_transform_func = partial(train_transform, size=args.extractor_input_size)
         suffix = "pvt2_b2li"
 
@@ -287,8 +306,11 @@ def main(args):
                 target = torch.nn.functional.interpolate(
                     target, (exp_map_size, exp_map_size), mode="bilinear"
                 )
-        else:
+        elif args.network == "wide_resnet101_2":
             target = extractor.embed(image_fe)
+        elif args.network == "pvt2_b2li":
+            target = extractor(image_fe)
+            target = process_pvt_features(target)
 
         target = (target - channel_mean) / channel_std
         prediction = pdn(image_pdn)
@@ -348,8 +370,11 @@ def feature_normalization(args, extractor, train_loader, steps=10000):
                     output = torch.nn.functional.interpolate(
                         output, (exp_map_size, exp_map_size), mode="bilinear"
                     )
-            else:
+            elif args.network == "wide_resnet101_2":
                 output = extractor.embed(image_fe)
+            elif args.network == "pvt2_b2li":
+                output = extractor(image_fe)
+                output = process_pvt_features(output)
 
             mean_output = torch.mean(output, dim=[0, 2, 3])
             mean_outputs.append(mean_output)
@@ -380,8 +405,11 @@ def feature_normalization(args, extractor, train_loader, steps=10000):
                     output = torch.nn.functional.interpolate(
                         output, (exp_map_size, exp_map_size), mode="bilinear"
                     )
-            else:
+            elif args.network == "wide_resnet101_2":
                 output = extractor.embed(image_fe)
+            elif args.network == "pvt2_b2li":
+                output = extractor(image_fe)
+                output = process_pvt_features(output)
 
             distance = (output - channel_mean) ** 2
             mean_distance = torch.mean(distance, dim=[0, 2, 3])
