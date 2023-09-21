@@ -25,6 +25,7 @@ from torch.utils.data.distributed import DistributedSampler
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from datetime import datetime
+from PVT.detection.pvt_v2 import pvt_v2_b2_li
 
 
 def get_argparse():
@@ -33,10 +34,12 @@ def get_argparse():
         description="What the program does",
         epilog="Text at the bottom of help",
     )
-    parser.add_argument("-o", "--output_folder", default="pretrained_pdn/pretrained_pdn")
+    parser.add_argument(
+        "-o", "--output_folder", default="pretrained_pdn/pretrained_pdn"
+    )
     parser.add_argument(
         "--network",
-        choices=["wide_resnet101_2", "vit","pvt2_b2li"],
+        choices=["wide_resnet101_2", "vit", "pvt2_b2li"],
         type=str,
         default="wide_resnet101_2",
     )
@@ -154,9 +157,31 @@ def main(args):
         )
         input_transform_func = partial(train_transform, size=512)
         suffix = "wres101_2"
+    elif args.network == "pvt2_b2li":
+        pretrained_model = torch.load(
+            "pvt_model_checkpoints/mask_rcnn_pvt_v2_b2_li_fpn_1x_coco.pth",
+            map_location=device,
+        )
+        pretrained_weights = {}
+        for k, v in pretrained_model["state_dict"].items():
+            if k.startswith("backbone"):
+                pretrained_weights[k.replace("backbone.", "")] = v
+                pass
+            else:
+                continue
+
+        model = pvt_v2_b2_li(pretrained=False)
+        model.load_state_dict(pretrained_weights)
+        model.eval()
+
+        out_channels = 384
+
+        extractor = PvtExtractor(model=model, out_channels=out_channels)
+
+        input_transform_func = partial(train_transform, size=args.extractor_input_size)
+        suffix = "pvt2_b2li"
 
     elif args.network == "vit":
-        # vit
         from urllib.request import urlretrieve
         from models.modeling import VisionTransformer, CONFIGS
 
@@ -251,9 +276,7 @@ def main(args):
             image_fe = image_fe.cuda()  # for extractor
             image_pdn = image_pdn.cuda()  # for pdn teacher
 
-        if args.network == "wide_resnet101_2":
-            target = extractor.embed(image_fe)
-        elif args.network == "vit":
+        if args.network == "vit":
             target = extractor(image_fe)[0]
             target = target[:, 1:, :]
             B, N, C = target.shape
@@ -264,6 +287,8 @@ def main(args):
                 target = torch.nn.functional.interpolate(
                     target, (exp_map_size, exp_map_size), mode="bilinear"
                 )
+        else:
+            target = extractor.embed(image_fe)
 
         target = (target - channel_mean) / channel_std
         prediction = pdn(image_pdn)
@@ -312,9 +337,7 @@ def feature_normalization(args, extractor, train_loader, steps=10000):
             if on_gpu:
                 image_fe = image_fe.cuda()  # shape: (16, 3, 512, 512)
 
-            if args.network == "wide_resnet101_2":
-                output = extractor.embed(image_fe)
-            elif args.network == "vit":
+            if args.network == "vit":
                 output = extractor(image_fe)[0]
                 output = output[:, 1:, :]
                 B, N, C = output.shape
@@ -325,6 +348,8 @@ def feature_normalization(args, extractor, train_loader, steps=10000):
                     output = torch.nn.functional.interpolate(
                         output, (exp_map_size, exp_map_size), mode="bilinear"
                     )
+            else:
+                output = extractor.embed(image_fe)
 
             mean_output = torch.mean(output, dim=[0, 2, 3])
             mean_outputs.append(mean_output)
@@ -344,9 +369,7 @@ def feature_normalization(args, extractor, train_loader, steps=10000):
             if on_gpu:
                 image_fe = image_fe.cuda()
 
-            if args.network == "wide_resnet101_2":
-                output = extractor.embed(image_fe)
-            elif args.network == "vit":
+            if args.network == "vit":
                 output = extractor(image_fe)[0]
                 output = output[:, 1:, :]
                 B, N, C = output.shape
@@ -357,6 +380,8 @@ def feature_normalization(args, extractor, train_loader, steps=10000):
                     output = torch.nn.functional.interpolate(
                         output, (exp_map_size, exp_map_size), mode="bilinear"
                     )
+            else:
+                output = extractor.embed(image_fe)
 
             distance = (output - channel_mean) ** 2
             mean_distance = torch.mean(distance, dim=[0, 2, 3])
@@ -374,6 +399,39 @@ def feature_normalization(args, extractor, train_loader, steps=10000):
     return channel_mean, channel_std
 
 
+class PvtExtractor(torch.nn.Module):
+    # TODO: at last, you can try using patchCore's method to enhance features here
+    def __init__(self, model, out_channels):
+        super().__init__()
+        self.out_channels = out_channels  # 384
+        self.model = model
+
+    @torch.no_grad()
+    def embed(self, images):
+        features = self.model(
+            images
+        )  # features[1].shape: [bs, 128, 64, 64]; features[2].shape: [bs, 320, 32, 32]
+        features = features[1:]  # 2 elements
+        _, _, target_size, _ = features[0].shape
+        for i in range(1, len(features)):
+            # i is only 1, for upsampling feature map
+            _features = features[i]
+            _features = F.interpolate(
+                _features,
+                size=(target_size, target_size),
+                mode="bilinear",
+            )
+            features[i] = _features
+        features = torch.cat(features, dim=1)  # shape: [bs, 128+320, 64, 64]
+        bs, c_size, h, w = features.shape
+        features = features.reshape(bs, c_size, -1)
+        features = features.transpose(1, 2)  # shape: [bs, h*w, c]
+        features = F.adaptive_avg_pool1d(features, self.out_channels)
+        features = features.transpose(1, 2)
+        features = features.reshape(bs, self.out_channels, h, w)
+        return features
+
+
 class FeatureExtractor(torch.nn.Module):
     def __init__(
         self, out_channels, backbone, layers_to_extract_from, device, input_shape
@@ -387,7 +445,7 @@ class FeatureExtractor(torch.nn.Module):
 
         self.forward_modules = torch.nn.ModuleDict({})
 
-        # aggregate features from different layers of pretrained model
+        # aggregate features at different layers of pretrained model
         feature_aggregator = NetworkFeatureAggregator(
             self.backbone, self.layers_to_extract_from, self.device
         )
