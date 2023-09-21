@@ -1,9 +1,9 @@
 #!/bin/bash
 
-#SBATCH --partition=gpu-a100
+###SBATCH --partition=gpu-a100
 
-###SBATCH --partition=feit-gpu-a100
-###SBATCH --qos=feit
+#SBATCH --partition=feit-gpu-a100
+#SBATCH --qos=feit
 
 ###SBATCH --partition=deeplearn
 ###SBATCH --qos=gpgpudeeplearn
@@ -11,7 +11,7 @@
 
 #SBATCH --job-name="pvt_deb"
 #SBATCH --account=punim1623
-#SBATCH --time=0-00:10:00
+#SBATCH --time=0-00:30:00
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=2
