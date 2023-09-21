@@ -25,7 +25,7 @@ from torch.utils.data.distributed import DistributedSampler
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from datetime import datetime
-from PVT.detection.pvt_v2 import pvt_v2_b2_li
+from pvt_v2 import pvt_v2_b2_li
 
 
 def get_argparse():
