@@ -109,7 +109,7 @@ device = "cuda" if on_gpu else "cpu"
 exp_map_size = 64
 
 
-def process_pvt_features(out_channels=384):
+def process_pvt_features(features, out_channels=384):
     features = features[1:]  # 2 elements
     _, _, target_size, _ = features[0].shape
     for i in range(1, len(features)):
