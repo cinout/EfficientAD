@@ -36,7 +36,7 @@ def get_argparse():
     parser.add_argument("-o", "--output_folder", default="pretrained_pdn/pretrained_pdn")
     parser.add_argument(
         "--network",
-        choices=["wide_resnet101_2", "vit"],
+        choices=["wide_resnet101_2", "vit","pvt2_b2li"],
         type=str,
         default="wide_resnet101_2",
     )
