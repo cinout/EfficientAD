@@ -297,7 +297,7 @@ class PyramidVisionTransformerV2(nn.Module):
         norm_layer=nn.LayerNorm,
         depths=[3, 4, 6, 3],
         sr_ratios=[8, 4, 2, 1],
-        num_stages=4,
+        num_stages=3,  # TODO: use first 3 only, default is 4
         linear=False,
         pretrained=None,
     ):
@@ -401,10 +401,6 @@ class PyramidVisionTransformerV2(nn.Module):
         outs = []
 
         for i in range(self.num_stages):
-            # TODO: only calculate up to block 3
-            if i == 3:
-                break
-
             patch_embed = getattr(self, f"patch_embed{i + 1}")
             block = getattr(self, f"block{i + 1}")
             norm = getattr(self, f"norm{i + 1}")

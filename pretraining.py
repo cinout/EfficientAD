@@ -188,12 +188,11 @@ def main(args):
         for k, v in pretrained_model["state_dict"].items():
             if k.startswith("backbone"):
                 pretrained_weights[k.replace("backbone.", "")] = v
-                pass
             else:
                 continue
 
         extractor = pvt_v2_b2_li(pretrained=False)
-        extractor.load_state_dict(pretrained_weights)
+        extractor.load_state_dict(pretrained_weights, strict=False)
         extractor.eval()
 
         out_channels = 384
