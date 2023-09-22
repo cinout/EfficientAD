@@ -141,7 +141,7 @@ def main():
     # generate visual maps
     subclass = args.object_name
     timestamp = args.timestamp
-    visual_folder = f"visual_{timestamp}/"
+    visual_folder = f"outputs/visual_{timestamp}/"
     os.mkdir(visual_folder)
     heatmap_alpha = 0.5
 
