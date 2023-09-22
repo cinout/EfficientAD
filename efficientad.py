@@ -71,7 +71,7 @@ def get_argparse():
     )
     parser.add_argument(
         "--pretrained_network",
-        choices=["wide_resnet101_2", "vit"],
+        choices=["wide_resnet101_2", "vit","pvt2_b2li"],
         type=str,
         default="wide_resnet101_2",
     )
@@ -206,10 +206,11 @@ def main():
     else:
         penalty_loader_infinite = itertools.repeat(None)
 
-    if config.pretrained_network == "wide_resnet101_2":
-        out_channels = 384
-    elif config.pretrained_network == "vit":
+    if config.pretrained_network == "vit":
         out_channels = 768
+    else:
+        # pvt2_b2li, wide_resnet101_2
+        out_channels = 384
 
     # create models
     if config.model_size == "small":
@@ -246,7 +247,7 @@ def main():
             else:
                 raise ValueError(f"unknown state_dict key {k}")
         teacher.load_state_dict(pretrained_teacher_model, strict=False)
-    elif config.pretrained_network == "vit":
+    elif config.pretrained_network in ["vit","pvt2_b2li"]:
         state_dict = torch.load(config.weights, map_location="cuda")
         pretrained_teacher_model = {}
         for k, v in state_dict.items():
