@@ -64,6 +64,8 @@ def get_argparse():
         type=int,
         default=1024,
     )
+    parser.add_argument("--avg_cdim", action="store_true")
+    parser.add_argument("--note", default="", type=str)
 
     # ---- SLURM and DDP args ---- #
     parser.add_argument(
@@ -109,7 +111,7 @@ device = "cuda" if on_gpu else "cpu"
 exp_map_size = 64
 
 
-def process_pvt_features(features, out_channels=384):
+def process_pvt_features(features, avg_cdim=False):
     features = features[1:]  # 2 elements
     _, _, target_size, _ = features[0].shape
     for i in range(1, len(features)):
@@ -122,12 +124,13 @@ def process_pvt_features(features, out_channels=384):
         )
         features[i] = _features
     features = torch.cat(features, dim=1)  # shape: [bs, 128+320=448, 64, 64]
-    # bs, c_size, h, w = features.shape
-    # features = features.reshape(bs, c_size, -1)
-    # features = features.transpose(1, 2)  # shape: [bs, h*w, c]
-    # features = F.adaptive_avg_pool1d(features, out_channels)
-    # features = features.transpose(1, 2)
-    # features = features.reshape(bs, out_channels, h, w)
+    if avg_cdim:
+        bs, c_size, h, w = features.shape
+        features = features.reshape(bs, c_size, -1)
+        features = features.transpose(1, 2)  # shape: [bs, h*w, c]
+        features = F.adaptive_avg_pool1d(features, 384)
+        features = features.transpose(1, 2)
+        features = features.reshape(bs, 384, h, w)
     return features
 
 
@@ -195,7 +198,11 @@ def main(args):
         extractor.load_state_dict(pretrained_weights, strict=False)
         extractor.eval()
 
-        out_channels = 448
+        if args.avg_cdim:
+            out_channels = 384
+        else:
+            out_channels = 448
+
         input_transform_func = partial(train_transform, size=args.extractor_input_size)
         suffix = "pvt2_b2li"
 
@@ -309,7 +316,7 @@ def main(args):
             target = extractor.embed(image_fe)
         elif args.network == "pvt2_b2li":
             target = extractor(image_fe)
-            target = process_pvt_features(target)
+            target = process_pvt_features(target, args.avg_cdim)
 
         target = (target - channel_mean) / channel_std
         prediction = pdn(image_pdn)
@@ -373,7 +380,7 @@ def feature_normalization(args, extractor, train_loader, steps=10000):
                 output = extractor.embed(image_fe)
             elif args.network == "pvt2_b2li":
                 output = extractor(image_fe)
-                output = process_pvt_features(output)
+                output = process_pvt_features(output, args.avg_cdim)
 
             mean_output = torch.mean(output, dim=[0, 2, 3])
             mean_outputs.append(mean_output)
@@ -408,7 +415,7 @@ def feature_normalization(args, extractor, train_loader, steps=10000):
                 output = extractor.embed(image_fe)
             elif args.network == "pvt2_b2li":
                 output = extractor(image_fe)
-                output = process_pvt_features(output)
+                output = process_pvt_features(output, args.avg_cdim)
 
             distance = (output - channel_mean) ** 2
             mean_distance = torch.mean(distance, dim=[0, 2, 3])
