@@ -47,7 +47,9 @@ def get_argparse():
         "-m", "--model_size", default="small", choices=["small", "medium"]
     )
     parser.add_argument(
-        "-w", "--weights", default="pretrained_pdn/pretrained_pdn_wide_resnet101_2/teacher_small.pth"
+        "-w",
+        "--weights",
+        default="pretrained_pdn/pretrained_pdn_wide_resnet101_2/teacher_small.pth",
     )
     parser.add_argument(
         "-i",
@@ -71,9 +73,14 @@ def get_argparse():
     )
     parser.add_argument(
         "--pretrained_network",
-        choices=["wide_resnet101_2", "vit","pvt2_b2li"],
+        choices=["wide_resnet101_2", "vit", "pvt2_b2li"],
         type=str,
         default="wide_resnet101_2",
+    )
+    parser.add_argument(
+        "--avg_cdim",
+        action="store_true",
+        help="if set to True, then perform avg pooling on channel dim to 384",
     )
 
     parser.add_argument("-t", "--train_steps", type=int, default=70000)
@@ -209,7 +216,10 @@ def main():
     if config.pretrained_network == "vit":
         out_channels = 768
     elif config.pretrained_network == "pvt2_b2li":
-        out_channels = 448
+        if config.avg_cdim:
+            out_channels = 384
+        else:
+            out_channels = 448
     else:
         #  wide_resnet101_2
         out_channels = 384
@@ -249,7 +259,7 @@ def main():
             else:
                 raise ValueError(f"unknown state_dict key {k}")
         teacher.load_state_dict(pretrained_teacher_model, strict=False)
-    elif config.pretrained_network in ["vit","pvt2_b2li"]:
+    elif config.pretrained_network in ["vit", "pvt2_b2li"]:
         state_dict = torch.load(config.weights, map_location="cuda")
         pretrained_teacher_model = {}
         for k, v in state_dict.items():
