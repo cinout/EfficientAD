@@ -64,7 +64,16 @@ def get_argparse():
         type=int,
         default=1024,
     )
-    parser.add_argument("--avg_cdim", action="store_true")
+    parser.add_argument(
+        "--avg_cdim",
+        action="store_true",
+        help="if set to True, then perform avg pooling on channel dim to 384",
+    )
+    parser.add_argument(
+        "--vit_mid",
+        action="store_true",
+        help="if set to True, then use intermediate layer of ViT for knowledge distillation",
+    )
     parser.add_argument("--note", default="", type=str)
 
     # ---- SLURM and DDP args ---- #
@@ -131,6 +140,19 @@ def process_pvt_features(features, avg_cdim=False):
         features = F.adaptive_avg_pool1d(features, 384)
         features = features.transpose(1, 2)
         features = features.reshape(bs, 384, h, w)
+    return features
+
+
+def process_vit_features(features):
+    features = features[:, 1:, :]
+    B, N, C = features.shape
+    H = int(math.sqrt(N))
+    W = int(math.sqrt(N))
+    features = features.transpose(1, 2).view(B, C, H, W)
+    if H != exp_map_size:
+        features = torch.nn.functional.interpolate(
+            features, (exp_map_size, exp_map_size), mode="bilinear"
+        )
     return features
 
 
@@ -210,7 +232,7 @@ def main(args):
         from urllib.request import urlretrieve
         from models.modeling import VisionTransformer, CONFIGS
 
-        if dist.get_rank() == 0:
+        if not on_gpu or dist.get_rank() == 0:
             os.makedirs("vit_model_checkpoints", exist_ok=True)
 
         if not os.path.isfile("vit_model_checkpoints/ViT-B_16-224.npz"):
@@ -226,9 +248,9 @@ def main(args):
             zero_head=False,
             img_size=args.extractor_input_size,
             vis=True,
+            vit_mid=args.vit_mid,
         )
         model.load_from(np.load("vit_model_checkpoints/ViT-B_16-224.npz"))
-
         extractor = torch.nn.Sequential(
             *[model.transformer.embeddings, model.transformer.encoder]
         )
@@ -303,15 +325,7 @@ def main(args):
 
         if args.network == "vit":
             target = extractor(image_fe)[0]
-            target = target[:, 1:, :]
-            B, N, C = target.shape
-            H = int(math.sqrt(N))
-            W = int(math.sqrt(N))
-            target = target.transpose(1, 2).view(B, C, H, W)
-            if H != exp_map_size:
-                target = torch.nn.functional.interpolate(
-                    target, (exp_map_size, exp_map_size), mode="bilinear"
-                )
+            target = process_vit_features(target)
         elif args.network == "wide_resnet101_2":
             target = extractor.embed(image_fe)
         elif args.network == "pvt2_b2li":
@@ -329,7 +343,7 @@ def main(args):
         tqdm_obj.set_description(f"{(loss.item())}")
 
         if iteration % 10000 == 0:
-            if dist.get_rank() == 0:
+            if not on_gpu or dist.get_rank() == 0:
                 # torch.save(
                 #     pdn,
                 #     os.path.join(
@@ -343,7 +357,7 @@ def main(args):
                         f"tmp_teacher_{args.pdn_size}_state_{suffix}.pth",
                     ),
                 )
-    if dist.get_rank() == 0:
+    if not on_gpu or dist.get_rank() == 0:
         # torch.save(
         #     pdn,
         #     os.path.join(args.output_folder, f"teacher_{args.pdn_size}_{suffix}.pth"),
@@ -367,15 +381,8 @@ def feature_normalization(args, extractor, train_loader, steps=10000):
 
             if args.network == "vit":
                 output = extractor(image_fe)[0]
-                output = output[:, 1:, :]
-                B, N, C = output.shape
-                H = int(math.sqrt(N))
-                W = int(math.sqrt(N))
-                output = output.transpose(1, 2).view(B, C, H, W)
-                if H != exp_map_size:
-                    output = torch.nn.functional.interpolate(
-                        output, (exp_map_size, exp_map_size), mode="bilinear"
-                    )
+                output = process_vit_features(output)
+
             elif args.network == "wide_resnet101_2":
                 output = extractor.embed(image_fe)
             elif args.network == "pvt2_b2li":
@@ -402,15 +409,7 @@ def feature_normalization(args, extractor, train_loader, steps=10000):
 
             if args.network == "vit":
                 output = extractor(image_fe)[0]
-                output = output[:, 1:, :]
-                B, N, C = output.shape
-                H = int(math.sqrt(N))
-                W = int(math.sqrt(N))
-                output = output.transpose(1, 2).view(B, C, H, W)
-                if H != exp_map_size:
-                    output = torch.nn.functional.interpolate(
-                        output, (exp_map_size, exp_map_size), mode="bilinear"
-                    )
+                output = process_vit_features(output)
             elif args.network == "wide_resnet101_2":
                 output = extractor.embed(image_fe)
             elif args.network == "pvt2_b2li":

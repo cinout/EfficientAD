@@ -265,12 +265,16 @@ class Block(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self, config, vis):
+    def __init__(self, config, vis, vit_mid):
         super(Encoder, self).__init__()
         self.vis = vis
         self.layer = nn.ModuleList()
-        self.encoder_norm = LayerNorm(config.hidden_size, eps=1e-6)
-        for _ in range(config.transformer["num_layers"]):
+        if not vit_mid:
+            self.encoder_norm = LayerNorm(config.hidden_size, eps=1e-6)
+        self.vit_mid = vit_mid
+        for i in range(config.transformer["num_layers"]):
+            if vit_mid and i > 9:
+                break
             layer = Block(config, vis)
             self.layer.append(copy.deepcopy(layer))
 
@@ -280,17 +284,19 @@ class Encoder(nn.Module):
             hidden_states, weights = layer_block(hidden_states)
             if self.vis:
                 attn_weights.append(weights)
+        if self.vit_mid:
+            return hidden_states, attn_weights
         encoded = self.encoder_norm(hidden_states)
         return encoded, attn_weights
 
 
 class Transformer(nn.Module):
-    def __init__(self, config, img_size, vis):
+    def __init__(self, config, img_size, vis, vit_mid):
         super(Transformer, self).__init__()
         self.embeddings = Embeddings(
             config, img_size=img_size
         )  # shape: (16, 1025, c), the first item in 1025 is cls_embed
-        self.encoder = Encoder(config, vis)
+        self.encoder = Encoder(config, vis, vit_mid)
 
     def forward(self, input_ids):
         embedding_output = self.embeddings(input_ids)
@@ -300,14 +306,21 @@ class Transformer(nn.Module):
 
 class VisionTransformer(nn.Module):
     def __init__(
-        self, config, img_size=224, num_classes=21843, zero_head=False, vis=False
+        self,
+        config,
+        img_size=224,
+        num_classes=21843,
+        zero_head=False,
+        vis=False,
+        vit_mid=False,
     ):
         super(VisionTransformer, self).__init__()
         self.num_classes = num_classes
         self.zero_head = zero_head
         self.classifier = config.classifier
+        self.vit_mid = vit_mid
 
-        self.transformer = Transformer(config, img_size, vis)
+        self.transformer = Transformer(config, img_size, vis, vit_mid)
         self.head = Linear(config.hidden_size, num_classes)
 
     def forward(self, x, labels=None):
@@ -337,12 +350,13 @@ class VisionTransformer(nn.Module):
                 np2th(weights["embedding/bias"])
             )
             self.transformer.embeddings.cls_token.copy_(np2th(weights["cls"]))
-            self.transformer.encoder.encoder_norm.weight.copy_(
-                np2th(weights["Transformer/encoder_norm/scale"])
-            )
-            self.transformer.encoder.encoder_norm.bias.copy_(
-                np2th(weights["Transformer/encoder_norm/bias"])
-            )
+            if not self.vit_mid:
+                self.transformer.encoder.encoder_norm.weight.copy_(
+                    np2th(weights["Transformer/encoder_norm/scale"])
+                )
+                self.transformer.encoder.encoder_norm.bias.copy_(
+                    np2th(weights["Transformer/encoder_norm/bias"])
+                )
 
             posemb = np2th(weights["Transformer/posembed_input/pos_embedding"])
             posemb_new = self.transformer.embeddings.position_embeddings
