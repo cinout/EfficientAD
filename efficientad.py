@@ -208,8 +208,10 @@ def main():
 
     if config.pretrained_network == "vit":
         out_channels = 768
+    elif config.pretrained_network == "pvt2_b2li":
+        out_channels = 448
     else:
-        # pvt2_b2li, wide_resnet101_2
+        #  wide_resnet101_2
         out_channels = 384
 
     # create models

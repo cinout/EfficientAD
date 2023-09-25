@@ -121,13 +121,13 @@ def process_pvt_features(features, out_channels=384):
             mode="bilinear",
         )
         features[i] = _features
-    features = torch.cat(features, dim=1)  # shape: [bs, 128+320, 64, 64]
-    bs, c_size, h, w = features.shape
-    features = features.reshape(bs, c_size, -1)
-    features = features.transpose(1, 2)  # shape: [bs, h*w, c]
-    features = F.adaptive_avg_pool1d(features, out_channels)
-    features = features.transpose(1, 2)
-    features = features.reshape(bs, out_channels, h, w)
+    features = torch.cat(features, dim=1)  # shape: [bs, 128+320=448, 64, 64]
+    # bs, c_size, h, w = features.shape
+    # features = features.reshape(bs, c_size, -1)
+    # features = features.transpose(1, 2)  # shape: [bs, h*w, c]
+    # features = F.adaptive_avg_pool1d(features, out_channels)
+    # features = features.transpose(1, 2)
+    # features = features.reshape(bs, out_channels, h, w)
     return features
 
 
@@ -195,7 +195,7 @@ def main(args):
         extractor.load_state_dict(pretrained_weights, strict=False)
         extractor.eval()
 
-        out_channels = 384
+        out_channels = 448
         input_transform_func = partial(train_transform, size=args.extractor_input_size)
         suffix = "pvt2_b2li"
 
@@ -424,39 +424,6 @@ def feature_normalization(args, extractor, train_loader, steps=10000):
     channel_std = torch.sqrt(channel_var)
 
     return channel_mean, channel_std
-
-
-class PvtExtractor(torch.nn.Module):
-    # TODO: at last, you can try using patchCore's method to enhance features here
-    def __init__(self, model, out_channels):
-        super().__init__()
-        self.out_channels = out_channels  # 384
-        self.model = model
-
-    @torch.no_grad()
-    def embed(self, images):
-        features = self.model(
-            images
-        )  # features[1].shape: [bs, 128, 64, 64]; features[2].shape: [bs, 320, 32, 32]
-        features = features[1:]  # 2 elements
-        _, _, target_size, _ = features[0].shape
-        for i in range(1, len(features)):
-            # i is only 1, for upsampling feature map
-            _features = features[i]
-            _features = F.interpolate(
-                _features,
-                size=(target_size, target_size),
-                mode="bilinear",
-            )
-            features[i] = _features
-        features = torch.cat(features, dim=1)  # shape: [bs, 128+320, 64, 64]
-        bs, c_size, h, w = features.shape
-        features = features.reshape(bs, c_size, -1)
-        features = features.transpose(1, 2)  # shape: [bs, h*w, c]
-        features = F.adaptive_avg_pool1d(features, self.out_channels)
-        features = features.transpose(1, 2)
-        features = features.reshape(bs, self.out_channels, h, w)
-        return features
 
 
 class FeatureExtractor(torch.nn.Module):
