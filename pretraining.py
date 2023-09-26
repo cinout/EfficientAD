@@ -70,6 +70,11 @@ def get_argparse():
         help="if set to True, then perform avg pooling on channel dim to 384",
     )
     parser.add_argument(
+        "--pvt2_stage4",
+        action="store_true",
+        help="if set to True, then use final stage output",
+    )
+    parser.add_argument(
         "--vit_mid",
         action="store_true",
         help="if set to True, then use intermediate layer of ViT for knowledge distillation",
@@ -121,10 +126,11 @@ exp_map_size = 64
 
 
 def process_pvt_features(features, avg_cdim=False):
-    features = features[1:]  # 2 elements
-    _, _, target_size, _ = features[0].shape
-    for i in range(1, len(features)):
-        # i is only 1, for upsampling feature map
+    target_size = 64
+
+    features = features[1:]  # remove 1st element
+    for i in range(0, len(features)):
+        # upsampling feature map
         _features = features[i]
         _features = F.interpolate(
             _features,
