@@ -480,6 +480,8 @@ class FeatureExtractor(torch.nn.Module):
         features = self.forward_modules["feature_aggregator"](
             images
         )  # {"layer2": tensor, "layer3": tensor}
+
+        # TODO: patchify feature maps for PVT and VIT
         features = [
             features[layer] for layer in self.layers_to_extract_from
         ]  # features[0].shape: [bs, 512, 64, 64], features[1].shape: [bs, 1024, 32, 32]
