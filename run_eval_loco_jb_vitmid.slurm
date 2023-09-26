@@ -20,7 +20,7 @@ module purge
 eval "$(conda shell.bash hook)"
 conda activate ds2
 
-timestamp="20230922_201618_6_73_[jb]"
+timestamp="20230926_090206_16_34_[jb]"
 
 python -u mvtec_loco_ad_evaluation/evaluate_experiment.py \
   --object_name "juice_bottle" \
@@ -29,9 +29,7 @@ python -u mvtec_loco_ad_evaluation/evaluate_experiment.py \
   --output_dir "./outputs/output_${timestamp}/metrics/mvtec_loco/" \
   --timestamp "${timestamp}" \
 
- 
+## FIXME: update timestamp
 ##Log this job's resource usage stats###
 my-job-stats -a -n -s
 ##
-
-# python -u mvtec_loco_ad_evaluation/evaluate_experiment.py --object_name "breakfast_box" --dataset_base_dir "./datasets/loco/" --anomaly_maps_dir "./output_${timestamp}/anomaly_maps/mvtec_loco/" --output_dir "./output_${timestamp}/metrics/mvtec_loco/"
