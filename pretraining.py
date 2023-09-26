@@ -230,7 +230,7 @@ def main(args):
 
     elif args.network == "vit":
         from urllib.request import urlretrieve
-        from models.modeling import VisionTransformer, CONFIGS
+        from vit_models.modeling import VisionTransformer, CONFIGS
 
         if not on_gpu or dist.get_rank() == 0:
             os.makedirs("vit_model_checkpoints", exist_ok=True)
