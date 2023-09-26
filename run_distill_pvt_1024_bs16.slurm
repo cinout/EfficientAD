@@ -11,7 +11,7 @@
 
 #SBATCH --job-name="pvt_dist"
 #SBATCH --account=punim1623
-#SBATCH --time=0-00:30:00
+#SBATCH --time=1-10:00:00
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=2
@@ -42,7 +42,7 @@ srun python -u pretraining.py \
   --network "pvt2_b2li" \
   --batch_size 16  \
   --extractor_input_size 1024 \
-  --note "no channel dim avg, input_size 1024" \
+  --note "no channel dim avg, input_size 1024, bs 16" \
 
 ##Log this job's resource usage stats###
 my-job-stats -a -n -s
