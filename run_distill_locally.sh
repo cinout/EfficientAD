@@ -1,5 +1,5 @@
 python -u pretraining.py \
-  --network vit \
+  --network pvt2_b2li \
   --extractor_input_size 512 \
-  --batch_size 4 \
-  --vit_mid \
+  --batch_size 2 \
+  --patchify \

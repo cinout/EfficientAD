@@ -69,10 +69,17 @@ def get_argparse():
         action="store_true",
         help="if set to True, then perform avg pooling on channel dim to 384",
     )
+    # TODO: use or not?
     parser.add_argument(
         "--pvt2_stage4",
         action="store_true",
         help="if set to True, then use final stage output",
+    )
+    # TODO: use or not?
+    parser.add_argument(
+        "--patchify",
+        action="store_true",
+        help="if set to True, then augment features using PatchCore",
     )
     parser.add_argument(
         "--vit_mid",
@@ -125,10 +132,23 @@ device = "cuda" if on_gpu else "cpu"
 exp_map_size = 64
 
 
-def process_pvt_features(features, avg_cdim=False):
+def process_pvt_features(features, args):
     target_size = 64
 
     features = features[1:]  # remove 1st element
+    if args.patchify:
+        # TODO: update
+        patch_maker = PatchMaker(3, stride=1)
+        features = [patch_maker.patchify(x, return_spatial_info=True) for x in features]
+        patch_shapes = [x[1] for x in features]
+        features = [x[0] for x in features]
+
+        print(patch_shapes[0])
+        print(patch_shapes[1])
+        print(features[0].shape)
+        print(features[1].shape)
+        exit()
+
     for i in range(0, len(features)):
         # upsampling feature map
         _features = features[i]
@@ -138,8 +158,10 @@ def process_pvt_features(features, avg_cdim=False):
             mode="bilinear",
         )
         features[i] = _features
+
     features = torch.cat(features, dim=1)  # shape: [bs, 128+320=448, 64, 64]
-    if avg_cdim:
+
+    if args.avg_cdim:
         bs, c_size, h, w = features.shape
         features = features.reshape(bs, c_size, -1)
         features = features.transpose(1, 2)  # shape: [bs, h*w, c]
@@ -336,7 +358,7 @@ def main(args):
             target = extractor.embed(image_fe)
         elif args.network == "pvt2_b2li":
             target = extractor(image_fe)
-            target = process_pvt_features(target, args.avg_cdim)
+            target = process_pvt_features(target, args)
 
         target = (target - channel_mean) / channel_std
         prediction = pdn(image_pdn)
@@ -393,7 +415,7 @@ def feature_normalization(args, extractor, train_loader, steps=10000):
                 output = extractor.embed(image_fe)
             elif args.network == "pvt2_b2li":
                 output = extractor(image_fe)
-                output = process_pvt_features(output, args.avg_cdim)
+                output = process_pvt_features(output, args)
 
             mean_output = torch.mean(output, dim=[0, 2, 3])
             mean_outputs.append(mean_output)
@@ -420,7 +442,7 @@ def feature_normalization(args, extractor, train_loader, steps=10000):
                 output = extractor.embed(image_fe)
             elif args.network == "pvt2_b2li":
                 output = extractor(image_fe)
-                output = process_pvt_features(output, args.avg_cdim)
+                output = process_pvt_features(output, args)
 
             distance = (output - channel_mean) ** 2
             mean_distance = torch.mean(distance, dim=[0, 2, 3])
@@ -487,7 +509,7 @@ class FeatureExtractor(torch.nn.Module):
         ]  # features[0].shape: [bs, 512, 64, 64], features[1].shape: [bs, 1024, 32, 32]
         features = [
             self.patch_maker.patchify(x, return_spatial_info=True) for x in features
-        ]
+        ]  # [(tensor.shape:[4, 4096, 512, 3, 3], number_of_total_patches:[64, 64]), ([4, 1024, 1024, 3, 3], [32, 32])]
 
         patch_shapes = [x[1] for x in features]  # [[64, 64], [32, 32]]
         features = [
