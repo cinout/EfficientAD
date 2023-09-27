@@ -196,7 +196,8 @@ def process_pvt_features(features, args):
         features = torch.reshape(
             features, (-1, 64, 64, out_channels)
         )  # (bs, h, w, out_channels)
-        features = torch.permute(features, (0, 3, 1, 2))  # (bs, out_channels, h, w)
+        # features = torch.permute(features, (0, 3, 1, 2))  # (bs, out_channels, h, w)
+        features = features.permute((0, 3, 1, 2))
         return features
     else:
         for i in range(0, len(features)):
@@ -293,7 +294,8 @@ def process_vit_features(features, args):
         features = torch.reshape(
             features, (-1, 64, 64, out_channels)
         )  # (bs, h, w, out_channels)
-        features = torch.permute(features, (0, 3, 1, 2))  # (bs, out_channels, h, w)
+        # features = torch.permute(features, (0, 3, 1, 2))  # (bs, out_channels, h, w)
+        features = features.permute((0, 3, 1, 2))
         return features
     else:
         if H != target_size:
@@ -688,8 +690,8 @@ class FeatureExtractor(torch.nn.Module):
         features = torch.reshape(
             features, (-1, 64, 64, self.out_channels)
         )  # (bs, h, w, 384)
-        features = torch.permute(features, (0, 3, 1, 2))  # (bs, 384, h, w)
-
+        # features = torch.permute(features, (0, 3, 1, 2))  # (bs, 384, h, w)
+        features = features.permute((0, 3, 1, 2))
         return features
 
 
