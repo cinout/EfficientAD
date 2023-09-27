@@ -3,3 +3,5 @@ python -u pretraining.py \
   --extractor_input_size 512 \
   --batch_size 2 \
   --patchify \
+
+### vit, pvt2_b2li

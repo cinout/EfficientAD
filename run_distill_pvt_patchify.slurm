@@ -1,15 +1,15 @@
 #!/bin/bash
 
-#SBATCH --partition=gpu-a100
+###SBATCH --partition=gpu-a100
 
-###SBATCH --partition=feit-gpu-a100
-###SBATCH --qos=feit
+#SBATCH --partition=feit-gpu-a100
+#SBATCH --qos=feit
 
 ###SBATCH --partition=deeplearn
 ###SBATCH --qos=gpgpudeeplearn
 ###SBATCH --constraint=dlg3|dlg4|dlg5
 
-#SBATCH --job-name="vit_mid"
+#SBATCH --job-name="pvt_patch"
 #SBATCH --account=punim1623
 #SBATCH --time=1-00:00:00
 
@@ -23,7 +23,7 @@
 #SBATCH --mem=40G
 
 export WORLD_SIZE=2  #### update world size: nodes x ntasks-per-node
-export MASTER_PORT=12343
+export MASTER_PORT=12340
 
 echo ">>> NODELIST="${SLURM_NODELIST}
 master_addr=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
@@ -39,11 +39,11 @@ set -e
 set -x
 
 srun python -u pretraining.py \
-  --network "vit" \
-  --batch_size 8  \
+  --network "pvt2_b2li" \
+  --batch_size 16  \
   --extractor_input_size 512 \
-  --vit_mid \
-  --note "vit, layer 10th [0-9]" \
+  --patchify \
+  --note "pvt, patchify" \
 
 ##Log this job's resource usage stats###
 my-job-stats -a -n -s

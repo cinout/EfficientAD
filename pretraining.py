@@ -67,7 +67,7 @@ def get_argparse():
     parser.add_argument(
         "--avg_cdim",
         action="store_true",
-        help="if set to True, then perform avg pooling on channel dim to 384",
+        help="if set to True, then perform avg pooling on channel dim to 384 (for PVT)",
     )
     # TODO: use or not?
     parser.add_argument(
@@ -75,7 +75,6 @@ def get_argparse():
         action="store_true",
         help="if set to True, then use final stage output",
     )
-    # TODO: use or not?
     parser.add_argument(
         "--patchify",
         action="store_true",
@@ -129,59 +128,179 @@ def get_argparse():
 seed = 42
 on_gpu = torch.cuda.is_available()
 device = "cuda" if on_gpu else "cpu"
-exp_map_size = 64
 
 
 def process_pvt_features(features, args):
     target_size = 64
+    out_channels = 448  # FIXME: or 384
 
     features = features[1:]  # remove 1st element
     if args.patchify:
-        # TODO: update
+        # patchify the feature maps
         patch_maker = PatchMaker(3, stride=1)
         features = [patch_maker.patchify(x, return_spatial_info=True) for x in features]
-        patch_shapes = [x[1] for x in features]
-        features = [x[0] for x in features]
+        patch_shapes = [x[1] for x in features]  # [64, 64] and [32, 32]
+        features = [
+            x[0] for x in features
+        ]  # [bs, 4096, 128, 3, 3] and [bs, 1024, 320, 3, 3]
 
-        print(patch_shapes[0])
-        print(patch_shapes[1])
-        print(features[0].shape)
-        print(features[1].shape)
-        exit()
+        # upsample the feature maps
+        for i in range(1, len(features)):
+            # i is only 1, for upsampling feature map
+            _features = features[i]
+            patch_dims = patch_shapes[i]
 
-    for i in range(0, len(features)):
-        # upsampling feature map
-        _features = features[i]
-        _features = F.interpolate(
-            _features,
-            size=(target_size, target_size),
-            mode="bilinear",
-        )
-        features[i] = _features
+            _features = _features.reshape(
+                _features.shape[0], patch_dims[0], patch_dims[1], *_features.shape[2:]
+            )  # [4, 32, 32, 320, 3, 3]
 
-    features = torch.cat(features, dim=1)  # shape: [bs, 128+320=448, 64, 64]
+            _features = _features.permute(0, -3, -2, -1, 1, 2)  # [4, 320, 3, 3, 32, 32]
 
-    if args.avg_cdim:
-        bs, c_size, h, w = features.shape
-        features = features.reshape(bs, c_size, -1)
-        features = features.transpose(1, 2)  # shape: [bs, h*w, c]
-        features = F.adaptive_avg_pool1d(features, 384)
-        features = features.transpose(1, 2)
-        features = features.reshape(bs, 384, h, w)
-    return features
+            perm_base_shape = _features.shape
+            _features = _features.reshape(-1, *_features.shape[-2:])  # [36864, 32, 32]
+
+            # upsample feature map to the largest size
+            _features = F.interpolate(
+                _features.unsqueeze(1),
+                size=(target_size, target_size),
+                mode="bilinear",
+                align_corners=False,
+            )  # [36864, 1, 64, 64]
+
+            _features = _features.squeeze(1)  # [36864, 64, 64]
+
+            _features = _features.reshape(
+                *perm_base_shape[:-2], target_size, target_size
+            )  # [4, 320, 3, 3, 64, 64]
+
+            _features = _features.permute(0, -2, -1, 1, 2, 3)  # [4, 64, 64, 320, 3, 3]
+
+            _features = _features.reshape(
+                len(_features), -1, *_features.shape[-3:]
+            )  # [bs, 4096, 320, 3, 3]
+
+            features[i] = _features
+
+        features = [
+            x.reshape(-1, *x.shape[-3:]) for x in features
+        ]  # each with shape: (bs*h*w, c, 3, 3), where h and w are the largest size
+
+        # adapt channel dimension to 1024
+        preprocessing = Preprocessing(len(features), 1024)
+        features = preprocessing(features)  # shape: (bs*h*w, 2, output_dim==1024)
+
+        # aggregate features of two maps
+        preadapt_aggregator = Aggregator(target_dim=out_channels)
+        preadapt_aggregator.to(device)
+        features = preadapt_aggregator(features)  # (bs*h*w, out_channels)
+        features = torch.reshape(
+            features, (-1, 64, 64, out_channels)
+        )  # (bs, h, w, out_channels)
+        features = torch.permute(features, (0, 3, 1, 2))  # (bs, out_channels, h, w)
+        return features
+    else:
+        for i in range(0, len(features)):
+            # upsampling feature map
+            _features = features[i]
+            _features = F.interpolate(
+                _features,
+                size=(target_size, target_size),
+                mode="bilinear",
+            )
+            features[i] = _features
+
+        features = torch.cat(features, dim=1)  # shape: [bs, 128+320=448, 64, 64]
+
+        if args.avg_cdim:
+            bs, c_size, h, w = features.shape
+            features = features.reshape(bs, c_size, -1)
+            features = features.transpose(1, 2)  # shape: [bs, h*w, c]
+            features = F.adaptive_avg_pool1d(features, 384)
+            features = features.transpose(1, 2)
+            features = features.reshape(bs, 384, h, w)
+        return features
 
 
-def process_vit_features(features):
+def process_vit_features(features, args):
+    target_size = 64
+    out_channels = 768  # FIXME: or 384
+
     features = features[:, 1:, :]
     B, N, C = features.shape
     H = int(math.sqrt(N))
     W = int(math.sqrt(N))
-    features = features.transpose(1, 2).view(B, C, H, W)
-    if H != exp_map_size:
-        features = torch.nn.functional.interpolate(
-            features, (exp_map_size, exp_map_size), mode="bilinear"
-        )
-    return features
+    features = features.transpose(1, 2).view(
+        B, C, H, W
+    )  # shape: (bs, 768, 32, 32) if input_size is 512
+
+    if args.patchify:
+        # patchify the feature maps
+        patch_maker = PatchMaker(3, stride=1)
+        features = [patch_maker.patchify(features, return_spatial_info=True)]
+        patch_shapes = [x[1] for x in features]
+        features = [x[0] for x in features]
+
+        # upsample the feature maps
+        for i in range(0, len(features)):
+            _features = features[i]
+            patch_dims = patch_shapes[i]
+
+            _features = _features.reshape(
+                _features.shape[0], patch_dims[0], patch_dims[1], *_features.shape[2:]
+            )  # [bs, 32, 32, 768, 3, 3]
+
+            _features = _features.permute(
+                0, -3, -2, -1, 1, 2
+            )  # [bs, 768, 3, 3, 32, 32]
+
+            perm_base_shape = _features.shape
+            _features = _features.reshape(-1, *_features.shape[-2:])  # [36864, 32, 32]
+
+            # upsample feature map to the largest size
+            _features = F.interpolate(
+                _features.unsqueeze(1),
+                size=(target_size, target_size),
+                mode="bilinear",
+                align_corners=False,
+            )  # [36864, 1, 64, 64]
+
+            _features = _features.squeeze(1)  # [36864, 64, 64]
+
+            _features = _features.reshape(
+                *perm_base_shape[:-2], target_size, target_size
+            )  # [bs, 768, 3, 3, 64, 64]
+
+            _features = _features.permute(0, -2, -1, 1, 2, 3)  # [bs, 64, 64, 768, 3, 3]
+
+            _features = _features.reshape(
+                len(_features), -1, *_features.shape[-3:]
+            )  # [bs, 4096, 768, 3, 3]
+
+            features[i] = _features
+
+        features = [
+            x.reshape(-1, *x.shape[-3:]) for x in features
+        ]  # each with shape: (bs*h*w, c, 3, 3), where h and w are the largest size
+
+        # adapt channel dimension to 1024
+        preprocessing = Preprocessing(len(features), 1024)
+        features = preprocessing(features)  # shape: (bs*h*w, 2, output_dim==1024)
+
+        # aggregate features of two maps
+        preadapt_aggregator = Aggregator(target_dim=out_channels)
+        preadapt_aggregator.to(device)
+        features = preadapt_aggregator(features)  # (bs*h*w, out_channels)
+        features = torch.reshape(
+            features, (-1, 64, 64, out_channels)
+        )  # (bs, h, w, out_channels)
+        features = torch.permute(features, (0, 3, 1, 2))  # (bs, out_channels, h, w)
+        return features
+    else:
+        if H != target_size:
+            features = torch.nn.functional.interpolate(
+                features, (target_size, target_size), mode="bilinear"
+            )
+        return features
 
 
 def train_transform(image, size):
@@ -353,7 +472,7 @@ def main(args):
 
         if args.network == "vit":
             target = extractor(image_fe)[0]
-            target = process_vit_features(target)
+            target = process_vit_features(target, args)
         elif args.network == "wide_resnet101_2":
             target = extractor.embed(image_fe)
         elif args.network == "pvt2_b2li":
@@ -409,7 +528,7 @@ def feature_normalization(args, extractor, train_loader, steps=10000):
 
             if args.network == "vit":
                 output = extractor(image_fe)[0]
-                output = process_vit_features(output)
+                output = process_vit_features(output, args)
 
             elif args.network == "wide_resnet101_2":
                 output = extractor.embed(image_fe)
@@ -437,7 +556,7 @@ def feature_normalization(args, extractor, train_loader, steps=10000):
 
             if args.network == "vit":
                 output = extractor(image_fe)[0]
-                output = process_vit_features(output)
+                output = process_vit_features(output, args)
             elif args.network == "wide_resnet101_2":
                 output = extractor.embed(image_fe)
             elif args.network == "pvt2_b2li":
@@ -485,7 +604,7 @@ class FeatureExtractor(torch.nn.Module):
         # use padding to include neighborhood, and upsample smaller features to the largest
         self.patch_maker = PatchMaker(3, stride=1)  # modify features
 
-        preprocessing = Preprocessing(feature_dimensions, 1024)
+        preprocessing = Preprocessing(len(feature_dimensions), 1024)
         self.forward_modules["preprocessing"] = preprocessing
 
         preadapt_aggregator = Aggregator(target_dim=out_channels)
@@ -503,7 +622,6 @@ class FeatureExtractor(torch.nn.Module):
             images
         )  # {"layer2": tensor, "layer3": tensor}
 
-        # TODO: patchify feature maps for PVT and VIT
         features = [
             features[layer] for layer in self.layers_to_extract_from
         ]  # features[0].shape: [bs, 512, 64, 64], features[1].shape: [bs, 1024, 32, 32]
@@ -629,13 +747,12 @@ class PatchMaker:
 
 
 class Preprocessing(torch.nn.Module):
-    def __init__(self, input_dims, output_dim):
+    def __init__(self, maps_count, output_dim):
         super(Preprocessing, self).__init__()
-        self.input_dims = input_dims
         self.output_dim = output_dim
 
         self.preprocessing_modules = torch.nn.ModuleList()
-        for input_dim in input_dims:
+        for _ in range(maps_count):
             module = MeanMapper(output_dim)
             self.preprocessing_modules.append(module)
 
