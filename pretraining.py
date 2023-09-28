@@ -69,7 +69,6 @@ def get_argparse():
         action="store_true",
         help="if set to True, then perform avg pooling on channel dim to 384 (for PVT)",
     )
-    # TODO: use or not?
     parser.add_argument(
         "--pvt2_stage3",
         action="store_true",
@@ -138,9 +137,14 @@ device = "cuda" if on_gpu else "cpu"
 
 def process_pvt_features(features, args):
     target_size = 64
-    out_channels = 448  # FIXME: or 384
+    out_channels = 448
 
-    features = features[1:]  # remove 1st element
+    # FIXME: this assumes only first three stages' results are returned
+    if args.pvt2_stage3:
+        features = features[2:]
+    else:
+        features = features[1:]  # remove 1st element
+
     if args.patchify:
         # patchify the feature maps
         patch_maker = PatchMaker(3, stride=1)
@@ -151,12 +155,13 @@ def process_pvt_features(features, args):
         ]  # [bs, 4096, 128, 3, 3] and [bs, 1024, 320, 3, 3]
 
         # upsample the feature maps
-        for i in range(1, len(features)):
-            # FIXME: start from 1 assumes the first map has resolution targer_size x targer_size
-            # i is only 1, for upsampling feature map
-            _features = features[i]
+        for i in range(len(features)):
             patch_dims = patch_shapes[i]
+            if patch_dims[0] == target_size:
+                # no need for upsampling
+                continue
 
+            _features = features[i]
             _features = _features.reshape(
                 _features.shape[0], patch_dims[0], patch_dims[1], *_features.shape[2:]
             )  # [4, 32, 32, 320, 3, 3]
@@ -217,7 +222,7 @@ def process_pvt_features(features, args):
             )
             features[i] = _features
 
-        features = torch.cat(features, dim=1)  # shape: [bs, 128+320=448, 64, 64]
+        features = torch.cat(features, dim=1)  # shape: [bs, c_sum=128+320=448, 64, 64]
 
         if args.avg_cdim:
             bs, c_size, h, w = features.shape
@@ -231,7 +236,7 @@ def process_pvt_features(features, args):
 
 def process_vit_features(features, args):
     target_size = 64
-    out_channels = 768  # FIXME: or 384
+    out_channels = 768
 
     features = features[:, 1:, :]
     B, N, C = features.shape
@@ -380,7 +385,13 @@ def main(args):
         if args.avg_cdim:
             out_channels = 384
         else:
-            out_channels = 448
+            if args.patchify:
+                out_channels = 448
+            else:
+                if args.pvt2_stage3:
+                    out_channels = 320
+                else:
+                    out_channels = 448
 
         input_transform_func = partial(train_transform, size=args.extractor_input_size)
         suffix = "pvt2_b2li"

@@ -82,6 +82,16 @@ def get_argparse():
         action="store_true",
         help="if set to True, then perform avg pooling on channel dim to 384",
     )
+    parser.add_argument(
+        "--pvt2_stage3",
+        action="store_true",
+        help="if set to True, then use 3rd stage output",
+    )
+    parser.add_argument(
+        "--patchify",
+        action="store_true",
+        help="if set to True, then augment features using PatchCore",
+    )
 
     parser.add_argument("-t", "--train_steps", type=int, default=70000)
     parser.add_argument("--note", type=str, default="")
@@ -220,7 +230,13 @@ def main():
         if config.avg_cdim:
             out_channels = 384
         else:
-            out_channels = 448
+            if config.patchify:
+                out_channels = 448
+            else:
+                if config.pvt2_stage3:
+                    out_channels = 320
+                else:
+                    out_channels = 448
     else:
         #  wide_resnet101_2
         out_channels = 384

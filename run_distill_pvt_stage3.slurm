@@ -43,7 +43,7 @@ srun python -u pretraining.py \
   --batch_size 16  \
   --extractor_input_size 512 \
   --pvt2_stage3 \
-  --note "pvt, patchify" \
+  --note "pvt, stage3 only" \
   # --patchify \
 
 ##Log this job's resource usage stats###
