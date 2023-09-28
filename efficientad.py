@@ -216,6 +216,7 @@ def main():
     if config.pretrained_network == "vit":
         out_channels = 768
     elif config.pretrained_network == "pvt2_b2li":
+        # TODO: always pay attention to out_channels
         if config.avg_cdim:
             out_channels = 384
         else:

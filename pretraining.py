@@ -71,6 +71,12 @@ def get_argparse():
     )
     # TODO: use or not?
     parser.add_argument(
+        "--pvt2_stage3",
+        action="store_true",
+        help="if set to True, then use 3rd stage output",
+    )
+    # TODO: use or not?
+    parser.add_argument(
         "--pvt2_stage4",
         action="store_true",
         help="if set to True, then use final stage output",
@@ -146,6 +152,7 @@ def process_pvt_features(features, args):
 
         # upsample the feature maps
         for i in range(1, len(features)):
+            # FIXME: start from 1 assumes the first map has resolution targer_size x targer_size
             # i is only 1, for upsampling feature map
             _features = features[i]
             patch_dims = patch_shapes[i]
@@ -369,6 +376,7 @@ def main(args):
         extractor.load_state_dict(pretrained_weights, strict=False)
         extractor.eval()
 
+        # TODO: alway pay attention to out_channels
         if args.avg_cdim:
             out_channels = 384
         else:
