@@ -31,10 +31,11 @@ set -x
 
 python -u efficientad.py \
   --pretrained_network pvt2_b2li \
-  --weights pretrained_pdn/20230928_114814_58_82_[pvt_patchify]/teacher_small_state_pvt2_b2li.pth \
+  --weights pretrained_pdn/pretrained_pdn_20230928_114814_58_82_[pvt_patchify]/teacher_small_state_pvt2_b2li.pth \
   --dataset mvtec_loco \
   --subdataset screw_bag \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
+  --patchify \
   --note "[pretrained] pvt2_b2li, patchify [weights] bs16size512"
 # FIXME: update job-name, weights, pretrained_network, subdataset, note
 ##Log this job's resource usage stats###
