@@ -1,5 +1,5 @@
 import torch
 
 
-for i in range(2):
-    print(i)
+a = "module.as"
+print(a.split("module."))
