@@ -42,7 +42,6 @@ python -u pretraining_after_ft.py \
   --network "vit" \
   --batch_size 8  \
   --extractor_input_size 512 \
-  --patchify \
   --subdataset screw_bag \
   --ft_folder finetuned_vit_20231001_112430_27_40 \
   --note "distill after ft, sb" \
