@@ -7,9 +7,9 @@
 
 #SBATCH --partition=deeplearn
 #SBATCH --qos=gpgpudeeplearn
-#SBATCH --constraint=dlg3|dlg4|dlg5
+#SBATCH --constraint=dlg4|dlg5
 
-#SBATCH --job-name="train_bb"
+#SBATCH --job-name="train_pp"
 #SBATCH --account=punim1623
 #SBATCH --time=0-05:00:00
 
@@ -31,12 +31,12 @@ set -x
 
 python -u efficientad.py \
   --pretrained_network pvt2_b2li \
-  --weights pretrained_pdn/pretrained_pdn_20230929_004834_86_63_[pvt_stage3]/teacher_small_state_pvt2_b2li.pth \
+  --weights pretrained_pdn/pretrained_pdn_20230929_044703_40_22/teacher_small_state_pvt2_b2li.pth \
   --dataset mvtec_loco \
-  --subdataset breakfast_box \
+  --subdataset pushpins \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
-  --pvt2_stage3 \
-  --note "[pretrained] pvt2_b2li, stage3 [weights] bs16size512"
+  --patchify \
+  --note "[pretrained] pvt2_b2li [weights] bs16size1024"
 # FIXME: update job-name, weights, pretrained_network, subdataset, note
 ##Log this job's resource usage stats###
 my-job-stats -a -n -s
