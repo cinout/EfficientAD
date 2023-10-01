@@ -11,8 +11,7 @@
 
 #SBATCH --job-name="ft_vit"
 #SBATCH --account=punim1623
-#SBATCH --time=0-01:00:00
-### TODO: update time
+#SBATCH --time=0-18:00:00
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=2
@@ -41,7 +40,7 @@ set -x
 
 srun python -u finetune.py \
   --note "finetune vit on mvtec_loco" \
-### TODO: update epochs, note
+### FIXME: update epochs, note
 
 ##Log this job's resource usage stats###
 my-job-stats -a -n -s
