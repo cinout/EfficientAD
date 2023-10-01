@@ -11,7 +11,7 @@
 
 #SBATCH --job-name="ft_vit"
 #SBATCH --account=punim1623
-#SBATCH --time=0-00:20:00
+#SBATCH --time=0-01:00:00
 ### TODO: update time
 
 #SBATCH --nodes=1
@@ -40,7 +40,6 @@ set -e
 set -x
 
 srun python -u finetune.py \
-  --epochs 2 \
   --note "finetune vit on mvtec_loco" \
 ### TODO: update epochs, note
 
