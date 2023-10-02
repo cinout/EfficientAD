@@ -38,7 +38,7 @@ conda activate ds2
 set -e
 set -x
 
-python -u pretraining_after_ft.py \
+srun python -u pretraining_after_ft.py \
   --network "vit" \
   --batch_size 8  \
   --extractor_input_size 512 \
