@@ -990,4 +990,5 @@ if __name__ == "__main__":
     )
     print(options_str)
     print("----------------------")
+    exit()
     main(args)

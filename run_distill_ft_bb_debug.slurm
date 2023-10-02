@@ -11,18 +11,18 @@
 
 #SBATCH --job-name="ds_ft_bb"
 #SBATCH --account=punim1623
-#SBATCH --time=0-21:00:00
+#SBATCH --time=0-00:20:00
 
 #SBATCH --nodes=1
-#SBATCH --ntasks-per-node=2
-#SBATCH --gres=gpu:2
+#SBATCH --ntasks-per-node=1
+#SBATCH --gres=gpu:1
 
 ### "ntasks-per-node" should have same value as "res=gpu:"
 
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=40G
 
-export WORLD_SIZE=2  #### update world size: nodes x ntasks-per-node
+export WORLD_SIZE=1  #### update world size: nodes x ntasks-per-node
 export MASTER_PORT=12342
 
 echo ">>> NODELIST="${SLURM_NODELIST}
@@ -40,12 +40,12 @@ set -x
 
 python -u pretraining_after_ft.py \
   --network "vit" \
-  --batch_size 8  \
+  --batch_size 2  \
   --extractor_input_size 512 \
   --subdataset breakfast_box \
   --ft_folder finetuned_vit_20231001_112430_27_40 \
   --note "distill after ft, bb" \
-
+# FIXME: update gpu_size, batch_size
 ##Log this job's resource usage stats###
 my-job-stats -a -n -s
 ##
