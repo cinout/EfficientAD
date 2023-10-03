@@ -100,6 +100,11 @@ def parse_args():
         type=int,
         help="seed for randomization",
     )
+    parser.add_argument(
+        "--pvt2_stage4",
+        action="store_true",
+        help="if set to True, then use final stage output",
+    )
     parser.add_argument("--note", type=str, default="")
 
     args = parser.parse_args()
@@ -236,7 +241,7 @@ def train(args):
             else:
                 continue
 
-        encoder = pvt_v2_b2_li(pretrained=False)
+        encoder = pvt_v2_b2_li(pretrained=False, stage4=args.pvt2_stage4)
         encoder.load_state_dict(pretrained_weights, strict=False)
 
     decoder = Decoder()
@@ -302,7 +307,7 @@ def train(args):
                     filename = "ft_vit.pth"
                 elif args.model == "pvt2_b2li":
                     filename = "ft_pvt.pth"
-                
+
                 torch.save(
                     encoder.state_dict(),
                     os.path.join(
