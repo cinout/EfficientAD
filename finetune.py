@@ -1,3 +1,4 @@
+import glob
 import math
 import torch
 import random, os, argparse, builtins
@@ -8,6 +9,9 @@ import numpy as np
 from torchvision import transforms
 from torch import nn
 from datetime import datetime
+from torch.utils.data import Dataset
+from PIL import Image
+from torch.nn import functional as F
 
 on_gpu = torch.cuda.is_available()
 device = "cuda" if on_gpu else "cpu"
@@ -81,7 +85,7 @@ def parse_args():
     )
     parser.add_argument(
         "--learning_rate",
-        default=0.0005,
+        default=0.0001,
         type=float,
         help="learning rate",
     )
@@ -149,32 +153,42 @@ class ImageFolderWithoutTarget(ImageFolder):
         return sample
 
 
-def train(_class_, args):
-    print(f"===============\ncurrent class: {_class_}")
+class MyDataset(Dataset):
+    def __init__(self, mvtec_loco_path, image_size):
+        super().__init__()
+        self.images = glob.glob(mvtec_loco_path + "/*/train/good/*.png")
+        self.default_transform = transforms.Compose(
+            [
+                transforms.Resize((image_size, image_size)),
+                transforms.ToTensor(),
+                transforms.Normalize(
+                    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+                ),
+            ]
+        )
+        self.transform_ae = transforms.RandomChoice(
+            [
+                transforms.ColorJitter(brightness=0.2),
+                transforms.ColorJitter(contrast=0.2),
+                transforms.ColorJitter(saturation=0.2),
+            ]
+        )
 
-    default_transform = transforms.Compose(
-        [
-            transforms.Resize((args.image_size, args.image_size)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ]
-    )
-    transform_ae = transforms.RandomChoice(
-        [
-            transforms.ColorJitter(brightness=0.2),
-            transforms.ColorJitter(contrast=0.2),
-            transforms.ColorJitter(saturation=0.2),
-        ]
-    )
+    def __len__(self):
+        return len(self.images)
 
-    def train_transform(image):
-        return default_transform(transform_ae(image))
+    def transform_image(self, img_path):
+        image = Image.open(img_path)
+        image = image.convert("RGB")
+        return self.default_transform(self.transform_ae(image))
 
-    dataset_path = args.mvtec_loco_path
-    train_data = ImageFolderWithoutTarget(
-        os.path.join(dataset_path, _class_, "train"),
-        transform=transforms.Lambda(train_transform),
-    )
+    def __getitem__(self, index):
+        img_path = self.images[index]
+        return self.transform_image(img_path)
+
+
+def train(args):
+    train_data = MyDataset(args.mvtec_loco_path, args.image_size)
 
     if args.distributed:
         train_sampler = DistributedSampler(train_data, shuffle=True)
@@ -231,7 +245,6 @@ def train(_class_, args):
         lr=args.learning_rate,
         betas=(0.5, 0.999),
     )
-    cos_loss = torch.nn.CosineSimilarity()
 
     for epoch in range(args.epochs):
         encoder.train()
@@ -252,7 +265,7 @@ def train(_class_, args):
             )  # shape: [bs, 768, 32, 32]
             output = decoder(features)  # shape: [bs, 3, 512, 512]
 
-            loss = torch.mean(1 - cos_loss(img, output))
+            loss = F.mse_loss(output, img, reduction="mean")
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -268,7 +281,7 @@ def train(_class_, args):
                     encoder.state_dict(),
                     os.path.join(
                         args.output_folder,
-                        f"ft_vit_{_class_}.pth",
+                        f"ft_vit.pth",
                     ),
                 )
 
@@ -336,13 +349,13 @@ if __name__ == "__main__":
     #             [f"\n{k}: {str(v)}" for k, v in sorted(dict(vars(args)).items())]
     #         )
 
-    item_list = [
-        "breakfast_box",
-        "juice_bottle",
-        "pushpins",
-        "screw_bag",
-        "splicing_connectors",
-    ]
+    # item_list = [
+    #     "breakfast_box",
+    #     "juice_bottle",
+    #     "pushpins",
+    #     "screw_bag",
+    #     "splicing_connectors",
+    # ]
 
     # download pretrained vit
     from urllib.request import urlretrieve
@@ -367,5 +380,7 @@ if __name__ == "__main__":
         args.output_folder = args.output_folder + "_" + timestamp
         os.makedirs(args.output_folder)
 
-    for i in item_list:
-        train(i, args)
+    # for i in item_list:
+    #     train(i, args)
+
+    train(args)
