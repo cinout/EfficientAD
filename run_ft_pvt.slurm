@@ -7,11 +7,11 @@
 
 #SBATCH --partition=deeplearn
 #SBATCH --qos=gpgpudeeplearn
-#SBATCH --constraint=dlg4|dlg5
+#SBATCH --constraint=dlg3|dlg4|dlg5
 
-#SBATCH --job-name="ds_ft_bb"
+#SBATCH --job-name="ft_vit"
 #SBATCH --account=punim1623
-#SBATCH --time=0-21:00:00
+#SBATCH --time=0-18:00:00
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=2
@@ -23,7 +23,7 @@
 #SBATCH --mem=40G
 
 export WORLD_SIZE=2  #### update world size: nodes x ntasks-per-node
-export MASTER_PORT=12342
+export MASTER_PORT=12340
 
 echo ">>> NODELIST="${SLURM_NODELIST}
 master_addr=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
@@ -38,12 +38,11 @@ conda activate ds2
 set -e
 set -x
 
-srun python -u pretraining_after_ft_overall.py \
-  --network "vit" \
-  --batch_size 8 \
-  --extractor_input_size 512 \
-  --ft_folder finetuned_vit_20231003_174000_27_40 \
-  --note "distill after ft, overall" \
+srun python -u finetune.py \
+  --model pvt2_b2li \
+  --output_folder "./finetuned_pvt" \
+  --note "finetune pvt on mvtec_loco" \
+### FIXME: update epochs, note
 
 ##Log this job's resource usage stats###
 my-job-stats -a -n -s

@@ -13,6 +13,8 @@ from torch.utils.data import Dataset
 from PIL import Image
 from torch.nn import functional as F
 
+from pvt_v2 import pvt_v2_b2_li
+
 on_gpu = torch.cuda.is_available()
 device = "cuda" if on_gpu else "cpu"
 
@@ -67,6 +69,9 @@ def parse_args():
         "--output_folder",
         default="./finetuned_vit",
         help="Downloaded Mvtec LOCO dataset",
+    )
+    parser.add_argument(
+        "--model", type=str, default="vit", choices=["vit", "pvt2_b2li"]
     )
     parser.add_argument(
         "--image_size", type=int, default=512, help="input image size for training"
@@ -206,18 +211,34 @@ def train(args):
         )
 
     # initialize encoder
-    config = CONFIGS["ViT-B_16"]
-    model = VisionTransformer(
-        config,
-        num_classes=1000,
-        zero_head=False,
-        img_size=args.image_size,
-        vis=True,
-    )
-    model.load_from(np.load("vit_model_checkpoints/ViT-B_16-224.npz"))
-    encoder = torch.nn.Sequential(
-        *[model.transformer.embeddings, model.transformer.encoder]
-    )
+    if args.model == "vit":
+        config = CONFIGS["ViT-B_16"]
+        model = VisionTransformer(
+            config,
+            num_classes=1000,
+            zero_head=False,
+            img_size=args.image_size,
+            vis=True,
+        )
+        model.load_from(np.load("vit_model_checkpoints/ViT-B_16-224.npz"))
+        encoder = torch.nn.Sequential(
+            *[model.transformer.embeddings, model.transformer.encoder]
+        )
+    elif args.model == "pvt2_b2li":
+        pretrained_model = torch.load(
+            "pvt_model_checkpoints/mask_rcnn_pvt_v2_b2_li_fpn_1x_coco.pth",
+            map_location=device,
+        )
+        pretrained_weights = {}
+        for k, v in pretrained_model["state_dict"].items():
+            if k.startswith("backbone"):
+                pretrained_weights[k.replace("backbone.", "")] = v
+            else:
+                continue
+
+        encoder = pvt_v2_b2_li(pretrained=False)
+        encoder.load_state_dict(pretrained_weights, strict=False)
+
     decoder = Decoder()
 
     if args.distributed:
@@ -277,11 +298,16 @@ def train(args):
 
         if epoch == args.epochs - 1:
             if not on_gpu or dist.get_rank() == 0:
+                if args.model == "vit":
+                    filename = "ft_vit.pth"
+                elif args.model == "pvt2_b2li":
+                    filename = "ft_pvt.pth"
+                
                 torch.save(
                     encoder.state_dict(),
                     os.path.join(
                         args.output_folder,
-                        f"ft_vit.pth",
+                        filename,
                     ),
                 )
 
