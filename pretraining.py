@@ -74,7 +74,6 @@ def get_argparse():
         action="store_true",
         help="if set to True, then use 3rd stage output",
     )
-    # TODO: use or not?
     parser.add_argument(
         "--pvt2_stage4",
         action="store_true",
@@ -139,10 +138,14 @@ def process_pvt_features(features, args):
     target_size = 64
     out_channels = 448
 
-    # FIXME: this assumes only first three stages' results are returned
-    if args.pvt2_stage3:
+    if args.pvt2_stage4:
+        # in this case, features have 4 elements
+        features = features[3:]
+    elif args.pvt2_stage3:
+        # in this case, features have 3 elements
         features = features[2:]
     else:
+        # in this case, features have 3 elements
         features = features[1:]  # remove 1st element
 
     if args.patchify:
@@ -377,7 +380,7 @@ def main(args):
             else:
                 continue
 
-        extractor = pvt_v2_b2_li(pretrained=False)
+        extractor = pvt_v2_b2_li(pretrained=False, stage4=args.pvt2_stage4)
         extractor.load_state_dict(pretrained_weights, strict=False)
         extractor.eval()
 
@@ -390,6 +393,8 @@ def main(args):
             else:
                 if args.pvt2_stage3:
                     out_channels = 320
+                elif args.pvt2_stage4:
+                    out_channels = 512
                 else:
                     out_channels = 448
 
@@ -550,13 +555,11 @@ def feature_normalization(args, extractor, train_loader, steps=10000):
             if args.network == "vit":
                 output = extractor(image_fe)[0]
                 output = process_vit_features(output, args)
-
             elif args.network == "wide_resnet101_2":
                 output = extractor.embed(image_fe)
             elif args.network == "pvt2_b2li":
                 output = extractor(image_fe)
                 output = process_pvt_features(output, args)
-
             mean_output = torch.mean(output, dim=[0, 2, 3])
             mean_outputs.append(mean_output)
             normalization_count += len(image_fe)

@@ -235,6 +235,8 @@ def main():
             else:
                 if config.pvt2_stage3:
                     out_channels = 320
+                elif config.pvt2_stage4:
+                    out_channels = 512
                 else:
                     out_channels = 448
     else:

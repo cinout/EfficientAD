@@ -297,7 +297,7 @@ class PyramidVisionTransformerV2(nn.Module):
         norm_layer=nn.LayerNorm,
         depths=[3, 4, 6, 3],
         sr_ratios=[8, 4, 2, 1],
-        num_stages=3,  # TODO: use first 3 only, default is 4
+        num_stages=4,
         linear=False,
         pretrained=None,
     ):
@@ -515,6 +515,9 @@ class pvt_v2_b2_li(PyramidVisionTransformerV2):
             drop_path_rate=0.1,
             linear=True,
             pretrained=kwargs["pretrained"],
+            num_stages=4
+            if kwargs["stage4"]
+            else 3,  # TODO: default is 3
         )
 
 

@@ -9,7 +9,7 @@
 ###SBATCH --qos=gpgpudeeplearn
 ###SBATCH --constraint=dlg3|dlg4|dlg5
 
-#SBATCH --job-name="pvt_patch"
+#SBATCH --job-name="pvt_stg4"
 #SBATCH --account=punim1623
 #SBATCH --time=1-00:00:00
 
@@ -42,8 +42,8 @@ srun python -u pretraining.py \
   --network "pvt2_b2li" \
   --batch_size 16  \
   --extractor_input_size 512 \
-  --pvt2_stage3 \
-  --note "pvt, stage3 only" \
+  --pvt2_stage4 \
+  --note "pvt, stage4 only" \
   # --patchify \
 
 ##Log this job's resource usage stats###

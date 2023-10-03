@@ -1,7 +1,6 @@
-python -u pretraining_after_ft.py \
-  --network vit \
+python -u pretraining.py \
+  --network pvt2_b2li \
   --extractor_input_size 512 \
   --batch_size 2 \
-  --subdataset breakfast_box \
-  --ft_folder finetuned_vit_20231001_112430_27_40 \
+  --pvt2_stage4 \
 ### vit, pvt2_b2li
