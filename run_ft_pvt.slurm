@@ -40,6 +40,7 @@ set -x
 
 srun python -u finetune.py \
   --model pvt2_b2li \
+  --pvt2_stage4 \
   --output_folder "./finetuned_pvt" \
   --note "finetune pvt on mvtec_loco" \
 ### FIXME: update epochs, note

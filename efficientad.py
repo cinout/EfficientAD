@@ -88,6 +88,11 @@ def get_argparse():
         help="if set to True, then use 3rd stage output",
     )
     parser.add_argument(
+        "--pvt2_stage4",
+        action="store_true",
+        help="if set to True, then use final stage output",
+    )
+    parser.add_argument(
         "--patchify",
         action="store_true",
         help="if set to True, then augment features using PatchCore",

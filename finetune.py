@@ -120,7 +120,7 @@ def setup_seed(seed):
     torch.backends.cudnn.benchmark = False
 
 
-class Decoder(nn.Module):
+class Decoder_VIT(nn.Module):
     def __init__(self):
         super().__init__()
         self.relu = nn.ReLU(inplace=True)
@@ -136,6 +136,44 @@ class Decoder(nn.Module):
         )
         self.dec_4 = nn.ConvTranspose2d(
             in_channels=24, out_channels=3, kernel_size=2, stride=2
+        )
+
+    def forward(self, x):
+        # x.shape: [bs, 768, 32, 32]
+
+        x = self.dec_1(x)
+        x = self.relu(x)
+        x = self.dropout(x)
+
+        x = self.dec_2(x)
+        x = self.relu(x)
+        x = self.dropout(x)
+
+        x = self.dec_3(x)
+        x = self.relu(x)
+
+        x = self.dec_4(x)
+
+        return x  # target_x.shape: [bs, 3, 512, 512]
+
+
+# TODO:
+class Decoder_PVT(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.relu = nn.ReLU(inplace=True)
+        self.dropout = nn.Dropout(0.2)
+        self.dec_1 = nn.ConvTranspose2d(
+            in_channels=512, out_channels=128, kernel_size=2, stride=2
+        )
+        self.dec_2 = nn.ConvTranspose2d(
+            in_channels=128, out_channels=32, kernel_size=2, stride=2
+        )
+        self.dec_3 = nn.ConvTranspose2d(
+            in_channels=32, out_channels=8, kernel_size=2, stride=2
+        )
+        self.dec_4 = nn.ConvTranspose2d(
+            in_channels=8, out_channels=3, kernel_size=2, stride=2
         )
 
     def forward(self, x):
@@ -244,7 +282,10 @@ def train(args):
         encoder = pvt_v2_b2_li(pretrained=False, stage4=args.pvt2_stage4)
         encoder.load_state_dict(pretrained_weights, strict=False)
 
-    decoder = Decoder()
+    if args.model == "vit":
+        decoder = Decoder_VIT()
+    elif args.model == "pvt":
+        decoder = Decoder_PVT()
 
     if args.distributed:
         if args.gpu is None:
@@ -281,15 +322,20 @@ def train(args):
 
         for img in train_dataloader:
             img = img.to(device)  # shape: [bs, 3, 512, 512]
-            features = encoder(img)[0]
-            features = features[:, 1:, :]
-            B, N, C = features.shape
-            H = int(math.sqrt(N))
-            W = int(math.sqrt(N))
-            features = features.transpose(1, 2).view(
-                B, C, H, W
-            )  # shape: [bs, 768, 32, 32]
-            output = decoder(features)  # shape: [bs, 3, 512, 512]
+
+            if args.model == "vit":
+                features = encoder(img)[0]
+                features = features[:, 1:, :]
+                B, N, C = features.shape
+                H = int(math.sqrt(N))
+                W = int(math.sqrt(N))
+                features = features.transpose(1, 2).view(
+                    B, C, H, W
+                )  # shape: [bs, 768, 32, 32]
+                output = decoder(features)  # shape: [bs, 3, 512, 512]
+            elif args.model == "pvt2_b2li":
+                features = encoder(img)
+                # TODO:
 
             loss = F.mse_loss(output, img, reduction="mean")
             optimizer.zero_grad()
