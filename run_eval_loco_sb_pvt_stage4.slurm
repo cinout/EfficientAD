@@ -20,7 +20,7 @@ module purge
 eval "$(conda shell.bash hook)"
 conda activate ds2
 
-timestamp="20231004_090425_11_95_[sb]"
+timestamp="20231004_134003_0_13_[sb]"
 
 python -u mvtec_loco_ad_evaluation/evaluate_experiment.py \
   --object_name "screw_bag" \
