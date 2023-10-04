@@ -31,7 +31,7 @@ set -x
 
 python -u efficientad.py \
   --pretrained_network vit \
-  --weights pretrained_pdn/pretrained_pdn_20231003_031126_6_86/teacher_small_state_vit_b16_ft_screw_bag.pth \
+  --weights pretrained_pdn/pretrained_pdn_vit_ft_overall/teacher_small_state_vit_b16_ft_screw_bag.pth \
   --dataset mvtec_loco \
   --subdataset screw_bag \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
