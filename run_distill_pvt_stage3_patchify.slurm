@@ -1,17 +1,17 @@
 #!/bin/bash
 
-###SBATCH --partition=gpu-a100
+#SBATCH --partition=gpu-a100
 
 ###SBATCH --partition=feit-gpu-a100
 ###SBATCH --qos=feit
 
-#SBATCH --partition=deeplearn
-#SBATCH --qos=gpgpudeeplearn
-#SBATCH --constraint=dlg4|dlg5
+###SBATCH --partition=deeplearn
+###SBATCH --qos=gpgpudeeplearn
+###SBATCH --constraint=dlg3|dlg4|dlg5
 
-#SBATCH --job-name="ds_ft_bb"
+#SBATCH --job-name="pvt_patch"
 #SBATCH --account=punim1623
-#SBATCH --time=0-21:00:00
+#SBATCH --time=1-00:00:00
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=2
@@ -23,7 +23,7 @@
 #SBATCH --mem=40G
 
 export WORLD_SIZE=2  #### update world size: nodes x ntasks-per-node
-export MASTER_PORT=12342
+export MASTER_PORT=12340
 
 echo ">>> NODELIST="${SLURM_NODELIST}
 master_addr=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
@@ -38,13 +38,13 @@ conda activate ds2
 set -e
 set -x
 
-srun python -u pretraining_after_ft.py \
-  --network "vit" \
-  --batch_size 8 \
+srun python -u pretraining.py \
+  --network "pvt2_b2li" \
+  --batch_size 16  \
   --extractor_input_size 512 \
-  --subdataset breakfast_box \
-  --ft_folder finetuned_vit_20231001_112430_27_40 \
-  --note "distill after ft, bb" \
+  --pvt2_stage3 \
+  --patchify \
+  --note "pvt, stage3 only, and patchify" \
 
 ##Log this job's resource usage stats###
 my-job-stats -a -n -s
