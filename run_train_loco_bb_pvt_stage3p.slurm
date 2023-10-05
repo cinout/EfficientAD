@@ -30,12 +30,13 @@ set -e
 set -x
 
 python -u efficientad.py \
-  --pretrained_network vit \
-  --weights pretrained_pdn/pretrained_pdn_vit_ft_overall/teacher_small_state_vit_b16_ft.pth \
+  --pretrained_network pvt2_b2li \
+  --weights pretrained_pdn/pretrained_pdn_20231005_013425_48_7/teacher_small_state_pvt2_b2li.pth \
   --dataset mvtec_loco \
   --subdataset breakfast_box \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
-  --note "[pretrained] vit_ft"
+  --pvt2_stage4 \
+  --note "[pretrained] pvt stage3 patchify"
 # FIXME: update job-name, weights, pretrained_network, subdataset, note
 ##Log this job's resource usage stats###
 my-job-stats -a -n -s
