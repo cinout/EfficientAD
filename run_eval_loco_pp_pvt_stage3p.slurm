@@ -2,7 +2,7 @@
 
 #SBATCH --partition=cascade
 
-#SBATCH --job-name="eval_sc"
+#SBATCH --job-name="eval_pp"
 #SBATCH --account=punim1623
 #SBATCH --time=0-01:10:00
 
@@ -20,10 +20,10 @@ module purge
 eval "$(conda shell.bash hook)"
 conda activate ds2
 
-timestamp="20231004_152553_64_0_[sc]"
+timestamp="20231005_195519_5_62_[pp]"
 
 python -u mvtec_loco_ad_evaluation/evaluate_experiment.py \
-  --object_name "splicing_connectors" \
+  --object_name "pushpins" \
   --dataset_base_dir "./datasets/loco/" \
   --anomaly_maps_dir "./outputs/output_${timestamp}/anomaly_maps/mvtec_loco/" \
   --output_dir "./outputs/output_${timestamp}/metrics/mvtec_loco/" \
