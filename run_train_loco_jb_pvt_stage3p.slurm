@@ -35,7 +35,8 @@ python -u efficientad.py \
   --dataset mvtec_loco \
   --subdataset juice_bottle \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
-  --pvt2_stage4 \
+  --pvt2_stage3 \
+  --patchify \
   --note "[pretrained] pvt stage3 patchify"
 # FIXME: update job-name, weights, pretrained_network, subdataset, note
 ##Log this job's resource usage stats###
