@@ -11,7 +11,7 @@
 
 #SBATCH --job-name="train_pp"
 #SBATCH --account=punim1623
-#SBATCH --time=0-10:00:00
+#SBATCH --time=0-07:30:00
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -34,7 +34,7 @@ python -u efficientad.py \
   --dataset mvtec_loco \
   --subdataset pushpins \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
-  --image_size_vit_teacher 512 \
+  --image_size_vit_teacher 1024 \
   --vit_teacher \
   --note "vit as teacher"
 # FIXME: update job-name, weights, pretrained_network, subdataset, note
