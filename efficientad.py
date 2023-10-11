@@ -23,6 +23,8 @@ from common import (
 from sklearn.metrics import roc_auc_score
 from datetime import datetime
 from functools import partial
+from pvt_v2 import pvt_v2_b2_li
+import torch.nn.functional as F
 
 timestamp = (
     datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -106,10 +108,11 @@ def get_argparse():
     )
     parser.add_argument("--image_size_vit_teacher", type=int, default=512)
     parser.add_argument(
-        "--pvt_for_teacher",
+        "--pvt2_teacher",
         action="store_true",
         help="if set to True, then use pvt for teacher",
     )
+    parser.add_argument("--image_size_pvt2_teacher", type=int, default=512)
 
     parser.add_argument("-t", "--train_steps", type=int, default=70000)
     parser.add_argument("--note", type=str, default="")
@@ -119,6 +122,7 @@ def get_argparse():
 # constants
 seed = 42
 on_gpu = torch.cuda.is_available()
+device = "cuda" if on_gpu else "cpu"
 image_size = 256
 
 # data loading
@@ -142,6 +146,34 @@ def process_vit_features(features):
     return features
 
 
+def process_pvt_features(features, config):
+    target_size = 64
+
+    if config.pvt2_stage4:
+        # in this case, features have 4 elements
+        features = features[3:]
+    elif config.pvt2_stage3:
+        # in this case, features have 3 elements
+        features = features[2:]
+    else:
+        # in this case, features have 3 elements
+        features = features[1:]  # remove 1st element
+
+    for i in range(len(features)):
+        # upsampling feature map
+        _features = features[i]
+        _features = F.interpolate(
+            _features,
+            size=(target_size, target_size),
+            mode="bilinear",
+        )
+        features[i] = _features
+
+    features = torch.cat(features, dim=1)  # shape: [bs, c_sum=128+320=448, 64, 64]
+
+    return features
+
+
 def train_transform(image, config):
     default_transform = transforms.Compose(
         [
@@ -154,6 +186,15 @@ def train_transform(image, config):
         [
             transforms.Resize(
                 (config.image_size_vit_teacher, config.image_size_vit_teacher)
+            ),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ]
+    )
+    pvt2_teacher_transform = transforms.Compose(
+        [
+            transforms.Resize(
+                (config.image_size_pvt2_teacher, config.image_size_pvt2_teacher)
             ),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
@@ -173,6 +214,14 @@ def train_transform(image, config):
             vit_teacher_transform(image),
             default_transform(ae_image),
             vit_teacher_transform(ae_image),
+        )
+    elif config.pvt2_teacher:
+        ae_image = transform_ae(image)
+        return (
+            default_transform(image),
+            pvt2_teacher_transform(image),
+            default_transform(ae_image),
+            pvt2_teacher_transform(ae_image),
         )
     else:
         return (
@@ -328,6 +377,20 @@ def main():
             teacher = torch.nn.Sequential(
                 *[model.transformer.embeddings, model.transformer.encoder]
             )
+        elif config.pvt2_teacher:
+            pretrained_model = torch.load(
+                "pvt_model_checkpoints/mask_rcnn_pvt_v2_b2_li_fpn_1x_coco.pth",
+                map_location=device,
+            )
+            pretrained_weights = {}
+            for k, v in pretrained_model["state_dict"].items():
+                if k.startswith("backbone"):
+                    pretrained_weights[k.replace("backbone.", "")] = v
+                else:
+                    continue
+
+            teacher = pvt_v2_b2_li(pretrained=False, stage4=config.pvt2_stage4)
+            teacher.load_state_dict(pretrained_weights, strict=False)
         else:
             teacher = PDN_Small(out_channels=out_channels, padding=True)
 
@@ -364,7 +427,7 @@ def main():
                 raise ValueError(f"unknown state_dict key {k}")
         teacher.load_state_dict(pretrained_teacher_model, strict=False)
     elif config.pretrained_network in ["vit", "pvt2_b2li"]:
-        if config.vit_teacher:
+        if config.vit_teacher or config.pvt2_teacher:
             # ckpt already loaded
             pass
         else:
@@ -424,17 +487,17 @@ def main():
         train_images,
         image_penalty,
     ) in zip(tqdm_obj, train_loader_infinite, penalty_loader_infinite):
-        if config.vit_teacher:
+        if config.vit_teacher or config.pvt2_teacher:
             (
                 image_st,
-                image_st_vit_teacher,
+                image_st_teacher,
                 image_ae,
-                image_ae_vit_teacher,
+                image_ae_teacher,
             ) = train_images
             if on_gpu:
                 image_st = image_st.cuda()
-                image_st_vit_teacher = image_st_vit_teacher.cuda()
-                image_ae_vit_teacher = image_ae_vit_teacher.cuda()
+                image_st_teacher = image_st_teacher.cuda()
+                image_ae_teacher = image_ae_teacher.cuda()
                 image_ae = image_ae.cuda()
 
         else:
@@ -448,8 +511,11 @@ def main():
 
         with torch.no_grad():
             if config.vit_teacher:
-                teacher_output_st = teacher(image_st_vit_teacher)[0]
+                teacher_output_st = teacher(image_st_teacher)[0]
                 teacher_output_st = process_vit_features(teacher_output_st)
+            elif config.pvt2_teacher:
+                teacher_output_st = teacher(image_st_teacher)
+                teacher_output_st = process_pvt_features(teacher_output_st, config)
             else:
                 teacher_output_st = teacher(image_st)
 
@@ -472,8 +538,11 @@ def main():
 
         with torch.no_grad():
             if config.vit_teacher:
-                teacher_output_ae = teacher(image_ae_vit_teacher)[0]
+                teacher_output_ae = teacher(image_ae_teacher)[0]
                 teacher_output_ae = process_vit_features(teacher_output_ae)
+            elif config.pvt2_teacher:
+                teacher_output_ae = teacher(image_ae_teacher)
+                teacher_output_ae = process_pvt_features(teacher_output_ae, config)
             else:
                 teacher_output_ae = teacher(image_ae)
 
@@ -731,7 +800,7 @@ def map_normalization(
 def teacher_normalization(teacher, train_loader, config):
     mean_outputs = []
     for train_images in tqdm(train_loader, desc="Computing mean of features"):
-        if config.vit_teacher:
+        if config.vit_teacher or config.pvt2_teacher:
             (
                 _,
                 train_image,
@@ -747,6 +816,9 @@ def teacher_normalization(teacher, train_loader, config):
         if config.vit_teacher:
             teacher_output = teacher(train_image)[0]
             teacher_output = process_vit_features(teacher_output)
+        elif config.pvt2_teacher:
+            teacher_output = teacher(train_image)
+            teacher_output = process_pvt_features(teacher_output, config)
         else:
             teacher_output = teacher(train_image)
 
@@ -773,6 +845,9 @@ def teacher_normalization(teacher, train_loader, config):
         if config.vit_teacher:
             teacher_output = teacher(train_image)[0]
             teacher_output = process_vit_features(teacher_output)
+        elif config.pvt2_teacher:
+            teacher_output = teacher(train_image)
+            teacher_output = process_pvt_features(teacher_output, config)
         else:
             teacher_output = teacher(train_image)
 
