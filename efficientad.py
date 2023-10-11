@@ -229,7 +229,7 @@ def main():
     # load data
     full_train_set = ImageFolderWithoutTarget(
         os.path.join(dataset_path, config.subdataset, "train"),
-        transform=transforms.Lambda(partial(train_transform, config)),
+        transform=transforms.Lambda(partial(train_transform, config=config)),
     )
     # test_set = ImageFolderWithPath(
     #     os.path.join(dataset_path, config.subdataset, "test")
