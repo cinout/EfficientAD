@@ -829,7 +829,7 @@ def teacher_normalization(teacher, train_loader, config):
 
     mean_distances = []
     for train_images in tqdm(train_loader, desc="Computing std of features"):
-        if config.vit_teacher:
+        if config.vit_teacher or config.pvt2_teacher:
             (
                 _,
                 train_image,
