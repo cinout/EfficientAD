@@ -806,7 +806,7 @@ def map_normalization(
     maps_st = []
     maps_ae = []
     # ignore augmented ae image
-    for images, _ in tqdm(validation_loader, desc=desc):
+    for images in tqdm(validation_loader, desc=desc):
         if config.vit_teacher or config.pvt2_teacher:
             (
                 image,
