@@ -342,16 +342,18 @@ def main():
     student = PDN_Small(out_channels=2 * out_channels, padding=True)
     autoencoder = Autoencoder(out_channels=out_channels)
 
-    student.load_state_dict(
-        torch.load(
-            os.path.join(train_output_dir, "student_final.pth"), map_location=device
-        )["state_dict"]
+    pretrained_student = torch.load(
+        os.path.join(train_output_dir, "student_final.pth"), map_location=device
     )
-    autoencoder.load_state_dict(
-        torch.load(
-            os.path.join(train_output_dir, "autoencoder_final.pth"), map_location=device
-        )["state_dict"]
+
+    print(pretrained_student)
+
+    pretrained_autoencoder = torch.load(
+        os.path.join(train_output_dir, "autoencoder_final.pth"), map_location=device
     )
+
+    student.load_state_dict(pretrained_student)
+    autoencoder.load_state_dict(pretrained_autoencoder)
 
     teacher.eval()
     student.eval()
