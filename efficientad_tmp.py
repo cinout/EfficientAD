@@ -346,7 +346,8 @@ def main():
         os.path.join(train_output_dir, "student_final.pth"), map_location=device
     )
 
-    print(pretrained_student)
+    print(type(pretrained_student))
+    print(pretrained_student.items())
 
     pretrained_autoencoder = torch.load(
         os.path.join(train_output_dir, "autoencoder_final.pth"), map_location=device
