@@ -11,7 +11,7 @@
 
 #SBATCH --job-name="train_pp"
 #SBATCH --account=punim1623
-#SBATCH --time=0-07:30:00
+#SBATCH --time=0-01:30:00
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -29,7 +29,7 @@ conda activate ds2
 set -e
 set -x
 
-python -u efficientad.py \
+python -u efficientad_tmp.py \
   --pretrained_network pvt2_b2li \
   --dataset mvtec_loco \
   --subdataset pushpins \
@@ -37,6 +37,7 @@ python -u efficientad.py \
   --image_size_pvt2_teacher 1024 \
   --pvt2_teacher \
   --pvt2_stage3 \
+  --output_dir "./outputs/output_20231011_224358_49_42_[pp]" \
   --note "pvt as teacher"
 # FIXME: update job-name, weights, pretrained_network, subdataset, note
 ##Log this job's resource usage stats###

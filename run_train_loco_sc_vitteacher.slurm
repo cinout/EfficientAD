@@ -11,7 +11,7 @@
 
 #SBATCH --job-name="train_sc"
 #SBATCH --account=punim1623
-#SBATCH --time=0-07:30:00
+#SBATCH --time=0-01:30:00
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -29,13 +29,14 @@ conda activate ds2
 set -e
 set -x
 
-python -u efficientad.py \
+python -u efficientad_tmp.py \
   --pretrained_network vit \
   --dataset mvtec_loco \
   --subdataset splicing_connectors \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
   --image_size_vit_teacher 1024 \
   --vit_teacher \
+  --output_dir "./outputs/output_20231011_215734_5_5_[sc]" \
   --note "vit as teacher"
 # FIXME: update job-name, weights, pretrained_network, subdataset, note
 ##Log this job's resource usage stats###

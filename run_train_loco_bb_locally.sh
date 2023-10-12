@@ -1,4 +1,4 @@
-python -u efficientad.py \
+python -u efficientad_tmp.py \
   --dataset mvtec_loco \
   --subdataset breakfast_box \
   --pretrained_network pvt2_b2li \
