@@ -346,7 +346,6 @@ def main():
         os.path.join(train_output_dir, "student_final.pth"), map_location=device
     )
 
-
     pretrained_autoencoder = torch.load(
         os.path.join(train_output_dir, "autoencoder_final.pth"), map_location=device
     )
@@ -554,7 +553,7 @@ def map_normalization(
     maps_st = []
     maps_ae = []
     # ignore augmented ae image
-    for images, _ in tqdm(validation_loader, desc=desc):
+    for images in tqdm(validation_loader, desc=desc):
         if config.vit_teacher or config.pvt2_teacher:
             (
                 image,
