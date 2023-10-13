@@ -50,6 +50,7 @@ def get_argparse():
     parser.add_argument(
         "-m", "--model_size", default="small", choices=["small", "medium"]
     )
+    # TODO: include if teacher needs to load from pretrained
     parser.add_argument(
         "-w",
         "--weights",
@@ -838,7 +839,9 @@ def map_normalization(
         maps_ae.append(map_ae)
     maps_st = torch.cat(maps_st)
     maps_ae = torch.cat(maps_ae)
-    q_st_start = torch.quantile(maps_st, q=0.9)
+    q_st_start = torch.quantile(
+        maps_st, q=0.9
+    )  # means 90% of values lie below q_st_start
     q_st_end = torch.quantile(maps_st, q=0.995)
     q_ae_start = torch.quantile(maps_ae, q=0.9)
     q_ae_end = torch.quantile(maps_ae, q=0.995)
