@@ -25,6 +25,23 @@ from datetime import datetime
 from functools import partial
 from pvt_v2 import pvt_v2_b2_li
 import torch.nn.functional as F
+import matplotlib.pyplot as plt
+
+timestamp = (
+    datetime.now().strftime("%Y%m%d_%H%M%S")
+    + "_"
+    + str(random.randint(0, 100))
+    + "_"
+    + str(random.randint(0, 100))
+)
+
+category_acronym = {
+    "breakfast_box": "bb",
+    "juice_bottle": "jb",
+    "pushpins": "pp",
+    "screw_bag": "sb",
+    "splicing_connectors": "sc",
+}
 
 
 def get_argparse():
@@ -38,10 +55,11 @@ def get_argparse():
         default="bottle",
         help="One of 15 sub-datasets of Mvtec AD or 5" + "sub-datasets of Mvtec LOCO",
     )
-    parser.add_argument("-o", "--output_dir", type=str)
+    parser.add_argument("-o", "--output_dir", default=f"outputs/output_{timestamp}")
     parser.add_argument(
         "-m", "--model_size", default="small", choices=["small", "medium"]
     )
+    # TODO: import choice
     parser.add_argument(
         "-w",
         "--weights",
@@ -67,12 +85,16 @@ def get_argparse():
         default="./datasets/loco",
         help="Downloaded Mvtec LOCO dataset",
     )
+    # TODO: important choice
     parser.add_argument(
         "--pretrained_network",
         choices=["wide_resnet101_2", "vit", "pvt2_b2li"],
         type=str,
         default="wide_resnet101_2",
     )
+    # TODO: for analysis
+    parser.add_argument("--ana_id", type=str, help="identifier for analysis")
+
     parser.add_argument(
         "--avg_cdim",
         action="store_true",
@@ -93,6 +115,8 @@ def get_argparse():
         action="store_true",
         help="if set to True, then augment features using PatchCore",
     )
+
+    # the following are necessary if teacher is directly a vit/pvt
     parser.add_argument(
         "--vit_teacher",
         action="store_true",
@@ -229,6 +253,19 @@ def main():
 
     config = get_argparse()
 
+    if config.subdataset == "breakfast_box":
+        config.output_dir = config.output_dir + "_[bb]"
+    elif config.subdataset == "juice_bottle":
+        config.output_dir = config.output_dir + "_[jb]"
+    elif config.subdataset == "pushpins":
+        config.output_dir = config.output_dir + "_[pp]"
+    elif config.subdataset == "screw_bag":
+        config.output_dir = config.output_dir + "_[sb]"
+    elif config.subdataset == "splicing_connectors":
+        config.output_dir = config.output_dir + "_[sc]"
+    else:
+        raise ValueError(f"unknown subdataset name {config.subdataset}")
+
     print(
         "\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(config)).items()))
     )
@@ -240,6 +277,10 @@ def main():
     else:
         raise Exception("Unknown config.dataset")
 
+    pretrain_penalty = True
+    if config.imagenet_train_path == "none":
+        pretrain_penalty = False
+
     # create output dir
     train_output_dir = os.path.join(
         config.output_dir, "trainings", config.dataset, config.subdataset
@@ -247,6 +288,8 @@ def main():
     test_output_dir = os.path.join(
         config.output_dir, "anomaly_maps", config.dataset, config.subdataset, "test"
     )
+    os.makedirs(train_output_dir)
+    os.makedirs(test_output_dir)
 
     # load data
     full_train_set = ImageFolderWithoutTarget(
@@ -276,11 +319,36 @@ def main():
     train_loader = DataLoader(
         train_set, batch_size=1, shuffle=True, num_workers=4, pin_memory=True
     )
+    train_loader_infinite = InfiniteDataloader(train_loader)
     validation_loader = DataLoader(validation_set, batch_size=1)
+
+    if pretrain_penalty:
+        # load pretraining data for penalty
+        penalty_transform = transforms.Compose(
+            [
+                transforms.Resize((2 * image_size, 2 * image_size)),
+                transforms.RandomGrayscale(0.3),
+                transforms.CenterCrop(image_size),
+                transforms.ToTensor(),
+                transforms.Normalize(
+                    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+                ),
+            ]
+        )
+        penalty_set = ImageFolderWithoutTarget(
+            config.imagenet_train_path, transform=penalty_transform
+        )
+        penalty_loader = DataLoader(
+            penalty_set, batch_size=1, shuffle=True, num_workers=4, pin_memory=True
+        )
+        penalty_loader_infinite = InfiniteDataloader(penalty_loader)
+    else:
+        penalty_loader_infinite = itertools.repeat(None)
 
     if config.pretrained_network == "vit":
         out_channels = 768
     elif config.pretrained_network == "pvt2_b2li":
+        # TODO: always pay attention to out_channels
         if config.avg_cdim:
             out_channels = 384
         else:
@@ -298,64 +366,115 @@ def main():
         out_channels = 384
 
     # create models
-    if config.vit_teacher:
-        from urllib.request import urlretrieve
-        from vit_models.modeling import VisionTransformer, CONFIGS
+    if config.model_size == "small":
+        if config.vit_teacher:
+            from urllib.request import urlretrieve
+            from vit_models.modeling import VisionTransformer, CONFIGS
 
-        # if not on_gpu or dist.get_rank() == 0:
-        os.makedirs("vit_model_checkpoints", exist_ok=True)
+            # if not on_gpu or dist.get_rank() == 0:
+            os.makedirs("vit_model_checkpoints", exist_ok=True)
 
-        if not os.path.isfile("vit_model_checkpoints/ViT-B_16-224.npz"):
-            urlretrieve(
-                "https://storage.googleapis.com/vit_models/imagenet21k+imagenet2012/ViT-B_16-224.npz",
-                "vit_model_checkpoints/ViT-B_16-224.npz",
+            if not os.path.isfile("vit_model_checkpoints/ViT-B_16-224.npz"):
+                urlretrieve(
+                    "https://storage.googleapis.com/vit_models/imagenet21k+imagenet2012/ViT-B_16-224.npz",
+                    "vit_model_checkpoints/ViT-B_16-224.npz",
+                )
+            model = VisionTransformer(
+                config=CONFIGS["ViT-B_16"],
+                num_classes=1000,
+                zero_head=False,
+                img_size=config.image_size_vit_teacher,
+                vis=True,
+                vit_mid=False,
             )
-        model = VisionTransformer(
-            config=CONFIGS["ViT-B_16"],
-            num_classes=1000,
-            zero_head=False,
-            img_size=config.image_size_vit_teacher,
-            vis=True,
-            vit_mid=False,
-        )
-        model.load_from(np.load("vit_model_checkpoints/ViT-B_16-224.npz"))
-        teacher = torch.nn.Sequential(
-            *[model.transformer.embeddings, model.transformer.encoder]
-        )
-    elif config.pvt2_teacher:
-        pretrained_model = torch.load(
-            "pvt_model_checkpoints/mask_rcnn_pvt_v2_b2_li_fpn_1x_coco.pth",
-            map_location=device,
-        )
-        pretrained_weights = {}
-        for k, v in pretrained_model["state_dict"].items():
-            if k.startswith("backbone"):
-                pretrained_weights[k.replace("backbone.", "")] = v
-            else:
-                continue
+            model.load_from(np.load("vit_model_checkpoints/ViT-B_16-224.npz"))
+            teacher = torch.nn.Sequential(
+                *[model.transformer.embeddings, model.transformer.encoder]
+            )
+        elif config.pvt2_teacher:
+            pretrained_model = torch.load(
+                "pvt_model_checkpoints/mask_rcnn_pvt_v2_b2_li_fpn_1x_coco.pth",
+                map_location=device,
+            )
+            pretrained_weights = {}
+            for k, v in pretrained_model["state_dict"].items():
+                if k.startswith("backbone"):
+                    pretrained_weights[k.replace("backbone.", "")] = v
+                else:
+                    continue
 
-        teacher = pvt_v2_b2_li(pretrained=False, stage4=config.pvt2_stage4)
-        teacher.load_state_dict(pretrained_weights, strict=False)
+            teacher = pvt_v2_b2_li(pretrained=False, stage4=config.pvt2_stage4)
+            teacher.load_state_dict(pretrained_weights, strict=False)
+        else:
+            teacher = PDN_Small(out_channels=out_channels, padding=True)
+
+        student = PDN_Small(out_channels=2 * out_channels, padding=True)
+        # teacher = get_pdn_small(out_channels, padding=True)
+        # student = get_pdn_small(2 * out_channels, padding=True)
+    elif config.model_size == "medium":
+        teacher = get_pdn_medium(out_channels, padding=True)
+        student = get_pdn_medium(2 * out_channels, padding=True)
     else:
-        teacher = PDN_Small(out_channels=out_channels, padding=True)
+        raise Exception()
 
-    student = PDN_Small(out_channels=2 * out_channels, padding=True)
+    if config.pretrained_network == "wide_resnet101_2":
+        state_dict = torch.load(config.weights, map_location=device)
+        pretrained_teacher_model = {}
+        for k, v in state_dict.items():
+            if k == "0.weight":
+                pretrained_teacher_model["conv1.weight"] = v
+            elif k == "0.bias":
+                pretrained_teacher_model["conv1.bias"] = v
+            elif k == "3.weight":
+                pretrained_teacher_model["conv2.weight"] = v
+            elif k == "3.bias":
+                pretrained_teacher_model["conv2.bias"] = v
+            elif k == "6.weight":
+                pretrained_teacher_model["conv3.weight"] = v
+            elif k == "6.bias":
+                pretrained_teacher_model["conv3.bias"] = v
+            elif k == "8.weight":
+                pretrained_teacher_model["conv4.weight"] = v
+            elif k == "8.bias":
+                pretrained_teacher_model["conv4.bias"] = v
+            else:
+                raise ValueError(f"unknown state_dict key {k}")
+        teacher.load_state_dict(pretrained_teacher_model, strict=False)
+    elif config.pretrained_network in ["vit", "pvt2_b2li"]:
+        if config.vit_teacher or config.pvt2_teacher:
+            # ckpt already loaded
+            pass
+        else:
+            state_dict = torch.load(config.weights, map_location=device)
+            pretrained_teacher_model = {}
+            for k, v in state_dict.items():
+                if k == "module.conv1.weight":
+                    pretrained_teacher_model["conv1.weight"] = v
+                elif k == "module.conv1.bias":
+                    pretrained_teacher_model["conv1.bias"] = v
+                elif k == "module.conv2.weight":
+                    pretrained_teacher_model["conv2.weight"] = v
+                elif k == "module.conv2.bias":
+                    pretrained_teacher_model["conv2.bias"] = v
+                elif k == "module.conv3.weight":
+                    pretrained_teacher_model["conv3.weight"] = v
+                elif k == "module.conv3.bias":
+                    pretrained_teacher_model["conv3.bias"] = v
+                elif k == "module.conv4.weight":
+                    pretrained_teacher_model["conv4.weight"] = v
+                elif k == "module.conv4.bias":
+                    pretrained_teacher_model["conv4.bias"] = v
+                else:
+                    raise ValueError(f"unknown state_dict key {k}")
+            teacher.load_state_dict(pretrained_teacher_model, strict=False)
+
+    # autoencoder = get_autoencoder(out_channels)
     autoencoder = Autoencoder(out_channels=out_channels)
 
-    pretrained_student = torch.load(
-        os.path.join(train_output_dir, "student_final.pth"), map_location=device
-    )
-
-    pretrained_autoencoder = torch.load(
-        os.path.join(train_output_dir, "autoencoder_final.pth"), map_location=device
-    )
-
-    student.load_state_dict(pretrained_student.state_dict())
-    autoencoder.load_state_dict(pretrained_autoencoder.state_dict())
-
+    # teacher frozen
     teacher.eval()
-    student.eval()
-    autoencoder.eval()
+    student.train()
+    autoencoder.train()
 
     if on_gpu:
         teacher.cuda()
@@ -363,7 +482,231 @@ def main():
         autoencoder.cuda()
 
     # FIXME: should we update the teacher_mean, teacher_std on the fly? Different for each batch
-    teacher_mean, teacher_std = teacher_normalization(teacher, train_loader, config)
+    # TODO: uncomment later
+    # teacher_mean, teacher_std = teacher_normalization(teacher, train_loader, config)
+
+    # with open(f"teacher_mean_{category_acronym[config.subdataset]}_{config.ana_id}.t", "wb") as f:
+    #     torch.save(teacher_mean, f)
+    # with open(f"teacher_std_{category_acronym[config.subdataset]}_{config.ana_id}.t", "wb") as f:
+    #     torch.save(teacher_std, f)
+
+    # shape: [1, c_dim, 1, 1]
+    with open(
+        f"teacher_mean_{category_acronym[config.subdataset]}_{config.ana_id}.t",
+        "rb",
+    ) as f:
+        teacher_mean = torch.load(f)
+    with open(
+        f"teacher_std_{category_acronym[config.subdataset]}_{config.ana_id}.t", "rb"
+    ) as f:
+        teacher_std = torch.load(f)
+
+    """
+    >>>>>>>>>>>>>>>>>>>>>>>>>>
+    Plot teacher_std histogram
+    >>>>>>>>>>>>>>>>>>>>>>>>>>
+    """
+    # ana_ids = ["respretrainedPDN", "vitpretrainedPDN", "vitasteacher"]
+    # fig, axs = plt.subplots(1, 3, sharey=True, tight_layout=True)
+    # n_bins = 50
+    # # axs.set(xlabel="std", ylabel="count", title="teacher_std_distribution")
+    # fig.suptitle("teacher_std/mean_distribution", fontsize=12)
+    # fig.supxlabel("teacher_std")
+    # fig.supylabel("teacher_mean")
+
+    # for i, ana_id in enumerate(ana_ids):
+    #     with open(
+    #         f"teacher_mean_{category_acronym[config.subdataset]}_{ana_id}.t",
+    #         "rb",
+    #     ) as f:
+    #         teacher_mean = torch.load(f)
+    #     with open(
+    #         f"teacher_std_{category_acronym[config.subdataset]}_{ana_id}.t", "rb"
+    #     ) as f:
+    #         teacher_std = torch.load(f)
+
+    #     teacher_std = teacher_std.flatten().numpy()
+    #     teacher_mean = teacher_mean.flatten().numpy()
+
+    #     # axs[i].hist(
+    #     #     teacher_std, bins=n_bins, label=f"{ana_id}\nc_dim={len(teacher_std)}"
+    #     # )
+    #     axs[i].hist2d(
+    #         teacher_std,
+    #         teacher_mean,
+    #         bins=n_bins,
+    #         # label=f"{ana_id}\nc_dim={len(teacher_std)}",
+    #     )
+
+    #     # legend = axs[i].legend(loc="upper right", shadow=True)
+    #     # legend.get_frame()
+
+    #     axs[i].title.set_text(f"{ana_id}\nc_dim={len(teacher_std)}")
+
+    # plt.show()
+
+    """
+    >>>>>>>>>>>>>>>>>>>>>>>>>>
+    [END] Plot teacher_std histogram
+    >>>>>>>>>>>>>>>>>>>>>>>>>>
+    """
+
+    optimizer = torch.optim.Adam(
+        itertools.chain(student.parameters(), autoencoder.parameters()),
+        lr=1e-4,
+        weight_decay=1e-5,
+    )
+
+    # step_size is 66500
+    scheduler = torch.optim.lr_scheduler.StepLR(
+        optimizer, step_size=int(0.95 * config.train_steps), gamma=0.1
+    )
+
+    tqdm_obj = tqdm(range(config.train_steps))
+
+    # training
+    for (
+        iteration,
+        train_images,
+        image_penalty,
+    ) in zip(tqdm_obj, train_loader_infinite, penalty_loader_infinite):
+        # TODO: uncomment
+        break
+
+        if config.vit_teacher or config.pvt2_teacher:
+            (
+                image_st,
+                image_st_teacher,
+                image_ae,
+                image_ae_teacher,
+            ) = train_images
+            if on_gpu:
+                image_st = image_st.cuda()
+                image_st_teacher = image_st_teacher.cuda()
+                image_ae_teacher = image_ae_teacher.cuda()
+                image_ae = image_ae.cuda()
+
+        else:
+            (image_st, image_ae) = train_images
+            if on_gpu:
+                image_st = image_st.cuda()
+                image_ae = image_ae.cuda()
+
+        if image_penalty is not None:
+            image_penalty = image_penalty.cuda()
+
+        with torch.no_grad():
+            if config.vit_teacher:
+                teacher_output_st = teacher(image_st_teacher)[0]
+                teacher_output_st = process_vit_features(teacher_output_st)
+            elif config.pvt2_teacher:
+                teacher_output_st = teacher(image_st_teacher)
+                teacher_output_st = process_pvt_features(teacher_output_st, config)
+            else:
+                teacher_output_st = teacher(image_st)
+
+            teacher_output_st = (teacher_output_st - teacher_mean) / teacher_std
+        student_output_st = student(image_st)[
+            :, :out_channels
+        ]  # the first half of student outputs
+        distance_st = (teacher_output_st - student_output_st) ** 2
+        d_hard = torch.quantile(distance_st, q=0.999)
+        loss_hard = torch.mean(distance_st[distance_st >= d_hard])
+
+        if image_penalty is not None:
+            student_output_penalty = student(image_penalty)[:, :out_channels]
+            loss_penalty = torch.mean(student_output_penalty**2)
+            loss_st = loss_hard + loss_penalty
+        else:
+            loss_st = loss_hard
+
+        ae_output = autoencoder(image_ae)
+
+        with torch.no_grad():
+            if config.vit_teacher:
+                teacher_output_ae = teacher(image_ae_teacher)[0]
+                teacher_output_ae = process_vit_features(teacher_output_ae)
+            elif config.pvt2_teacher:
+                teacher_output_ae = teacher(image_ae_teacher)
+                teacher_output_ae = process_pvt_features(teacher_output_ae, config)
+            else:
+                teacher_output_ae = teacher(image_ae)
+
+            teacher_output_ae = (teacher_output_ae - teacher_mean) / teacher_std
+        student_output_ae = student(image_ae)[
+            :, out_channels:
+        ]  # the second half of student outputs
+        distance_ae = (teacher_output_ae - ae_output) ** 2
+        distance_stae = (ae_output - student_output_ae) ** 2
+        loss_ae = torch.mean(distance_ae)
+        loss_stae = torch.mean(distance_stae)
+        loss_total = loss_st + loss_ae + loss_stae
+
+        optimizer.zero_grad()
+        loss_total.backward()
+        optimizer.step()
+        scheduler.step()
+
+        if iteration % 200 == 0:
+            print(
+                "Iteration: ",
+                iteration,
+                "Current loss: {:.4f}".format(loss_total.item()),
+            )
+            # tqdm_obj.set_description("Current loss: {:.4f}  ".format(loss_total.item()))
+
+        # if iteration % 1000 == 0:
+        #     torch.save(teacher, os.path.join(train_output_dir, "teacher_tmp.pth"))
+        #     torch.save(student, os.path.join(train_output_dir, "student_tmp.pth"))
+        #     torch.save(
+        #         autoencoder, os.path.join(train_output_dir, "autoencoder_tmp.pth")
+        #     )
+
+        # if iteration % 10000 == 0 and iteration > 0:
+        #     # run intermediate evaluation
+        #     teacher.eval()
+        #     student.eval()
+        #     autoencoder.eval()
+
+        #     q_st_start, q_st_end, q_ae_start, q_ae_end = map_normalization(
+        #         validation_loader=validation_loader,
+        #         teacher=teacher,
+        #         student=student,
+        #         autoencoder=autoencoder,
+        #         teacher_mean=teacher_mean,
+        #         teacher_std=teacher_std,
+        #         desc="Intermediate map normalization",
+        #     )
+        #     auc = test(
+        #         test_set=test_set,
+        #         teacher=teacher,
+        #         student=student,
+        #         autoencoder=autoencoder,
+        #         teacher_mean=teacher_mean,
+        #         teacher_std=teacher_std,
+        #         q_st_start=q_st_start,
+        #         q_st_end=q_st_end,
+        #         q_ae_start=q_ae_start,
+        #         q_ae_end=q_ae_end,
+        #         test_output_dir=None,
+        #         desc="Intermediate inference",
+        #     )
+        #     print("Intermediate image auc: {:.4f}".format(auc))
+
+        #     # teacher frozen
+        #     teacher.eval()
+        #     student.train()
+        #     autoencoder.train()
+
+    # TODO: load student and autoencoder from .pth
+
+    teacher.eval()
+    student.eval()
+    autoencoder.eval()
+
+    torch.save(teacher, os.path.join(train_output_dir, "teacher_final.pth"))
+    torch.save(student, os.path.join(train_output_dir, "student_final.pth"))
+    torch.save(autoencoder, os.path.join(train_output_dir, "autoencoder_final.pth"))
 
     q_st_start, q_st_end, q_ae_start, q_ae_end = map_normalization(
         out_channels=out_channels,
@@ -585,7 +928,9 @@ def map_normalization(
         maps_ae.append(map_ae)
     maps_st = torch.cat(maps_st)
     maps_ae = torch.cat(maps_ae)
-    q_st_start = torch.quantile(maps_st, q=0.9)
+    q_st_start = torch.quantile(
+        maps_st, q=0.9
+    )  # means 90% of values lie below q_st_start
     q_st_end = torch.quantile(maps_st, q=0.995)
     q_ae_start = torch.quantile(maps_ae, q=0.9)
     q_ae_end = torch.quantile(maps_ae, q=0.995)

@@ -34,9 +34,8 @@ python -u efficientad.py \
   --dataset mvtec_loco \
   --subdataset splicing_connectors \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
-  --image_size_vit_teacher 512 \
-  --vit_teacher \
-  --note "vit as teacher"
+  --weights pretrained_pdn/pretrained_pdn_vit_lastlayer_bs8_sz512/teacher_small_state_vit_b16.pth \
+  --note "vit pretrained PDN"
 # FIXME: update job-name, weights, pretrained_network, subdataset, note
 ##Log this job's resource usage stats###
 my-job-stats -a -n -s

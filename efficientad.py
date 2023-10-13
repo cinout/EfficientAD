@@ -50,7 +50,7 @@ def get_argparse():
     parser.add_argument(
         "-m", "--model_size", default="small", choices=["small", "medium"]
     )
-    # TODO: include if teacher needs to load from pretrained
+    # TODO: import choice
     parser.add_argument(
         "-w",
         "--weights",
@@ -76,6 +76,7 @@ def get_argparse():
         default="./datasets/loco",
         help="Downloaded Mvtec LOCO dataset",
     )
+    # TODO: important choice
     parser.add_argument(
         "--pretrained_network",
         choices=["wide_resnet101_2", "vit", "pvt2_b2li"],
@@ -102,6 +103,8 @@ def get_argparse():
         action="store_true",
         help="if set to True, then augment features using PatchCore",
     )
+
+    # the following are necessary if teacher is directly a vit/pvt
     parser.add_argument(
         "--vit_teacher",
         action="store_true",
@@ -403,7 +406,7 @@ def main():
         raise Exception()
 
     if config.pretrained_network == "wide_resnet101_2":
-        state_dict = torch.load(config.weights, map_location="cpu")
+        state_dict = torch.load(config.weights, map_location=device)
         pretrained_teacher_model = {}
         for k, v in state_dict.items():
             if k == "0.weight":
@@ -430,7 +433,7 @@ def main():
             # ckpt already loaded
             pass
         else:
-            state_dict = torch.load(config.weights, map_location="cuda")
+            state_dict = torch.load(config.weights, map_location=device)
             pretrained_teacher_model = {}
             for k, v in state_dict.items():
                 if k == "module.conv1.weight":

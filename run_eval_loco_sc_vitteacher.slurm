@@ -20,13 +20,14 @@ module purge
 eval "$(conda shell.bash hook)"
 conda activate ds2
 
-timestamp="20231011_215734_5_5_[sc]"
+timestamp="20231013_131459_76_12_[sc]"
+folder_name="folder_vitteacher_sz512"
 
 python -u mvtec_loco_ad_evaluation/evaluate_experiment.py \
   --object_name "splicing_connectors" \
   --dataset_base_dir "./datasets/loco/" \
-  --anomaly_maps_dir "./outputs/output_${timestamp}/anomaly_maps/mvtec_loco/" \
-  --output_dir "./outputs/output_${timestamp}/metrics/mvtec_loco/" \
+  --anomaly_maps_dir "./outputs/${folder_name}/output_${timestamp}/anomaly_maps/mvtec_loco/" \
+  --output_dir "./outputs/${folder_name}/output_${timestamp}/metrics/mvtec_loco/" \
   --timestamp "${timestamp}" \
 
 ## FIXME: update timestamp
