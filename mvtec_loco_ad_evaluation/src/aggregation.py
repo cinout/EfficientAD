@@ -421,7 +421,9 @@ class MetricsAggregator:
         Returns:
             The resulting ThresholdMetrics instance.
         """
-        initial_thresholds = self._get_initial_thresholds()
+        initial_thresholds = (
+            self._get_initial_thresholds()
+        )  # the initial_thresholds are calculated over all predicted anomaly scores, so when visualize, we should do this too
         initial_values = self._refinement_callback(initial_thresholds)
         binary_refinement(
             init_queries=initial_thresholds,
@@ -489,12 +491,15 @@ class MetricsAggregator:
     def _get_initial_thresholds(self, num_thresholds=50, epsilon=1e-6):
         """Returns initial anomaly thresholds for refining a sPRO curve.
 
-        The thresholds are sorted in descending order. The first threshold is
-        the maximum of all anomaly scores in self.anomaly_maps, plus a given
-        epsilon. The last threshold is the minimum of all anomaly scores, minus
-        a given epsilon. Thus, the first threshold corresponds to an FPR of 0
-        and a sPRO of 0, while the last threshold corresponds to an FPR of 1 and
-        a sPRO of 1.
+        # TODO: this might be the key area for figuring out if sPRO is calculated image-wise or all-together
+
+        The thresholds are sorted in descending order.
+
+        The first threshold is the maximum of all anomaly scores in self.anomaly_maps, plus a given
+        epsilon.
+        The last threshold is the minimum of all anomaly scores, minus a given epsilon.
+
+        Thus, the first threshold corresponds to an FPR of 0 and a sPRO of 0, while the last threshold corresponds to an FPR of 1 and a sPRO of 1.
 
         The thresholds in between are selected by sorting the anomaly scores
         and picking scores at equidistant indices. If the number of anomaly
@@ -528,7 +533,7 @@ class MetricsAggregator:
 
         # Iterate through the images and keep track of the maximum and minimum
         # of all anomaly scores.
-        some_score = self.anomaly_maps[0].np_array[0, 0]
+        some_score = self.anomaly_maps[0].np_array[0, 0]  # example: -0.035081606
 
         min_score, max_score = some_score, some_score
         for anomaly_map in self.anomaly_maps:

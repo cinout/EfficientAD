@@ -26,8 +26,8 @@ from src.util import (
 )
 
 
-def normalizeData(data):
-    return (data - np.min(data)) / (np.max(data) - np.min(data))
+def normalizeData(data, minval, maxval):
+    return (data - minval) / (maxval - minval)
 
 
 TIFF_EXTS = [".tif", ".tiff", ".TIF", ".TIFF"]
@@ -111,6 +111,11 @@ def parse_arguments():
         type=str,
         help="parent folder for the outputs",
     )
+    parser.add_argument(
+        "--generate_visual",
+        action="store_true",
+        help="if true, then generate visual anomaly maps",
+    )
 
     parser.add_argument("--timestamp", type=str)
 
@@ -136,61 +141,82 @@ def main():
     gt_dir = os.path.join(args.dataset_base_dir, args.object_name, "ground_truth")
     anomaly_maps_test_dir = os.path.join(
         args.anomaly_maps_dir, args.object_name, "test"
-    )
+    )  # this is the folder of all the predicted .tiff files
     gt_maps, anomaly_maps = read_maps(
         gt_dir=gt_dir,
         anomaly_maps_test_dir=anomaly_maps_test_dir,
         defects_config=defects_config,
     )
 
-    # generate visual maps
-    subclass = args.object_name
-    timestamp = args.timestamp
-    folder_name= args.folder_name
-    visual_folder = f"outputs/{folder_name}/visual_{timestamp}/"
-    os.mkdir(visual_folder)
-    heatmap_alpha = 0.5
+    anomaly_maps_values = [i.np_array for i in anomaly_maps]
+    anomaly_maps_values = np.stack(anomaly_maps_values, axis=0)
 
-    for file_info in anomaly_maps:
-        file_path = file_info.file_path
-        file_map = file_info.np_array  # shape: (h,w)
-        file_map = np.expand_dims(file_map, axis=2)  # shape: (h,w,1)
+    minval = np.min(anomaly_maps_values)
+    maxval = np.max(anomaly_maps_values)
+    
+    """
+    >>>>>>>>>>>>>>>>
+    generate visual maps
+    >>>>>>>>>>>>>>>>
+    """
+    if args.generate_visual:
+        subclass = args.object_name
+        timestamp = args.timestamp
+        folder_name = args.folder_name
+        visual_folder = f"outputs/{folder_name}/visual_{timestamp}/"
+        os.mkdir(visual_folder)
+        heatmap_alpha = 0.5
 
-        file_path_partition = file_path.split("/")
-        filename = file_path_partition[-1].split(".tiff")[0]
-        anomaly_type = file_path_partition[-2]
+        for file_info in anomaly_maps:
+            file_path = file_info.file_path
+            file_map = file_info.np_array  # shape: (h,w)
+            file_map = np.expand_dims(file_map, axis=2)  # shape: (h,w,1)
 
-        # get raw image
-        raw_img_path = os.path.join(
-            args.dataset_base_dir, subclass, "test", anomaly_type, filename + ".png"
-        )
-        raw_img = np.array(cv2.imread(raw_img_path, cv2.IMREAD_COLOR))
+            file_path_partition = file_path.split("/")
+            filename = file_path_partition[-1].split(".tiff")[0]
+            anomaly_type = file_path_partition[-2]
 
-        # get heatmap
-        pred_mask = np.uint8(normalizeData(file_map) * 255)
-        heatmap = cv2.applyColorMap(pred_mask, cv2.COLORMAP_JET)
-        hmap_overlay_gt_img = heatmap * heatmap_alpha + raw_img * (1.0 - heatmap_alpha)
-
-        cv2.imwrite(
-            f"{visual_folder}/{anomaly_type}_{filename}_heatmap.jpg",
-            hmap_overlay_gt_img,
-        )
-
-        if anomaly_type == "structural_anomalies":
-            # get structural gt mask
-            gt_mask_path = os.path.join(
-                args.dataset_base_dir,
-                subclass,
-                "ground_truth",
-                "structural_anomalies",
-                filename,
-                "000.png",
+            # get raw image
+            raw_img_path = os.path.join(
+                args.dataset_base_dir, subclass, "test", anomaly_type, filename + ".png"
             )
-            gt_mask = np.array(cv2.imread(gt_mask_path, cv2.IMREAD_GRAYSCALE))
+            raw_img = np.array(cv2.imread(raw_img_path, cv2.IMREAD_COLOR))
+
+            # get heatmap
+            pred_mask = np.uint8(normalizeData(file_map, minval, maxval) * 255)
+            heatmap = cv2.applyColorMap(pred_mask, cv2.COLORMAP_JET)
+            hmap_overlay_gt_img = heatmap * heatmap_alpha + raw_img * (
+                1.0 - heatmap_alpha
+            )
+
             cv2.imwrite(
-                f"{visual_folder}/{anomaly_type}_{filename}_gt.jpg",
-                gt_mask,
+                f"{visual_folder}/{anomaly_type}_{filename}_heatmap.jpg",
+                hmap_overlay_gt_img,
             )
+
+            if anomaly_type == "structural_anomalies":
+                # get structural gt mask
+                gt_mask_path = os.path.join(
+                    args.dataset_base_dir,
+                    subclass,
+                    "ground_truth",
+                    "structural_anomalies",
+                    filename,
+                    "000.png",
+                )
+                gt_mask = np.array(cv2.imread(gt_mask_path, cv2.IMREAD_GRAYSCALE))
+                cv2.imwrite(
+                    f"{visual_folder}/{anomaly_type}_{filename}_gt.jpg",
+                    gt_mask,
+                )
+    # TODO: remove this later
+    exit()
+
+    """
+    >>>>>>>>>>>>>>>>
+    [END] generate visual maps
+    >>>>>>>>>>>>>>>>
+    """
 
     # Collect relevant metrics based on the ground truth and anomaly maps.
     metrics_aggregator = MetricsAggregator(
@@ -202,6 +228,7 @@ def main():
     metrics = metrics_aggregator.run(curve_max_distance=args.curve_max_distance)
 
     # Fetch the anomaly localization results.
+    # TODO: localization score is calculated here
     localization_results = get_auc_spro_results(
         metrics=metrics, anomaly_maps_test_dir=anomaly_maps_test_dir
     )
@@ -344,13 +371,14 @@ def get_auc_spro_results(metrics: ThresholdMetrics, anomaly_maps_test_dir: str):
     defect names.
     """
     # Compute the AUC sPRO for logical and structural anomalies.
+    # TODO: the sPRO is calculated here
     auc_spro = get_auc_spros_per_subdir(
         metrics=metrics,
         anomaly_maps_test_dir=anomaly_maps_test_dir,
         add_good_images=True,
     )
 
-    # Compute the mean performance over logical and structural anomalies.
+    # Compute the MEAN performance over logical and structural anomalies.
     mean_spros = dict()
     for limit in auc_spro["structural_anomalies"].keys():
         auc_spro_structural = auc_spro["structural_anomalies"][limit]
@@ -437,6 +465,7 @@ def get_auc_spros_per_subdir(
         subdir_names.remove("good")
 
     for subdir_name in subdir_names:
+        # subdir_name is either structural_anomalies or logical_anomalies
         subdir = os.path.join(anomaly_maps_test_dir, subdir_name)
         subdir = os.path.realpath(subdir)
         # Get all anomaly maps in here.
@@ -445,15 +474,20 @@ def get_auc_spros_per_subdir(
             for a in metrics.anomaly_maps
             if os.path.realpath(a.file_path).startswith(subdir)
         ]
+
+        # TODO: good images are added with each type of anomalous images
         if add_good_images:
             subdir_anomaly_maps += good_images
 
+        # TODO: key parts of calculating sPROs
         subdir_metrics = metrics.reduce_to_images(subdir_anomaly_maps)
-
+        print(subdir_metrics)
+        exit()
         aucs_per_subdir[subdir_name] = get_auc_spros_for_metrics(subdir_metrics)
     return aucs_per_subdir
 
 
+# TODO: key function for calculating sPROs
 def get_auc_spros_for_metrics(
     metrics: ThresholdMetrics,
     filter_defect_names_for_spro: Optional[Iterable[str]] = None,

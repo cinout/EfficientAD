@@ -30,6 +30,7 @@ python -u mvtec_loco_ad_evaluation/evaluate_experiment.py \
   --output_dir "./outputs/${folder_name}/output_${timestamp}/metrics/mvtec_loco/" \
   --timestamp "${timestamp}" \
   --folder_name "${folder_name}" \
+  --generate_visual \
 
 ## FIXME: update timestamp
 ##Log this job's resource usage stats###

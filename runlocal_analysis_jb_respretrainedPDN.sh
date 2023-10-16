@@ -5,3 +5,4 @@ python -u efficientad_analysis.py \
   --weights pretrained_pdn/pretrained_pdn_wide_resnet101_2/teacher_small.pth \
   --note "wideresnet pretrained PDN" \
   --ana_id respretrainedPDN \
+  --pth_folder "outputs/folder_wideresnet101/jb/" \

@@ -26,6 +26,7 @@ from functools import partial
 from pvt_v2 import pvt_v2_b2_li
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
+import cv2
 
 timestamp = (
     datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -55,7 +56,7 @@ def get_argparse():
         default="bottle",
         help="One of 15 sub-datasets of Mvtec AD or 5" + "sub-datasets of Mvtec LOCO",
     )
-    parser.add_argument("-o", "--output_dir", default=f"outputs/output_{timestamp}")
+    # parser.add_argument("-o", "--output_dir", default=f"outputs/output_{timestamp}")
     parser.add_argument(
         "-m", "--model_size", default="small", choices=["small", "medium"]
     )
@@ -94,6 +95,7 @@ def get_argparse():
     )
     # TODO: for analysis
     parser.add_argument("--ana_id", type=str, help="identifier for analysis")
+    parser.add_argument("--pth_folder", type=str, help="trained student/ae weights")
 
     parser.add_argument(
         "--avg_cdim",
@@ -253,18 +255,18 @@ def main():
 
     config = get_argparse()
 
-    if config.subdataset == "breakfast_box":
-        config.output_dir = config.output_dir + "_[bb]"
-    elif config.subdataset == "juice_bottle":
-        config.output_dir = config.output_dir + "_[jb]"
-    elif config.subdataset == "pushpins":
-        config.output_dir = config.output_dir + "_[pp]"
-    elif config.subdataset == "screw_bag":
-        config.output_dir = config.output_dir + "_[sb]"
-    elif config.subdataset == "splicing_connectors":
-        config.output_dir = config.output_dir + "_[sc]"
-    else:
-        raise ValueError(f"unknown subdataset name {config.subdataset}")
+    # if config.subdataset == "breakfast_box":
+    #     config.output_dir = config.output_dir + "_[bb]"
+    # elif config.subdataset == "juice_bottle":
+    #     config.output_dir = config.output_dir + "_[jb]"
+    # elif config.subdataset == "pushpins":
+    #     config.output_dir = config.output_dir + "_[pp]"
+    # elif config.subdataset == "screw_bag":
+    #     config.output_dir = config.output_dir + "_[sb]"
+    # elif config.subdataset == "splicing_connectors":
+    #     config.output_dir = config.output_dir + "_[sc]"
+    # else:
+    #     raise ValueError(f"unknown subdataset name {config.subdataset}")
 
     print(
         "\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(config)).items()))
@@ -281,15 +283,15 @@ def main():
     if config.imagenet_train_path == "none":
         pretrain_penalty = False
 
-    # create output dir
-    train_output_dir = os.path.join(
-        config.output_dir, "trainings", config.dataset, config.subdataset
-    )
-    test_output_dir = os.path.join(
-        config.output_dir, "anomaly_maps", config.dataset, config.subdataset, "test"
-    )
-    os.makedirs(train_output_dir)
-    os.makedirs(test_output_dir)
+    # # create output dir
+    # train_output_dir = os.path.join(
+    #     config.output_dir, "trainings", config.dataset, config.subdataset
+    # )
+    # test_output_dir = os.path.join(
+    #     config.output_dir, "anomaly_maps", config.dataset, config.subdataset, "test"
+    # )
+    # os.makedirs(train_output_dir)
+    # os.makedirs(test_output_dir)
 
     # load data
     full_train_set = ImageFolderWithoutTarget(
@@ -698,28 +700,200 @@ def main():
         #     student.train()
         #     autoencoder.train()
 
-    # TODO: load student and autoencoder from .pth
-    
+    """
+    >>>>>>>>>>>>>>>>>>>>>>>>>
+    load student and autoencoder from .pth
+    >>>>>>>>>>>>>>>>>>>>>>>>>
+    """
+    pretrained_student = torch.load(
+        os.path.join(config.pth_folder, "student_final.pth"), map_location=device
+    )
+    pretrained_autoencoder = torch.load(
+        os.path.join(config.pth_folder, "autoencoder_final.pth"), map_location=device
+    )
+
+    if config.pretrained_network == "wide_resnet101_2":
+        student_updated = {}
+        for k, v in pretrained_student.state_dict().items():
+            if k == "0.weight":
+                student_updated["conv1.weight"] = v
+            elif k == "0.bias":
+                student_updated["conv1.bias"] = v
+            elif k == "3.weight":
+                student_updated["conv2.weight"] = v
+            elif k == "3.bias":
+                student_updated["conv2.bias"] = v
+            elif k == "6.weight":
+                student_updated["conv3.weight"] = v
+            elif k == "6.bias":
+                student_updated["conv3.bias"] = v
+            elif k == "8.weight":
+                student_updated["conv4.weight"] = v
+            elif k == "8.bias":
+                student_updated["conv4.bias"] = v
+            else:
+                raise ValueError(f"unknown state_dict key {k}")
+        student.load_state_dict(student_updated)
+
+        autoencoder_updated = {}
+        for k, v in pretrained_autoencoder.state_dict().items():
+            if k == "0.weight":
+                autoencoder_updated["enc_conv1.weight"] = v
+            elif k == "0.bias":
+                autoencoder_updated["enc_conv1.bias"] = v
+            elif k == "2.weight":
+                autoencoder_updated["enc_conv2.weight"] = v
+            elif k == "2.bias":
+                autoencoder_updated["enc_conv2.bias"] = v
+            elif k == "4.weight":
+                autoencoder_updated["enc_conv3.weight"] = v
+            elif k == "4.bias":
+                autoencoder_updated["enc_conv3.bias"] = v
+            elif k == "6.weight":
+                autoencoder_updated["enc_conv4.weight"] = v
+            elif k == "6.bias":
+                autoencoder_updated["enc_conv4.bias"] = v
+            elif k == "8.weight":
+                autoencoder_updated["enc_conv5.weight"] = v
+            elif k == "8.bias":
+                autoencoder_updated["enc_conv5.bias"] = v
+            elif k == "10.weight":
+                autoencoder_updated["enc_conv6.weight"] = v
+            elif k == "10.bias":
+                autoencoder_updated["enc_conv6.bias"] = v
+            elif k == "12.weight":
+                autoencoder_updated["dec_conv1.weight"] = v
+            elif k == "12.bias":
+                autoencoder_updated["dec_conv1.bias"] = v
+            elif k == "16.weight":
+                autoencoder_updated["dec_conv2.weight"] = v
+            elif k == "16.bias":
+                autoencoder_updated["dec_conv2.bias"] = v
+            elif k == "20.weight":
+                autoencoder_updated["dec_conv3.weight"] = v
+            elif k == "20.bias":
+                autoencoder_updated["dec_conv3.bias"] = v
+            elif k == "24.weight":
+                autoencoder_updated["dec_conv4.weight"] = v
+            elif k == "24.bias":
+                autoencoder_updated["dec_conv4.bias"] = v
+            elif k == "28.weight":
+                autoencoder_updated["dec_conv5.weight"] = v
+            elif k == "28.bias":
+                autoencoder_updated["dec_conv5.bias"] = v
+            elif k == "32.weight":
+                autoencoder_updated["dec_conv6.weight"] = v
+            elif k == "32.bias":
+                autoencoder_updated["dec_conv6.bias"] = v
+            elif k == "36.weight":
+                autoencoder_updated["dec_conv7.weight"] = v
+            elif k == "36.bias":
+                autoencoder_updated["dec_conv7.bias"] = v
+            elif k == "38.weight":
+                autoencoder_updated["dec_conv8.weight"] = v
+            elif k == "38.bias":
+                autoencoder_updated["dec_conv8.bias"] = v
+            else:
+                raise ValueError(f"unknown state_dict key {k}")
+        autoencoder.load_state_dict(autoencoder_updated)
+    else:
+        student.load_state_dict(pretrained_student.state_dict())
+        autoencoder.load_state_dict(pretrained_autoencoder.state_dict())
+
+    """
+    >>>>>>>>>>>>>>>>>>>>>>>>>
+    [END] load student and autoencoder from .pth
+    >>>>>>>>>>>>>>>>>>>>>>>>>
+    """
 
     teacher.eval()
     student.eval()
     autoencoder.eval()
 
-    torch.save(teacher, os.path.join(train_output_dir, "teacher_final.pth"))
-    torch.save(student, os.path.join(train_output_dir, "student_final.pth"))
-    torch.save(autoencoder, os.path.join(train_output_dir, "autoencoder_final.pth"))
+    # torch.save(teacher, os.path.join(train_output_dir, "teacher_final.pth"))
+    # torch.save(student, os.path.join(train_output_dir, "student_final.pth"))
+    # torch.save(autoencoder, os.path.join(train_output_dir, "autoencoder_final.pth"))
 
-    q_st_start, q_st_end, q_ae_start, q_ae_end = map_normalization(
-        out_channels=out_channels,
-        validation_loader=validation_loader,
-        teacher=teacher,
-        student=student,
-        autoencoder=autoencoder,
-        teacher_mean=teacher_mean,
-        teacher_std=teacher_std,
-        config=config,
-        desc="Final map normalization",
-    )
+    """
+    >>>>>>>>>>>>>>>>>>>>>>>>>
+    Visualize validation results
+    >>>>>>>>>>>>>>>>>>>>>>>>>
+    """
+    # fig, ax = plt.subplots(2, 3, tight_layout=True)
+    # fig.suptitle("normalized prediction variation on the validation set", fontsize=12)
+
+    # ana_ids = ["respretrainedPDN", "vitpretrainedPDN", "vitasteacher"]
+
+    # for i, ana_id in enumerate(ana_ids):
+    #     with open(
+    #         f"vld_info_{category_acronym[config.subdataset]}_{ana_id}.t", "rb"
+    #     ) as f:
+    #         validation_data = torch.load(f)
+
+    #     maps_st = validation_data["maps_st"]  # shape: [#val_images,1,256,256]
+    #     maps_ae = validation_data["maps_ae"]
+
+    #     q_st_start = validation_data["q_st_start"]
+    #     q_st_end = validation_data["q_st_end"]
+    #     q_ae_start = validation_data["q_ae_start"]
+    #     q_ae_end = validation_data["q_ae_end"]
+
+    #     # normalized maps_st and maps_ae on validation set
+    #     maps_st = 0.1 * (maps_st - q_st_start) / (q_st_end - q_st_start)
+    #     maps_ae = 0.1 * (maps_ae - q_ae_start) / (q_ae_end - q_ae_start)
+
+    #     maps_st_max = torch.amax(maps_st, dim=0).squeeze(0)  # shape: (256, 256)
+    #     maps_st_min = torch.amin(maps_st, dim=0).squeeze(0)
+    #     maps_ae_max = torch.amax(maps_ae, dim=0).squeeze(0)  # shape: (256, 256)
+    #     maps_ae_min = torch.amin(maps_ae, dim=0).squeeze(0)
+    #     maps_st_range = (maps_st_max - maps_st_min).numpy()
+    #     maps_ae_range = (maps_ae_max - maps_ae_min).numpy()
+
+    #     im_st = ax[0, i].imshow(maps_st_range)
+    #     im_ae = ax[1, i].imshow(maps_ae_range)
+
+    #     ax[0, i].set_title(f"{ana_id}")
+
+    #     plt.colorbar(im_st, ax=ax[0, i])
+    #     plt.colorbar(im_ae, ax=ax[1, i])
+
+    # row_labels = ["map_st", "map_ae"]
+    # for ax, row in zip(ax[:, 0], row_labels):
+    #     ax.set_ylabel(row, rotation=90, size="large")
+
+    # plt.show()
+
+    """
+    >>>>>>>>>>>>>>>>>>>>>>>>>
+    [END] Visualize validation results
+    >>>>>>>>>>>>>>>>>>>>>>>>>
+    """
+
+    # TODO: uncomment below
+    # q_st_start, q_st_end, q_ae_start, q_ae_end = map_normalization(
+    #     out_channels=out_channels,
+    #     validation_loader=validation_loader,
+    #     teacher=teacher,
+    #     student=student,
+    #     autoencoder=autoencoder,
+    #     teacher_mean=teacher_mean,
+    #     teacher_std=teacher_std,
+    #     config=config,
+    #     desc="Final map normalization",
+    # )
+
+    with open(
+        f"vld_info_{category_acronym[config.subdataset]}_{config.ana_id}.t", "rb"
+    ) as f:
+        validation_data = torch.load(f)
+    # maps_st = validation_data["maps_st"]  # shape: [#val_images,1,256,256]
+    # maps_ae = validation_data["maps_ae"]
+
+    q_st_start = validation_data["q_st_start"]
+    q_st_end = validation_data["q_st_end"]
+    q_ae_start = validation_data["q_ae_start"]
+    q_ae_end = validation_data["q_ae_end"]
+
     auc = test(
         out_channels=out_channels,
         test_set=test_set,
@@ -733,10 +907,18 @@ def main():
         q_ae_start=q_ae_start,
         q_ae_end=q_ae_end,
         config=config,
-        test_output_dir=test_output_dir,
+        # test_output_dir=test_output_dir,
+        test_output_dir=None,
         desc="Final inference",
     )
-    print("Final image auc: {:.4f}".format(auc))
+    # print("Final image auc: {:.4f}".format(auc))
+
+
+def normalizeData(data):
+    return (data - np.min(data)) / (np.max(data) - np.min(data))
+
+
+heatmap_alpha = 0.5
 
 
 @torch.no_grad()
@@ -758,7 +940,20 @@ def test(
 ):
     y_true = []
     y_score = []
+
+    # TODO: change later
+    interested_images = [
+        "good/079.png",
+        "logical_anomalies/128.png",
+        "structural_anomalies/080.png",
+    ]
+
     for image, target, path in tqdm(test_set, desc=desc):
+        # path: ./datasets/loco/juice_bottle/test/good/000.png
+        file_id = "/".join(path.split("/")[-2:])
+        if file_id not in interested_images:
+            continue
+
         orig_width = image.width
         orig_height = image.height
 
@@ -800,6 +995,41 @@ def test(
             q_ae_end=q_ae_end,
         )
 
+        print(file_id)
+
+        map_st = map_st.squeeze().numpy()  # shape: (256, 256)
+        map_ae = map_ae.squeeze().numpy()
+        map_st = np.expand_dims(map_st, axis=2)
+        map_ae = np.expand_dims(map_ae, axis=2)
+
+        raw_img_path = os.path.join(path)
+        raw_img = np.array(cv2.imread(raw_img_path, cv2.IMREAD_COLOR))
+        raw_img = cv2.resize(raw_img, dsize=(256, 256))
+
+        # get heatmap
+        pred_mask_st = np.uint8(normalizeData(map_st) * 255)
+        heatmap_st = cv2.applyColorMap(pred_mask_st, cv2.COLORMAP_JET)
+        hmap_overlay_gt_img_st = heatmap_st * heatmap_alpha + raw_img * (
+            1.0 - heatmap_alpha
+        )
+
+        pred_mask_ae = np.uint8(normalizeData(map_ae) * 255)
+        heatmap_ae = cv2.applyColorMap(pred_mask_ae, cv2.COLORMAP_JET)
+        hmap_overlay_gt_img_ae = heatmap_ae * heatmap_alpha + raw_img * (
+            1.0 - heatmap_alpha
+        )
+
+        cv2.imwrite(
+            f"{'_'.join(path.split('/')[-2:])[:-4]}_st_{config.ana_id}.jpg",
+            hmap_overlay_gt_img_st,
+        )
+        cv2.imwrite(
+            f"{'_'.join(path.split('/')[-2:])[:-4]}_ae_{config.ana_id}.jpg",
+            hmap_overlay_gt_img_ae,
+        )
+
+        continue
+
         defect_class = os.path.basename(os.path.dirname(path))
         y_true_image = 0 if defect_class == "good" else 1
         y_score_image = np.max(map_combined[0, 0].cpu().numpy())
@@ -823,8 +1053,9 @@ def test(
             file = os.path.join(test_output_dir, defect_class, img_nm + ".tiff")
             tifffile.imwrite(file, map_combined)
 
-    auc = roc_auc_score(y_true=y_true, y_score=y_score)
-    return auc * 100
+    # TODO: uncomment
+    # auc = roc_auc_score(y_true=y_true, y_score=y_score)
+    # return auc * 100
 
 
 @torch.no_grad()
@@ -935,6 +1166,20 @@ def map_normalization(
     q_st_end = torch.quantile(maps_st, q=0.995)
     q_ae_start = torch.quantile(maps_ae, q=0.9)
     q_ae_end = torch.quantile(maps_ae, q=0.995)
+
+    # validation_data = {
+    #     "maps_st": maps_st,
+    #     "maps_ae": maps_ae,
+    #     "q_st_start": q_st_start,
+    #     "q_st_end": q_st_end,
+    #     "q_ae_start": q_ae_start,
+    #     "q_ae_end": q_ae_end,
+    # }
+    # with open(
+    #     f"vld_info_{category_acronym[config.subdataset]}_{config.ana_id}.t", "wb"
+    # ) as f:
+    #     torch.save(validation_data, f)
+
     return q_st_start, q_st_end, q_ae_start, q_ae_end
 
 

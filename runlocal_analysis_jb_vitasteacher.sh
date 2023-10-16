@@ -6,3 +6,4 @@ python -u efficientad_analysis.py \
   --image_size_vit_teacher 512 \
   --note "vit as teacher" \
   --ana_id vitasteacher \
+  --pth_folder "outputs/folder_vitteacher_sz512/output_20231013_122206_46_21_[jb]/trainings/mvtec_loco/juice_bottle/" \
