@@ -20,8 +20,8 @@ module purge
 eval "$(conda shell.bash hook)"
 conda activate ds2
 
-timestamp="20231013_172242_28_99_[pp]"
-folder_name="folder_vit_bs8_sz512"
+timestamp="2023_[pp]"
+folder_name="folder_wideresnet101"
 
 python -u mvtec_loco_ad_evaluation/evaluate_experiment.py \
   --object_name "pushpins" \
