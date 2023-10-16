@@ -153,7 +153,7 @@ def main():
 
     minval = np.min(anomaly_maps_values)
     maxval = np.max(anomaly_maps_values)
-    
+
     """
     >>>>>>>>>>>>>>>>
     generate visual maps
@@ -209,8 +209,6 @@ def main():
                     f"{visual_folder}/{anomaly_type}_{filename}_gt.jpg",
                     gt_mask,
                 )
-    # TODO: remove this later
-    exit()
 
     """
     >>>>>>>>>>>>>>>>
@@ -481,8 +479,6 @@ def get_auc_spros_per_subdir(
 
         # TODO: key parts of calculating sPROs
         subdir_metrics = metrics.reduce_to_images(subdir_anomaly_maps)
-        print(subdir_metrics)
-        exit()
         aucs_per_subdir[subdir_name] = get_auc_spros_for_metrics(subdir_metrics)
     return aucs_per_subdir
 

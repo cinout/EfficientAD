@@ -9,7 +9,7 @@
 #SBATCH --qos=gpgpudeeplearn
 #SBATCH --constraint=dlg4|dlg5
 
-#SBATCH --job-name="train_jb"
+#SBATCH --job-name="train_sb"
 #SBATCH --account=punim1623
 #SBATCH --time=0-06:20:00
 
@@ -29,13 +29,13 @@ conda activate ds2
 set -e
 set -x
 
-python -u efficientad.py \
-  --pretrained_network vit \
+python -u efficientad_patch.py \
+  --pretrained_network wide_resnet101_2 \
   --dataset mvtec_loco \
-  --subdataset juice_bottle \
+  --subdataset screw_bag \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
-  --weights pretrained_pdn/pretrained_pdn_vit_lastlayer_bs8_sz512/teacher_small_state_vit_b16.pth \
-  --note "vit pretrained PDN"
+  --note "patch wideresnet" \
+  --output_dir "outputs/folder_wideresnet101/output_2023_[sb]" \
 # FIXME: update job-name, weights, pretrained_network, subdataset, note
 ##Log this job's resource usage stats###
 my-job-stats -a -n -s
