@@ -1,5 +1,17 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+"""
+Used when trained model is saved, but test split is not evaluated on.
+
+An example:
+python -u efficientad_separatebranches.py \
+  --pretrained_network wide_resnet101_2 \
+  --dataset mvtec_loco \
+  --subdataset breakfast_box \
+  --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
+  --note "separate branches [vit for logical]" \
+  --output_dir "outputs/folder_wideresnet101/output_2023_[bb]" \
+"""
 import math
 import numpy as np
 import tifffile
@@ -38,6 +50,7 @@ def get_argparse():
         default="bottle",
         help="One of 15 sub-datasets of Mvtec AD or 5" + "sub-datasets of Mvtec LOCO",
     )
+    # TODO: important choice
     parser.add_argument("-o", "--output_dir", type=str)
     parser.add_argument(
         "-m", "--model_size", default="small", choices=["small", "medium"]
@@ -450,7 +463,6 @@ def main():
 
     # FIXME: should we update the teacher_mean, teacher_std on the fly? Different for each batch
     teacher_mean, teacher_std = teacher_normalization(teacher, train_loader, config)
-
 
     pretrained_student = torch.load(
         os.path.join(train_output_dir, "student_final.pth"), map_location=device

@@ -914,8 +914,8 @@ def main():
     # print("Final image auc: {:.4f}".format(auc))
 
 
-def normalizeData(data):
-    return (data - np.min(data)) / (np.max(data) - np.min(data))
+def normalizeData(data, minval, maxval):
+    return (data - minval) / (maxval - minval)
 
 
 heatmap_alpha = 0.5
@@ -941,17 +941,30 @@ def test(
     y_true = []
     y_score = []
 
-    # TODO: change later
-    interested_images = [
-        "good/079.png",
-        "logical_anomalies/128.png",
-        "structural_anomalies/080.png",
-    ]
+    """
+    >>>>>>>>>>>>>>
+    analyze st and ae maps
+    >>>>>>>>>>>>>>
+    """
+    with open(
+        f"tstextreme_{category_acronym[config.subdataset]}_{config.ana_id}.t", "rb"
+    ) as f:
+        extremes = torch.load(f)
+
+        map_comb_min = extremes["map_comb_min"]
+        map_comb_max = extremes["map_comb_max"]
+        map_comb_ups_min = extremes["map_comb_ups_min"]
+        map_comb_ups_max = extremes["map_comb_ups_max"]
+        map_st_min = extremes["map_st_min"]
+        map_st_max = extremes["map_st_max"]
+        map_ae_min = extremes["map_ae_min"]
+        map_ae_max = extremes["map_ae_max"]
+
+    interested_image = "./datasets/loco/juice_bottle/test/good/008.png"
 
     for image, target, path in tqdm(test_set, desc=desc):
         # path: ./datasets/loco/juice_bottle/test/good/000.png
-        file_id = "/".join(path.split("/")[-2:])
-        if file_id not in interested_images:
+        if path != interested_image:
             continue
 
         orig_width = image.width
@@ -995,7 +1008,20 @@ def test(
             q_ae_end=q_ae_end,
         )
 
-        print(file_id)
+        # if map_comb_min is None:
+        #     map_comb_min = torch.min(map_combined)
+        #     map_comb_max = torch.max(map_combined)
+        #     map_st_min = torch.min(map_st)
+        #     map_st_max = torch.max(map_st)
+        #     map_ae_min = torch.min(map_ae)
+        #     map_ae_max = torch.max(map_ae)
+        # else:
+        #     map_comb_min = min(map_comb_min, torch.min(map_combined))
+        #     map_comb_max = max(map_comb_max, torch.max(map_combined))
+        #     map_st_min = min(map_st_min, torch.min(map_st))
+        #     map_st_max = max(map_st_max, torch.max(map_st))
+        #     map_ae_min = min(map_ae_min, torch.min(map_ae))
+        #     map_ae_max = max(map_ae_max, torch.max(map_ae))
 
         map_st = map_st.squeeze().numpy()  # shape: (256, 256)
         map_ae = map_ae.squeeze().numpy()
@@ -1007,13 +1033,13 @@ def test(
         raw_img = cv2.resize(raw_img, dsize=(256, 256))
 
         # get heatmap
-        pred_mask_st = np.uint8(normalizeData(map_st) * 255)
+        pred_mask_st = np.uint8(normalizeData(map_st, map_st_min, map_st_max) * 255)
         heatmap_st = cv2.applyColorMap(pred_mask_st, cv2.COLORMAP_JET)
         hmap_overlay_gt_img_st = heatmap_st * heatmap_alpha + raw_img * (
             1.0 - heatmap_alpha
         )
 
-        pred_mask_ae = np.uint8(normalizeData(map_ae) * 255)
+        pred_mask_ae = np.uint8(normalizeData(map_ae, map_ae_min, map_ae_max) * 255)
         heatmap_ae = cv2.applyColorMap(pred_mask_ae, cv2.COLORMAP_JET)
         hmap_overlay_gt_img_ae = heatmap_ae * heatmap_alpha + raw_img * (
             1.0 - heatmap_alpha
@@ -1028,7 +1054,7 @@ def test(
             hmap_overlay_gt_img_ae,
         )
 
-        continue
+        exit()
 
         defect_class = os.path.basename(os.path.dirname(path))
         y_true_image = 0 if defect_class == "good" else 1
@@ -1046,12 +1072,36 @@ def test(
         )
         map_combined = map_combined[0, 0].cpu().numpy()
 
+        # if map_comb_ups_min is None:
+        #     map_comb_ups_min = np.min(map_combined)
+        #     map_comb_ups_max = np.max(map_combined)
+        # else:
+        #     map_comb_ups_min = min(map_comb_ups_min, np.min(map_combined))
+        #     map_comb_ups_max = max(map_comb_ups_max, np.max(map_combined))
+
         if test_output_dir is not None:
             img_nm = os.path.split(path)[1].split(".")[0]
             if not os.path.exists(os.path.join(test_output_dir, defect_class)):
                 os.makedirs(os.path.join(test_output_dir, defect_class))
             file = os.path.join(test_output_dir, defect_class, img_nm + ".tiff")
             tifffile.imwrite(file, map_combined)
+
+    # with open(
+    #     f"tstextreme_{category_acronym[config.subdataset]}_{config.ana_id}.t", "wb"
+    # ) as f:
+    #     torch.save(
+    #         {
+    #             "map_comb_min": map_comb_min.numpy(),
+    #             "map_comb_max": map_comb_max.numpy(),
+    #             "map_comb_ups_min": map_comb_ups_min,
+    #             "map_comb_ups_max": map_comb_ups_max,
+    #             "map_st_min": map_st_min.numpy(),
+    #             "map_st_max": map_st_max.numpy(),
+    #             "map_ae_min": map_ae_min.numpy(),
+    #             "map_ae_max": map_ae_max.numpy(),
+    #         },
+    #         f,
+    #     )
 
     # TODO: uncomment
     # auc = roc_auc_score(y_true=y_true, y_score=y_score)
