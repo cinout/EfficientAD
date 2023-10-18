@@ -20,8 +20,8 @@ module purge
 eval "$(conda shell.bash hook)"
 conda activate ds2
 
-timestamp="20231013_131459_76_12_[sc]"
-folder_name="folder_vitteacher_sz512"
+timestamp="20231018_233435_8_8_[sc]"
+folder_name="folder_sepa_vit"
 
 python -u mvtec_loco_ad_evaluation/evaluate_experiment.py \
   --object_name "splicing_connectors" \
