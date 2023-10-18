@@ -418,9 +418,9 @@ def main():
             img_logical_teacher,
         ) = train_images
 
-        img_structural.to(device)
-        img_logical_student.to(device)
-        img_logical_teacher.to(device)
+        img_structural = img_structural.to(device)
+        img_logical_student = img_logical_student.to(device)
+        img_logical_teacher = img_logical_teacher.to(device)
 
         if image_penalty is not None:
             image_penalty = image_penalty.cuda()
@@ -563,9 +563,9 @@ def test(
             img_logical_teacher,
         ) = images
 
-        img_structural.to(device)
-        img_logical_student.to(device)
-        img_logical_teacher.to(device)
+        img_structural = img_structural.to(device)
+        img_logical_student = img_logical_student.to(device)
+        img_logical_teacher = img_logical_teacher.to(device)
 
         map_combined, _, _ = predict(
             config=config,
@@ -710,9 +710,9 @@ def map_normalization(
             img_logical_teacher,
         ) = images
 
-        img_structural.to(device)
-        img_logical_student.to(device)
-        img_logical_teacher.to(device)
+        img_structural = img_structural.to(device)
+        img_logical_student = img_logical_student.to(device)
+        img_logical_teacher = img_logical_teacher.to(device)
 
         map_combined, map_st, map_log = predict(
             config=config,
@@ -751,8 +751,8 @@ def teacher_normalization(teacher_structural, teacher_logical, train_loader, con
             img_logical_teacher,
         ) = train_images
 
-        img_structural.to(device)
-        img_logical_teacher.to(device)
+        img_structural = img_structural.to(device)
+        img_logical_teacher = img_logical_teacher.to(device)
 
         teacher_structural_output = teacher_structural(img_structural)
         if config.logical_teacher == "vit":
@@ -785,8 +785,8 @@ def teacher_normalization(teacher_structural, teacher_logical, train_loader, con
             img_logical_teacher,
         ) = train_images
 
-        img_structural.to(device)
-        img_logical_teacher.to(device)
+        img_structural = img_structural.to(device)
+        img_logical_teacher = img_logical_teacher.to(device)
 
         teacher_structural_output = teacher_structural(img_structural)
         if config.logical_teacher == "vit":
