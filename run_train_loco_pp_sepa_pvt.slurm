@@ -29,7 +29,7 @@ conda activate ds2
 set -e
 set -x
 
-python -u efficientad_separatebranches.py \
+python -u efficientad_separatebranches_patchup.py \
   --dataset mvtec_loco \
   --subdataset pushpins \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \

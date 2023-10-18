@@ -4,7 +4,7 @@
 Used when trained model is saved, but test split is not evaluated on.
 
 An example:
-python -u efficientad_separatebranches.py \
+python -u efficientad_patchup.py \
   --pretrained_network wide_resnet101_2 \
   --dataset mvtec_loco \
   --subdataset breakfast_box \
