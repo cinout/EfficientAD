@@ -36,7 +36,7 @@ python -u efficientad_separatebranches_patchup.py \
   --note "separate branches [vit for logical]" \
   --logical_teacher vit \
   --logical_teacher_image_size 1024 \
-  --output_dir "outputs/folder_sepa_vit/output_20231018_231623_21_46_[bb]" \
+  --output_dir "outputs/folder_sepa_vit/output_20231018_233435_67_25_[pp]" \
 
 # FIXME: update job-name, weights, pretrained_network, subdataset, note
 ##Log this job's resource usage stats###
