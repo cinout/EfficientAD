@@ -25,14 +25,6 @@ from functools import partial
 from pvt_v2 import pvt_v2_b2_li
 import torch.nn.functional as F
 
-timestamp = (
-    datetime.now().strftime("%Y%m%d_%H%M%S")
-    + "_"
-    + str(random.randint(0, 100))
-    + "_"
-    + str(random.randint(0, 100))
-)
-
 
 def get_argparse():
     parser = argparse.ArgumentParser()
@@ -45,7 +37,7 @@ def get_argparse():
         default="bottle",
         help="One of 15 sub-datasets of Mvtec AD or 5" + "sub-datasets of Mvtec LOCO",
     )
-    parser.add_argument("-o", "--output_dir", default=f"outputs/output_{timestamp}")
+    parser.add_argument("-o", "--output_dir")
     parser.add_argument(
         "-m", "--model_size", default="small", choices=["small", "medium"]
     )
@@ -191,19 +183,6 @@ def main():
     random.seed(seed)
 
     config = get_argparse()
-
-    if config.subdataset == "breakfast_box":
-        config.output_dir = config.output_dir + "_[bb]"
-    elif config.subdataset == "juice_bottle":
-        config.output_dir = config.output_dir + "_[jb]"
-    elif config.subdataset == "pushpins":
-        config.output_dir = config.output_dir + "_[pp]"
-    elif config.subdataset == "screw_bag":
-        config.output_dir = config.output_dir + "_[sb]"
-    elif config.subdataset == "splicing_connectors":
-        config.output_dir = config.output_dir + "_[sc]"
-    else:
-        raise ValueError(f"unknown subdataset name {config.subdataset}")
 
     print(
         "\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(config)).items()))
@@ -378,11 +357,6 @@ def main():
     else:
         raise Exception()
 
-    teacher_structural.eval()
-    teacher_logical.eval()
-    student_structural.train()
-    student_logical.train()
-
     teacher_structural.to(device)
     student_structural.to(device)
     teacher_logical.to(device)
@@ -395,100 +369,20 @@ def main():
         teacher_logical_std,
     ) = teacher_normalization(teacher_structural, teacher_logical, train_loader, config)
 
-    optimizer = torch.optim.Adam(
-        itertools.chain(student_structural.parameters(), student_logical.parameters()),
-        lr=1e-4,
-        weight_decay=1e-5,
+    pretrained_student_structural = torch.load(
+        os.path.join(train_output_dir, "student_structural.pth"), map_location=device
+    )
+    pretrained_student_logical = torch.load(
+        os.path.join(train_output_dir, "student_logical.pth"), map_location=device
     )
 
-    # step_size is 66500
-    scheduler = torch.optim.lr_scheduler.StepLR(
-        optimizer, step_size=int(0.95 * config.train_steps), gamma=0.1
-    )
-
-    tqdm_obj = tqdm(range(config.train_steps))
-    for (
-        iteration,
-        train_images,
-        image_penalty,
-    ) in zip(tqdm_obj, train_loader_infinite, penalty_loader_infinite):
-        (
-            img_structural,
-            img_logical_student,
-            img_logical_teacher,
-        ) = train_images
-
-        img_structural = img_structural.to(device)
-        img_logical_student = img_logical_student.to(device)
-        img_logical_teacher = img_logical_teacher.to(device)
-
-        if image_penalty is not None:
-            image_penalty = image_penalty.cuda()
-
-        # structural branch
-        with torch.no_grad():
-            teacher_structural_output = teacher_structural(img_structural)
-            teacher_structural_output = (
-                teacher_structural_output - teacher_structural_mean
-            ) / teacher_structural_std
-        student_structural_output = student_structural(img_structural)
-        distance_structural = (
-            teacher_structural_output - student_structural_output
-        ) ** 2
-        d_hard = torch.quantile(distance_structural, q=0.999)
-        loss_hard = torch.mean(distance_structural[distance_structural >= d_hard])
-        if image_penalty is not None:
-            student_output_penalty = student_structural(image_penalty)
-            loss_penalty = torch.mean(student_output_penalty**2)
-            loss_structural = loss_hard + loss_penalty
-        else:
-            loss_structural = loss_hard
-
-        # logical branch
-        with torch.no_grad():
-            if config.logical_teacher == "vit":
-                teacher_logical_output = teacher_logical(img_logical_teacher)[0]
-                teacher_logical_output = process_vit_features(teacher_logical_output)
-            elif config.logical_teacher == "pvt2":
-                teacher_logical_output = teacher_logical(img_logical_teacher)
-                teacher_logical_output = process_pvt_features(
-                    teacher_logical_output, config
-                )
-            else:
-                raise Exception("wrong logical_teacher")
-            teacher_logical_output = (
-                teacher_logical_output - teacher_logical_mean
-            ) / teacher_logical_std
-        student_logical_output = student_logical(img_logical_student)
-        distance_logical = (teacher_logical_output - student_logical_output) ** 2
-        loss_logical = torch.mean(distance_logical)
-
-        loss_total = loss_structural + loss_logical
-        optimizer.zero_grad()
-        loss_total.backward()
-        optimizer.step()
-        scheduler.step()
-
-        if iteration % 200 == 0:
-            print(
-                "Iteration: ",
-                iteration,
-                "Current loss: {:.4f}".format(loss_total.item()),
-            )
+    student_structural.load_state_dict(pretrained_student_structural)
+    student_logical.load_state_dict(pretrained_student_logical)
 
     teacher_logical.eval()
     student_logical.eval()
     teacher_structural.eval()
     student_structural.eval()
-
-    torch.save(
-        student_logical.state_dict(),
-        os.path.join(train_output_dir, "student_logical.pth"),
-    )
-    torch.save(
-        student_structural.state_dict(),
-        os.path.join(train_output_dir, "student_structural.pth"),
-    )
 
     (
         q_structural_start,
