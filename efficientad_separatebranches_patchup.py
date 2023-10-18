@@ -206,8 +206,8 @@ def main():
     test_output_dir = os.path.join(
         config.output_dir, "anomaly_maps", config.dataset, config.subdataset, "test"
     )
-    os.makedirs(train_output_dir)
-    os.makedirs(test_output_dir)
+    os.makedirs(train_output_dir, exist_ok=True)
+    os.makedirs(test_output_dir, exist_ok=True)
 
     # load data
     full_train_set = ImageFolderWithoutTarget(
