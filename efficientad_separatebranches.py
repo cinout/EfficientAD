@@ -566,6 +566,9 @@ def test(
         img_structural = img_structural.to(device)
         img_logical_student = img_logical_student.to(device)
         img_logical_teacher = img_logical_teacher.to(device)
+        img_structural = img_structural.unsqueeze(0)
+        img_logical_student = img_logical_student.unsqueeze(0)
+        img_logical_teacher = img_logical_teacher.unsqueeze(0)
 
         # TODO: fix the error here
         map_combined, _, _ = predict(

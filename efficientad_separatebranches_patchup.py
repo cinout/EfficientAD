@@ -460,6 +460,9 @@ def test(
         img_structural = img_structural.to(device)
         img_logical_student = img_logical_student.to(device)
         img_logical_teacher = img_logical_teacher.to(device)
+        img_structural = img_structural.unsqueeze(0)
+        img_logical_student = img_logical_student.unsqueeze(0)
+        img_logical_teacher = img_logical_teacher.unsqueeze(0)
 
         # TODO: fix the error here
 
@@ -528,8 +531,6 @@ def predict(
     q_logical_start=None,
     q_logical_end=None,
 ):
-    print(f"img_structural.shape: {img_structural.shape}")
-    print(f"teacher_structural: {teacher_structural}")
     teacher_structural_output = teacher_structural(img_structural)
     if config.logical_teacher == "vit":
         teacher_logical_output = teacher_logical(img_logical_teacher)[0]
