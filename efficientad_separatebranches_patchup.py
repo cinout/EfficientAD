@@ -462,7 +462,7 @@ def test(
         img_logical_teacher = img_logical_teacher.to(device)
 
         # TODO: fix the error here
-        print(f"img_structural.shape: {img_structural.shape}")
+
         map_combined, _, _ = predict(
             config=config,
             img_structural=img_structural,
@@ -528,6 +528,8 @@ def predict(
     q_logical_start=None,
     q_logical_end=None,
 ):
+    print(f"img_structural.shape: {img_structural.shape}")
+    print(f"teacher_structural: {teacher_structural}")
     teacher_structural_output = teacher_structural(img_structural)
     if config.logical_teacher == "vit":
         teacher_logical_output = teacher_logical(img_logical_teacher)[0]
