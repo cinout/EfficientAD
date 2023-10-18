@@ -11,7 +11,7 @@
 
 #SBATCH --job-name="train_jb"
 #SBATCH --account=punim1623
-#SBATCH --time=0-06:20:00
+#SBATCH --time=0-01:20:00
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -37,6 +37,7 @@ python -u efficientad_separatebranches.py \
   --logical_teacher pvt2 \
   --logical_teacher_image_size 1024 \
   --pvt2_stage3 \
+  --output_dir "outputs/folder_sepa_pvt_stage3/output_20231018_233711_93_24_[jb]" \
 
 # FIXME: update job-name, weights, pretrained_network, subdataset, note
 ##Log this job's resource usage stats###
