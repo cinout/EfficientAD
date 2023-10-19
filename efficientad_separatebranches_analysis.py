@@ -608,6 +608,9 @@ def test(
             map_comb_min = min(map_comb_min, torch.min(map_combined))
             map_comb_max = max(map_comb_max, torch.max(map_combined))
 
+    map_comb_min = map_comb_min.cpu().numpy()
+    map_comb_max = map_comb_max.cpu().numpy()
+
     heatmap_folder = f"analysis_heatmap_{config.ana_id}/{config.subdataset}/"
     os.makedirs(heatmap_folder, exist_ok=True)
 
