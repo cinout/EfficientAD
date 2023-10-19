@@ -1025,8 +1025,8 @@ def test(
         #     map_ae_min = min(map_ae_min, torch.min(map_ae))
         #     map_ae_max = max(map_ae_max, torch.max(map_ae))
 
-        map_st = map_st.squeeze().numpy()  # shape: (256, 256)
-        map_ae = map_ae.squeeze().numpy()
+        map_st = map_st.squeeze().cpu().numpy()  # shape: (256, 256)
+        map_ae = map_ae.squeeze().cpu().numpy()
         map_st = np.expand_dims(map_st, axis=2)
         map_ae = np.expand_dims(map_ae, axis=2)
 

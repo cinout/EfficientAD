@@ -647,8 +647,8 @@ def test(
             q_logical_end=q_logical_end,
         )
 
-        map_structural = map_structural.squeeze().numpy()  # shape: (256, 256)
-        map_logical = map_logical.squeeze().numpy()
+        map_structural = map_structural.squeeze().cpu().numpy()  # shape: (256, 256)
+        map_logical = map_logical.squeeze().cpu().numpy()
         map_structural = np.expand_dims(map_structural, axis=2)
         map_logical = np.expand_dims(map_logical, axis=2)
 
