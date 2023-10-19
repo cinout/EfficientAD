@@ -1,15 +1,5 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
-"""
-python -u efficientad_separatebranches_patchup.py \
-  --dataset mvtec_loco \
-  --subdataset screw_bag \
-  --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
-  --note "separate branches [vit for logical]" \
-  --logical_teacher vit \
-  --logical_teacher_image_size 1024 \
-  --output_dir "outputs/folder_sepa_vit/output_20231018_233435_93_50_[sb]" \
-"""
 import math
 import numpy as np
 import tifffile
@@ -34,6 +24,15 @@ from datetime import datetime
 from functools import partial
 from pvt_v2 import pvt_v2_b2_li
 import torch.nn.functional as F
+import cv2
+
+category_acronym = {
+    "breakfast_box": "bb",
+    "juice_bottle": "jb",
+    "pushpins": "pp",
+    "screw_bag": "sb",
+    "splicing_connectors": "sc",
+}
 
 
 def get_argparse():
@@ -79,11 +78,13 @@ def get_argparse():
         help="pretrained weights for structural branch teacher",
     )
 
+    # TODO: for analysis
+    parser.add_argument("--ana_id", type=str, help="identifier for analysis")
+
     # TODO: use the following option
     parser.add_argument("--logical_teacher", choices=["vit", "pvt2"], required=True)
     parser.add_argument("--logical_teacher_image_size", type=int, default=512)
 
-    # TODO: additional (may or may not be used)
     parser.add_argument(
         "--pvt2_stage3",
         action="store_true",
@@ -194,6 +195,19 @@ def main():
 
     config = get_argparse()
 
+    # if config.subdataset == "breakfast_box":
+    #     config.output_dir = config.output_dir + "_[bb]"
+    # elif config.subdataset == "juice_bottle":
+    #     config.output_dir = config.output_dir + "_[jb]"
+    # elif config.subdataset == "pushpins":
+    #     config.output_dir = config.output_dir + "_[pp]"
+    # elif config.subdataset == "screw_bag":
+    #     config.output_dir = config.output_dir + "_[sb]"
+    # elif config.subdataset == "splicing_connectors":
+    #     config.output_dir = config.output_dir + "_[sc]"
+    # else:
+    #     raise ValueError(f"unknown subdataset name {config.subdataset}")
+
     print(
         "\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(config)).items()))
     )
@@ -209,15 +223,13 @@ def main():
     if config.imagenet_train_path == "none":
         pretrain_penalty = False
 
-    # create output dir
-    train_output_dir = os.path.join(
-        config.output_dir, "trainings", config.dataset, config.subdataset
-    )
-    test_output_dir = os.path.join(
-        config.output_dir, "anomaly_maps", config.dataset, config.subdataset, "test"
-    )
-    os.makedirs(train_output_dir, exist_ok=True)
-    os.makedirs(test_output_dir, exist_ok=True)
+    # # create output dir
+
+    # test_output_dir = os.path.join(
+    #     config.output_dir, "anomaly_maps", config.dataset, config.subdataset, "test"
+    # )
+    # os.makedirs(train_output_dir)
+    # os.makedirs(test_output_dir)
 
     # load data
     full_train_set = ImageFolderWithoutTarget(
@@ -250,28 +262,28 @@ def main():
     train_loader_infinite = InfiniteDataloader(train_loader)
     validation_loader = DataLoader(validation_set, batch_size=1)
 
-    if pretrain_penalty:
-        # load pretraining data for penalty
-        penalty_transform = transforms.Compose(
-            [
-                transforms.Resize((2 * image_size, 2 * image_size)),
-                transforms.RandomGrayscale(0.3),
-                transforms.CenterCrop(image_size),
-                transforms.ToTensor(),
-                transforms.Normalize(
-                    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-                ),
-            ]
-        )
-        penalty_set = ImageFolderWithoutTarget(
-            config.imagenet_train_path, transform=penalty_transform
-        )
-        penalty_loader = DataLoader(
-            penalty_set, batch_size=1, shuffle=True, num_workers=4, pin_memory=True
-        )
-        penalty_loader_infinite = InfiniteDataloader(penalty_loader)
-    else:
-        penalty_loader_infinite = itertools.repeat(None)
+    # if pretrain_penalty:
+    #     # load pretraining data for penalty
+    #     penalty_transform = transforms.Compose(
+    #         [
+    #             transforms.Resize((2 * image_size, 2 * image_size)),
+    #             transforms.RandomGrayscale(0.3),
+    #             transforms.CenterCrop(image_size),
+    #             transforms.ToTensor(),
+    #             transforms.Normalize(
+    #                 mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+    #             ),
+    #         ]
+    #     )
+    #     penalty_set = ImageFolderWithoutTarget(
+    #         config.imagenet_train_path, transform=penalty_transform
+    #     )
+    #     penalty_loader = DataLoader(
+    #         penalty_set, batch_size=1, shuffle=True, num_workers=4, pin_memory=True
+    #     )
+    #     penalty_loader_infinite = InfiniteDataloader(penalty_loader)
+    # else:
+    #     penalty_loader_infinite = itertools.repeat(None)
 
     structural_channels = 384
     if config.logical_teacher == "vit":
@@ -367,6 +379,11 @@ def main():
     else:
         raise Exception()
 
+    # teacher_structural.eval()
+    # teacher_logical.eval()
+    # student_structural.train()
+    # student_logical.train()
+
     teacher_structural.to(device)
     student_structural.to(device)
     teacher_logical.to(device)
@@ -379,13 +396,96 @@ def main():
         teacher_logical_std,
     ) = teacher_normalization(teacher_structural, teacher_logical, train_loader, config)
 
+    # optimizer = torch.optim.Adam(
+    #     itertools.chain(student_structural.parameters(), student_logical.parameters()),
+    #     lr=1e-4,
+    #     weight_decay=1e-5,
+    # )
+
+    # # step_size is 66500
+    # scheduler = torch.optim.lr_scheduler.StepLR(
+    #     optimizer, step_size=int(0.95 * config.train_steps), gamma=0.1
+    # )
+
+    # tqdm_obj = tqdm(range(config.train_steps))
+    # for (
+    #     iteration,
+    #     train_images,
+    #     image_penalty,
+    # ) in zip(tqdm_obj, train_loader_infinite, penalty_loader_infinite):
+    #     (
+    #         img_structural,
+    #         img_logical_student,
+    #         img_logical_teacher,
+    #     ) = train_images
+
+    #     img_structural = img_structural.to(device)
+    #     img_logical_student = img_logical_student.to(device)
+    #     img_logical_teacher = img_logical_teacher.to(device)
+
+    #     if image_penalty is not None:
+    #         image_penalty = image_penalty.cuda()
+
+    #     # structural branch
+    #     with torch.no_grad():
+    #         teacher_structural_output = teacher_structural(img_structural)
+    #         teacher_structural_output = (
+    #             teacher_structural_output - teacher_structural_mean
+    #         ) / teacher_structural_std
+    #     student_structural_output = student_structural(img_structural)
+    #     distance_structural = (
+    #         teacher_structural_output - student_structural_output
+    #     ) ** 2
+    #     d_hard = torch.quantile(distance_structural, q=0.999)
+    #     loss_hard = torch.mean(distance_structural[distance_structural >= d_hard])
+    #     if image_penalty is not None:
+    #         student_output_penalty = student_structural(image_penalty)
+    #         loss_penalty = torch.mean(student_output_penalty**2)
+    #         loss_structural = loss_hard + loss_penalty
+    #     else:
+    #         loss_structural = loss_hard
+
+    #     # logical branch
+    #     with torch.no_grad():
+    #         if config.logical_teacher == "vit":
+    #             teacher_logical_output = teacher_logical(img_logical_teacher)[0]
+    #             teacher_logical_output = process_vit_features(teacher_logical_output)
+    #         elif config.logical_teacher == "pvt2":
+    #             teacher_logical_output = teacher_logical(img_logical_teacher)
+    #             teacher_logical_output = process_pvt_features(
+    #                 teacher_logical_output, config
+    #             )
+    #         else:
+    #             raise Exception("wrong logical_teacher")
+    #         teacher_logical_output = (
+    #             teacher_logical_output - teacher_logical_mean
+    #         ) / teacher_logical_std
+    #     student_logical_output = student_logical(img_logical_student)
+    #     distance_logical = (teacher_logical_output - student_logical_output) ** 2
+    #     loss_logical = torch.mean(distance_logical)
+
+    #     loss_total = loss_structural + loss_logical
+    #     optimizer.zero_grad()
+    #     loss_total.backward()
+    #     optimizer.step()
+    #     scheduler.step()
+
+    #     if iteration % 200 == 0:
+    #         print(
+    #             "Iteration: ",
+    #             iteration,
+    #             "Current loss: {:.4f}".format(loss_total.item()),
+    #         )
+
+    train_output_dir = os.path.join(
+        config.output_dir, "trainings", config.dataset, config.subdataset
+    )
     pretrained_student_structural = torch.load(
         os.path.join(train_output_dir, "student_structural.pth"), map_location=device
     )
     pretrained_student_logical = torch.load(
         os.path.join(train_output_dir, "student_logical.pth"), map_location=device
     )
-
     student_structural.load_state_dict(pretrained_student_structural)
     student_logical.load_state_dict(pretrained_student_logical)
 
@@ -428,10 +528,17 @@ def main():
         q_logical_start=q_logical_start,
         q_logical_end=q_logical_end,
         config=config,
-        test_output_dir=test_output_dir,
+        test_output_dir=None,
         desc="Final inference",
     )
     print("Final image auc: {:.4f}".format(auc))
+
+
+def normalizeData(data, minval, maxval):
+    return (data - minval) / (maxval - minval)
+
+
+heatmap_alpha = 0.5
 
 
 @torch.no_grad()
@@ -453,12 +560,13 @@ def test(
     test_output_dir=None,
     desc="Running inference",
 ):
-    y_true = []
-    y_score = []
-    for image, target, path in tqdm(test_set, desc=desc):
-        orig_width = image.width
-        orig_height = image.height
+    # y_true = []
+    # y_score = []
+    map_comb_min = None
+    map_comb_max = None
 
+    # obtain min and max values for map_combined
+    for image, target, path in tqdm(test_set, desc=desc):
         images = train_transform(image, config=config)
 
         (
@@ -473,8 +581,6 @@ def test(
         img_structural = img_structural.unsqueeze(0)
         img_logical_student = img_logical_student.unsqueeze(0)
         img_logical_teacher = img_logical_teacher.unsqueeze(0)
-
-        # TODO: fix the error here
 
         map_combined, _, _ = predict(
             config=config,
@@ -495,30 +601,94 @@ def test(
             q_logical_end=q_logical_end,
         )
 
-        defect_class = os.path.basename(os.path.dirname(path))
-        y_true_image = 0 if defect_class == "good" else 1
-        y_score_image = np.max(map_combined[0, 0].cpu().numpy())
-        y_true.append(y_true_image)
-        y_score.append(y_score_image)
+        if map_comb_min is None:
+            map_comb_min = torch.min(map_combined)
+            map_comb_max = torch.max(map_combined)
+        else:
+            map_comb_min = min(map_comb_min, torch.min(map_combined))
+            map_comb_max = max(map_comb_max, torch.max(map_combined))
 
-        # map_combined = torch.nn.functional.pad(
-        #     map_combined, (4, 4, 4, 4)
-        # )  # pad last dim by (4, 4) and 2nd to last by (4, 4), the value in padding area is 0
+    heatmap_folder = f"analysis_heatmap_{config.ana_id}/{config.subdataset}/"
+    os.makedirs(heatmap_folder, exist_ok=True)
 
-        # save into riff format
-        map_combined = torch.nn.functional.interpolate(
-            map_combined, (orig_height, orig_width), mode="bilinear"
+    # output heatmaps for separate branches
+    for image, target, path in tqdm(test_set, desc=desc):
+        images = train_transform(image, config=config)
+
+        (
+            img_structural,
+            img_logical_student,
+            img_logical_teacher,
+        ) = images
+
+        img_structural = img_structural.to(device)
+        img_logical_student = img_logical_student.to(device)
+        img_logical_teacher = img_logical_teacher.to(device)
+        img_structural = img_structural.unsqueeze(0)
+        img_logical_student = img_logical_student.unsqueeze(0)
+        img_logical_teacher = img_logical_teacher.unsqueeze(0)
+
+        _, map_structural, map_logical = predict(
+            config=config,
+            img_structural=img_structural,
+            img_logical_student=img_logical_student,
+            img_logical_teacher=img_logical_teacher,
+            teacher_structural=teacher_structural,
+            teacher_logical=teacher_logical,
+            student_structural=student_structural,
+            student_logical=student_logical,
+            teacher_structural_mean=teacher_structural_mean,
+            teacher_structural_std=teacher_structural_std,
+            teacher_logical_mean=teacher_logical_mean,
+            teacher_logical_std=teacher_logical_std,
+            q_structural_start=q_structural_start,
+            q_structural_end=q_structural_end,
+            q_logical_start=q_logical_start,
+            q_logical_end=q_logical_end,
         )
-        map_combined = map_combined[0, 0].cpu().numpy()
 
-        if test_output_dir is not None:
-            img_nm = os.path.split(path)[1].split(".")[0]
-            if not os.path.exists(os.path.join(test_output_dir, defect_class)):
-                os.makedirs(os.path.join(test_output_dir, defect_class))
-            file = os.path.join(test_output_dir, defect_class, img_nm + ".tiff")
-            tifffile.imwrite(file, map_combined)
+        map_structural = map_structural.squeeze().numpy()  # shape: (256, 256)
+        map_logical = map_logical.squeeze().numpy()
+        map_structural = np.expand_dims(map_structural, axis=2)
+        map_logical = np.expand_dims(map_logical, axis=2)
 
-    auc = roc_auc_score(y_true=y_true, y_score=y_score)
+        raw_img_path = os.path.join(path)
+        raw_img = np.array(cv2.imread(raw_img_path, cv2.IMREAD_COLOR))
+        raw_img = cv2.resize(raw_img, dsize=(256, 256))
+
+        # get heatmap
+        pred_mask_structural = np.uint8(
+            normalizeData(map_structural, map_comb_min, map_comb_max) * 255
+        )
+        heatmap_structural = cv2.applyColorMap(pred_mask_structural, cv2.COLORMAP_JET)
+        hmap_overlay_gt_img_structural = (
+            heatmap_structural * heatmap_alpha + raw_img * (1.0 - heatmap_alpha)
+        )
+
+        pred_mask_logical = np.uint8(
+            normalizeData(map_logical, map_comb_min, map_comb_max) * 255
+        )
+        heatmap_logical = cv2.applyColorMap(pred_mask_logical, cv2.COLORMAP_JET)
+        hmap_overlay_gt_img_logical = heatmap_logical * heatmap_alpha + raw_img * (
+            1.0 - heatmap_alpha
+        )
+
+        cv2.imwrite(
+            os.path.join(
+                heatmap_folder,
+                f"{'_'.join(path.split('/')[-2:])[:-4]}_structural.jpg",
+            ),
+            hmap_overlay_gt_img_structural,
+        )
+        cv2.imwrite(
+            os.path.join(
+                heatmap_folder,
+                f"{'_'.join(path.split('/')[-2:])[:-4]}_logical.jpg",
+            ),
+            hmap_overlay_gt_img_logical,
+        )
+
+    auc = 0
     return auc * 100
 
 

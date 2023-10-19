@@ -29,7 +29,7 @@ conda activate ds2
 set -e
 set -x
 
-python -u efficientad_separatebranches_patchup.py \
+python -u efficientad_separatebranches_analysis.py \
   --dataset mvtec_loco \
   --subdataset pushpins \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
@@ -37,6 +37,7 @@ python -u efficientad_separatebranches_patchup.py \
   --logical_teacher vit \
   --logical_teacher_image_size 1024 \
   --output_dir "outputs/folder_sepa_vit/output_20231018_233435_67_25_[pp]" \
+  --ana_id sepa_vit \
 
 # FIXME: update job-name, weights, pretrained_network, subdataset, note
 ##Log this job's resource usage stats###

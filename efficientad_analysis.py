@@ -960,7 +960,9 @@ def test(
         map_ae_min = extremes["map_ae_min"]
         map_ae_max = extremes["map_ae_max"]
 
-    interested_image = "./datasets/loco/juice_bottle/test/good/008.png"
+    # interested_image = "./datasets/loco/juice_bottle/test/good/008.png"
+    # interested_image = "./datasets/loco/juice_bottle/test/logical_anomalies/128.png"
+    interested_image = "./datasets/loco/juice_bottle/test/structural_anomalies/061.png"
 
     for image, target, path in tqdm(test_set, desc=desc):
         # path: ./datasets/loco/juice_bottle/test/good/000.png
@@ -1033,13 +1035,13 @@ def test(
         raw_img = cv2.resize(raw_img, dsize=(256, 256))
 
         # get heatmap
-        pred_mask_st = np.uint8(normalizeData(map_st, map_st_min, map_st_max) * 255)
+        pred_mask_st = np.uint8(normalizeData(map_st, map_comb_min, map_comb_max) * 255)
         heatmap_st = cv2.applyColorMap(pred_mask_st, cv2.COLORMAP_JET)
         hmap_overlay_gt_img_st = heatmap_st * heatmap_alpha + raw_img * (
             1.0 - heatmap_alpha
         )
 
-        pred_mask_ae = np.uint8(normalizeData(map_ae, map_ae_min, map_ae_max) * 255)
+        pred_mask_ae = np.uint8(normalizeData(map_ae, map_comb_min, map_comb_max) * 255)
         heatmap_ae = cv2.applyColorMap(pred_mask_ae, cv2.COLORMAP_JET)
         hmap_overlay_gt_img_ae = heatmap_ae * heatmap_alpha + raw_img * (
             1.0 - heatmap_alpha
