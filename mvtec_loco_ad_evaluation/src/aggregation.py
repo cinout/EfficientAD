@@ -83,6 +83,7 @@ def binary_refinement(
             continue
         query_left, query_right = init_queries[i], init_queries[i + 1]
         candidates.append((distance, (query_left, query_right)))
+
     if len(candidates) == 0 or max_steps < 1:
         return init_queries, init_values
 
@@ -312,6 +313,7 @@ class ThresholdMetrics:
                 continue
             for gt_channel, spros in zip(gt_image.channels, image_spros):
                 defect_name = gt_channel.defect_config.defect_name
+
                 if filter_defect_names is None or defect_name in filter_defect_names:
                     spros_of_defects.append(spros)
 
@@ -421,9 +423,7 @@ class MetricsAggregator:
         Returns:
             The resulting ThresholdMetrics instance.
         """
-        initial_thresholds = (
-            self._get_initial_thresholds()
-        )  # the initial_thresholds are calculated over all predicted anomaly scores, so when visualize, we should do this too
+        initial_thresholds = self._get_initial_thresholds()
         initial_values = self._refinement_callback(initial_thresholds)
         binary_refinement(
             init_queries=initial_thresholds,
@@ -491,7 +491,7 @@ class MetricsAggregator:
     def _get_initial_thresholds(self, num_thresholds=50, epsilon=1e-6):
         """Returns initial anomaly thresholds for refining a sPRO curve.
 
-        # TODO: this might be the key area for figuring out if sPRO is calculated image-wise or all-together
+        # FIXME: this is the key area for figuring out if sPRO is calculated image-wise or all-together
 
         The thresholds are sorted in descending order.
 

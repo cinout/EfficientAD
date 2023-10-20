@@ -164,7 +164,7 @@ def main():
         timestamp = args.timestamp
         folder_name = args.folder_name
         visual_folder = f"outputs/{folder_name}/visual_{timestamp}/"
-        os.makedirs(visual_folder,exist_ok=True)
+        os.makedirs(visual_folder, exist_ok=True)
         heatmap_alpha = 0.5
 
         for file_info in anomaly_maps:
@@ -226,7 +226,6 @@ def main():
     metrics = metrics_aggregator.run(curve_max_distance=args.curve_max_distance)
 
     # Fetch the anomaly localization results.
-    # TODO: localization score is calculated here
     localization_results = get_auc_spro_results(
         metrics=metrics, anomaly_maps_test_dir=anomaly_maps_test_dir
     )
@@ -369,7 +368,6 @@ def get_auc_spro_results(metrics: ThresholdMetrics, anomaly_maps_test_dir: str):
     defect names.
     """
     # Compute the AUC sPRO for logical and structural anomalies.
-    # TODO: the sPRO is calculated here
     auc_spro = get_auc_spros_per_subdir(
         metrics=metrics,
         anomaly_maps_test_dir=anomaly_maps_test_dir,
@@ -473,17 +471,15 @@ def get_auc_spros_per_subdir(
             if os.path.realpath(a.file_path).startswith(subdir)
         ]
 
-        # TODO: good images are added with each type of anomalous images
         if add_good_images:
             subdir_anomaly_maps += good_images
 
-        # TODO: key parts of calculating sPROs
         subdir_metrics = metrics.reduce_to_images(subdir_anomaly_maps)
         aucs_per_subdir[subdir_name] = get_auc_spros_for_metrics(subdir_metrics)
     return aucs_per_subdir
 
 
-# TODO: key function for calculating sPROs
+# key function for calculating sPROs
 def get_auc_spros_for_metrics(
     metrics: ThresholdMetrics,
     filter_defect_names_for_spro: Optional[Iterable[str]] = None,
@@ -506,6 +502,7 @@ def get_auc_spros_for_metrics(
             mean_spros = metrics.get_mean_spros(
                 filter_defect_names=filter_defect_names_for_spro
             )
+
             auc = get_auc_for_max_fpr(
                 fprs=fp_rates, y_values=mean_spros, max_fpr=max_fpr, scale_to_one=True
             )
