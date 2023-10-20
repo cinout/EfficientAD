@@ -24,6 +24,7 @@ from datetime import datetime
 from functools import partial
 from pvt_v2 import pvt_v2_b2_li
 import torch.nn.functional as F
+import cv2
 
 timestamp = (
     datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -81,7 +82,19 @@ def get_argparse():
     parser.add_argument("--logical_teacher", choices=["vit", "pvt2"], required=True)
     parser.add_argument("--logical_teacher_image_size", type=int, default=512)
 
-    # TODO: additional (may or may not be used)
+    # TODO: add it to code and slurm file
+    parser.add_argument(
+        "--analysis_heatmap",
+        action="store_true",
+        help="if set to True, then generate branch-wise analysis heatmap",
+    )
+    # TODO: add it to code and slurm file
+    parser.add_argument(
+        "--loss_2students",
+        action="store_true",
+        help="if set to True, then use the diff between two students for training loss and evaluation",
+    )
+
     parser.add_argument(
         "--pvt2_stage3",
         action="store_true",
@@ -93,7 +106,8 @@ def get_argparse():
         help="if set to True, then use final stage output",
     )
 
-    parser.add_argument("-t", "--train_steps", type=int, default=70000)
+    
+    parser.add_argument("-t", "--train_steps", type=int, default=20) # TODO: 70000
     parser.add_argument("--note", type=str, default="")
     return parser.parse_args()
 
@@ -103,8 +117,6 @@ seed = 42
 on_gpu = torch.cuda.is_available()
 device = "cuda" if on_gpu else "cpu"
 image_size = 256
-
-# data loading
 
 
 def process_vit_features(features):
@@ -170,6 +182,7 @@ def train_transform(image, config):
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ]
     )
+
     transform_logical = transforms.RandomChoice(
         [
             transforms.ColorJitter(brightness=0.2),
@@ -179,9 +192,10 @@ def train_transform(image, config):
     )
     logical_image = transform_logical(image)
     return (
-        default_transform(image),  # structural student and teacher
-        default_transform(logical_image),  # logical student
-        teacher_logical_transform(logical_image),  # logical teacher
+        default_transform(image),  # (train/validation/test)
+        teacher_logical_transform(image),  # (validation) logical_teacher
+        default_transform(logical_image),  # (train) logical_student
+        teacher_logical_transform(logical_image),  # (train) logical_teacher
     )
 
 
@@ -326,7 +340,14 @@ def main():
         teacher_structural.load_state_dict(pretrained_teacher_model, strict=False)
 
         # structural branch student
-        student_structural = PDN_Small(out_channels=structural_channels, padding=True)
+        if config.loss_2students:
+            student_structural = PDN_Small(
+                out_channels=structural_channels + logical_channels, padding=True
+            )
+        else:
+            student_structural = PDN_Small(
+                out_channels=structural_channels, padding=True
+            )
 
         # logical branch teacher
         if config.logical_teacher == "vit":
@@ -414,6 +435,7 @@ def main():
     ) in zip(tqdm_obj, train_loader_infinite, penalty_loader_infinite):
         (
             img_structural,
+            _,
             img_logical_student,
             img_logical_teacher,
         ) = train_images
@@ -432,13 +454,26 @@ def main():
                 teacher_structural_output - teacher_structural_mean
             ) / teacher_structural_std
         student_structural_output = student_structural(img_structural)
-        distance_structural = (
-            teacher_structural_output - student_structural_output
-        ) ** 2
+
+        if config.loss_2students:
+            distance_structural = (
+                teacher_structural_output
+                - student_structural_output[:, :structural_channels]
+            ) ** 2
+        else:
+            distance_structural = (
+                teacher_structural_output - student_structural_output
+            ) ** 2
+
         d_hard = torch.quantile(distance_structural, q=0.999)
         loss_hard = torch.mean(distance_structural[distance_structural >= d_hard])
         if image_penalty is not None:
-            student_output_penalty = student_structural(image_penalty)
+            if config.loss_2students:
+                student_output_penalty = student_structural(image_penalty)[
+                    :, :structural_channels
+                ]
+            else:
+                student_output_penalty = student_structural(image_penalty)
             loss_penalty = torch.mean(student_output_penalty**2)
             loss_structural = loss_hard + loss_penalty
         else:
@@ -463,7 +498,16 @@ def main():
         distance_logical = (teacher_logical_output - student_logical_output) ** 2
         loss_logical = torch.mean(distance_logical)
 
-        loss_total = loss_structural + loss_logical
+        if config.loss_2students:
+            distance_2students = (
+                student_logical_output
+                - student_structural(img_logical_student)[:, structural_channels:]
+            ) ** 2
+            loss_2students = torch.mean(distance_2students)
+            loss_total = loss_structural + loss_logical + loss_2students
+        else:
+            loss_total = loss_structural + loss_logical
+
         optimizer.zero_grad()
         loss_total.backward()
         optimizer.step()
@@ -496,6 +540,7 @@ def main():
         q_logical_start,
         q_logical_end,
     ) = map_normalization(
+        structural_channels=structural_channels,
         validation_loader=validation_loader,
         teacher_structural=teacher_structural,
         teacher_logical=teacher_logical,
@@ -510,6 +555,7 @@ def main():
     )
 
     auc = test(
+        structural_channels=structural_channels,
         test_set=test_set,
         teacher_structural=teacher_structural,
         teacher_logical=teacher_logical,
@@ -530,8 +576,16 @@ def main():
     print("Final image auc: {:.4f}".format(auc))
 
 
+def normalizeData(data, minval, maxval):
+    return (data - minval) / (maxval - minval)
+
+
+heatmap_alpha = 0.5
+
+
 @torch.no_grad()
 def test(
+    structural_channels,
     test_set,
     teacher_structural,
     teacher_logical,
@@ -551,6 +605,11 @@ def test(
 ):
     y_true = []
     y_score = []
+
+    if config.analysis_heatmap:
+        map_comb_min = None
+        map_comb_max = None
+
     for image, target, path in tqdm(test_set, desc=desc):
         orig_width = image.width
         orig_height = image.height
@@ -559,23 +618,23 @@ def test(
 
         (
             img_structural,
-            img_logical_student,
-            img_logical_teacher,
+            img_structural_upsize,
+            _,
+            _,
         ) = images
 
         img_structural = img_structural.to(device)
-        img_logical_student = img_logical_student.to(device)
-        img_logical_teacher = img_logical_teacher.to(device)
         img_structural = img_structural.unsqueeze(0)
-        img_logical_student = img_logical_student.unsqueeze(0)
-        img_logical_teacher = img_logical_teacher.unsqueeze(0)
+        img_structural_upsize = img_structural_upsize.to(device)
+        img_structural_upsize = img_structural_upsize.unsqueeze(0)
 
-        # TODO: fix the error here
         map_combined, _, _ = predict(
+            structural_channels=structural_channels,
             config=config,
             img_structural=img_structural,
-            img_logical_student=img_logical_student,
-            img_logical_teacher=img_logical_teacher,
+            img_structural_upsize=img_structural_upsize,
+            # img_logical_student=img_logical_student,
+            # img_logical_teacher=img_logical_teacher,
             teacher_structural=teacher_structural,
             teacher_logical=teacher_logical,
             student_structural=student_structural,
@@ -589,6 +648,14 @@ def test(
             q_logical_start=q_logical_start,
             q_logical_end=q_logical_end,
         )
+
+        if config.analysis_heatmap:
+            if map_comb_min is None:
+                map_comb_min = torch.min(map_combined)
+                map_comb_max = torch.max(map_combined)
+            else:
+                map_comb_min = min(map_comb_min, torch.min(map_combined))
+                map_comb_max = max(map_comb_max, torch.max(map_combined))
 
         defect_class = os.path.basename(os.path.dirname(path))
         y_true_image = 0 if defect_class == "good" else 1
@@ -613,16 +680,104 @@ def test(
             file = os.path.join(test_output_dir, defect_class, img_nm + ".tiff")
             tifffile.imwrite(file, map_combined)
 
+    if config.analysis_heatmap:
+        map_comb_min = map_comb_min.cpu().numpy()
+        map_comb_max = map_comb_max.cpu().numpy()
+
+        heatmap_folder = os.path.join(test_output_dir, "analysis_heatmap/")
+        os.makedirs(heatmap_folder, exist_ok=True)
+
+        # output heatmaps for separate branches
+        for image, target, path in tqdm(test_set, desc=desc):
+            images = train_transform(image, config=config)
+
+            (
+                img_structural,
+                img_structural_upsize,
+                _,
+                _,
+            ) = images
+
+            img_structural = img_structural.to(device)
+            img_structural = img_structural.unsqueeze(0)
+            img_structural_upsize = img_structural_upsize.to(device)
+            img_structural_upsize = img_structural_upsize.unsqueeze(0)
+
+            _, map_structural, map_logical = predict(
+                config=config,
+                img_structural=img_structural,
+                img_structural_upsize=img_structural_upsize,
+                # img_logical_student=img_logical_student,
+                # img_logical_teacher=img_logical_teacher,
+                teacher_structural=teacher_structural,
+                teacher_logical=teacher_logical,
+                student_structural=student_structural,
+                student_logical=student_logical,
+                teacher_structural_mean=teacher_structural_mean,
+                teacher_structural_std=teacher_structural_std,
+                teacher_logical_mean=teacher_logical_mean,
+                teacher_logical_std=teacher_logical_std,
+                q_structural_start=q_structural_start,
+                q_structural_end=q_structural_end,
+                q_logical_start=q_logical_start,
+                q_logical_end=q_logical_end,
+            )
+
+            map_structural = map_structural.squeeze().cpu().numpy()  # shape: (256, 256)
+            map_logical = map_logical.squeeze().cpu().numpy()
+            map_structural = np.expand_dims(map_structural, axis=2)
+            map_logical = np.expand_dims(map_logical, axis=2)
+
+            raw_img_path = os.path.join(path)
+            raw_img = np.array(cv2.imread(raw_img_path, cv2.IMREAD_COLOR))
+            raw_img = cv2.resize(raw_img, dsize=(256, 256))
+
+            # get heatmap
+            pred_mask_structural = np.uint8(
+                normalizeData(map_structural, map_comb_min, map_comb_max) * 255
+            )
+            heatmap_structural = cv2.applyColorMap(
+                pred_mask_structural, cv2.COLORMAP_JET
+            )
+            hmap_overlay_gt_img_structural = (
+                heatmap_structural * heatmap_alpha + raw_img * (1.0 - heatmap_alpha)
+            )
+
+            pred_mask_logical = np.uint8(
+                normalizeData(map_logical, map_comb_min, map_comb_max) * 255
+            )
+            heatmap_logical = cv2.applyColorMap(pred_mask_logical, cv2.COLORMAP_JET)
+            hmap_overlay_gt_img_logical = heatmap_logical * heatmap_alpha + raw_img * (
+                1.0 - heatmap_alpha
+            )
+
+            cv2.imwrite(
+                os.path.join(
+                    heatmap_folder,
+                    f"{'_'.join(path.split('/')[-2:])[:-4]}_structural.jpg",
+                ),
+                hmap_overlay_gt_img_structural,
+            )
+            cv2.imwrite(
+                os.path.join(
+                    heatmap_folder,
+                    f"{'_'.join(path.split('/')[-2:])[:-4]}_logical.jpg",
+                ),
+                hmap_overlay_gt_img_logical,
+            )
+
     auc = roc_auc_score(y_true=y_true, y_score=y_score)
     return auc * 100
 
 
 @torch.no_grad()
 def predict(
+    structural_channels,
     config,
     img_structural,
-    img_logical_student,
-    img_logical_teacher,
+    img_structural_upsize,
+    # img_logical_student,
+    # img_logical_teacher,
     teacher_structural,
     teacher_logical,
     student_structural,
@@ -637,35 +792,55 @@ def predict(
     q_logical_end=None,
 ):
     teacher_structural_output = teacher_structural(img_structural)
-    if config.logical_teacher == "vit":
-        teacher_logical_output = teacher_logical(img_logical_teacher)[0]
-        teacher_logical_output = process_vit_features(teacher_logical_output)
-    elif config.logical_teacher == "pvt2":
-        teacher_logical_output = teacher_logical(img_logical_teacher)
-        teacher_logical_output = process_pvt_features(teacher_logical_output, config)
-    else:
-        raise Exception("wrong logical_teacher")
-
     teacher_structural_output = (
         teacher_structural_output - teacher_structural_mean
     ) / teacher_structural_std
-    teacher_logical_output = (
-        teacher_logical_output - teacher_logical_mean
-    ) / teacher_logical_std
 
     student_structural_output = student_structural(img_structural)
-    student_logical_output = student_logical(img_logical_student)
+    student_logical_output = student_logical(img_structural)
 
-    map_structural = torch.mean(
-        (teacher_structural_output - student_structural_output) ** 2,
-        dim=1,
-        keepdim=True,
-    )  # shape: (bs, 1, h, w)
-    map_logical = torch.mean(
-        (teacher_logical_output - student_logical_output) ** 2,
-        dim=1,
-        keepdim=True,
-    )  # shape: (bs, 1, h, w)
+    if config.loss_2students:
+        map_structural = torch.mean(
+            (
+                teacher_structural_output
+                - student_structural_output[:, :structural_channels]
+            )
+            ** 2,
+            dim=1,
+            keepdim=True,
+        )
+        map_logical = torch.mean(
+            (
+                student_logical_output
+                - student_structural_output[:, structural_channels:]
+            )
+            ** 2,
+            dim=1,
+            keepdim=True,
+        )
+    else:
+        if config.logical_teacher == "vit":
+            teacher_logical_output = teacher_logical(img_structural_upsize)[0]
+            teacher_logical_output = process_vit_features(teacher_logical_output)
+        elif config.logical_teacher == "pvt2":
+            teacher_logical_output = teacher_logical(img_structural_upsize)
+            teacher_logical_output = process_pvt_features(teacher_logical_output, config)
+        else:
+            raise Exception("wrong logical_teacher")
+        teacher_logical_output = (
+            teacher_logical_output - teacher_logical_mean
+        ) / teacher_logical_std
+
+        map_structural = torch.mean(
+            (teacher_structural_output - student_structural_output) ** 2,
+            dim=1,
+            keepdim=True,
+        )  # shape: (bs, 1, h, w)
+        map_logical = torch.mean(
+            (teacher_logical_output - student_logical_output) ** 2,
+            dim=1,
+            keepdim=True,
+        )  # shape: (bs, 1, h, w)
 
     # upsample map_structural and map_logical to 256*256
     map_structural = torch.nn.functional.interpolate(
@@ -692,6 +867,7 @@ def predict(
 
 @torch.no_grad()
 def map_normalization(
+    structural_channels,
     validation_loader,
     teacher_structural,
     teacher_logical,
@@ -710,19 +886,23 @@ def map_normalization(
     for images in tqdm(validation_loader, desc=desc):
         (
             img_structural,
-            img_logical_student,
-            img_logical_teacher,
+            img_structural_upsize,
+            _,
+            _,
         ) = images
 
         img_structural = img_structural.to(device)
-        img_logical_student = img_logical_student.to(device)
-        img_logical_teacher = img_logical_teacher.to(device)
+        img_structural_upsize = img_structural_upsize.to(device)
+        # img_logical_student = img_logical_student.to(device)
+        # img_logical_teacher = img_logical_teacher.to(device)
 
         map_combined, map_st, map_log = predict(
+            structural_channels=structural_channels,
             config=config,
             img_structural=img_structural,
-            img_logical_student=img_logical_student,
-            img_logical_teacher=img_logical_teacher,
+            img_structural_upsize=img_structural_upsize,
+            # img_logical_student=img_logical_student,
+            # img_logical_teacher=img_logical_teacher,
             teacher_structural=teacher_structural,
             teacher_logical=teacher_logical,
             student_structural=student_structural,
@@ -751,6 +931,7 @@ def teacher_normalization(teacher_structural, teacher_logical, train_loader, con
     for train_images in tqdm(train_loader, desc="Computing mean of features"):
         (
             img_structural,
+            _,
             _,
             img_logical_teacher,
         ) = train_images
@@ -785,6 +966,7 @@ def teacher_normalization(teacher_structural, teacher_logical, train_loader, con
     for train_images in tqdm(train_loader, desc="Computing std of features"):
         (
             img_structural,
+            _,
             _,
             img_logical_teacher,
         ) = train_images
