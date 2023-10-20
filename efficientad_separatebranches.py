@@ -106,7 +106,7 @@ def get_argparse():
         help="if set to True, then use final stage output",
     )
 
-    parser.add_argument("-t", "--train_steps", type=int, default=20)  # TODO: 70000
+    parser.add_argument("-t", "--train_steps", type=int, default=70000)
     parser.add_argument("--note", type=str, default="")
     return parser.parse_args()
 
