@@ -106,8 +106,7 @@ def get_argparse():
         help="if set to True, then use final stage output",
     )
 
-    
-    parser.add_argument("-t", "--train_steps", type=int, default=20) # TODO: 70000
+    parser.add_argument("-t", "--train_steps", type=int, default=20)  # TODO: 70000
     parser.add_argument("--note", type=str, default="")
     return parser.parse_args()
 
@@ -704,6 +703,7 @@ def test(
             img_structural_upsize = img_structural_upsize.unsqueeze(0)
 
             _, map_structural, map_logical = predict(
+                structural_channels=structural_channels,
                 config=config,
                 img_structural=img_structural,
                 img_structural_upsize=img_structural_upsize,
@@ -824,7 +824,9 @@ def predict(
             teacher_logical_output = process_vit_features(teacher_logical_output)
         elif config.logical_teacher == "pvt2":
             teacher_logical_output = teacher_logical(img_structural_upsize)
-            teacher_logical_output = process_pvt_features(teacher_logical_output, config)
+            teacher_logical_output = process_pvt_features(
+                teacher_logical_output, config
+            )
         else:
             raise Exception("wrong logical_teacher")
         teacher_logical_output = (
