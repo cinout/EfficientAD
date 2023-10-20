@@ -557,7 +557,7 @@ def test(
         map_comb_min = map_comb_min.cpu().numpy()
         map_comb_max = map_comb_max.cpu().numpy()
 
-        heatmap_folder = os.path.join(test_output_dir, "analysis_heatmap/")
+        heatmap_folder = os.path.join(config.output_dir, "analysis_heatmap/")
         os.makedirs(heatmap_folder, exist_ok=True)
 
         # output heatmaps for separate branches
