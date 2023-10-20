@@ -9,7 +9,7 @@ python -u efficientad_patchup.py \
   --dataset mvtec_loco \
   --subdataset breakfast_box \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
-  --note "separate branches [vit for logical]" \
+  --note "sepa vit loss_2students" \
   --output_dir "outputs/folder_wideresnet101/output_2023_[bb]" \
 """
 import math

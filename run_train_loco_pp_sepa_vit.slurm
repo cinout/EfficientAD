@@ -11,7 +11,7 @@
 
 #SBATCH --job-name="train_pp"
 #SBATCH --account=punim1623
-#SBATCH --time=0-00:30:00
+#SBATCH --time=0-07:00:00
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -29,15 +29,15 @@ conda activate ds2
 set -e
 set -x
 
-python -u efficientad_separatebranches_analysis.py \
+python -u efficientad_separatebranches.py \
   --dataset mvtec_loco \
   --subdataset pushpins \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
-  --note "separate branches [vit for logical]" \
+  --note "sepa vit loss_2students" \
   --logical_teacher vit \
   --logical_teacher_image_size 1024 \
-  --output_dir "outputs/folder_sepa_vit/output_20231018_233435_67_25_[pp]" \
-  --ana_id sepa_vit \
+  --analysis_heatmap \
+  --loss_2students \
 
 # FIXME: update job-name, weights, pretrained_network, subdataset, note
 ##Log this job's resource usage stats###
