@@ -164,7 +164,7 @@ def main():
         timestamp = args.timestamp
         folder_name = args.folder_name
         visual_folder = f"outputs/{folder_name}/visual_{timestamp}/"
-        os.mkdir(visual_folder)
+        os.makedirs(visual_folder,exist_ok=True)
         heatmap_alpha = 0.5
 
         for file_info in anomaly_maps:
