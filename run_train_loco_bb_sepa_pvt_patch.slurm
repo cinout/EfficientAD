@@ -38,6 +38,7 @@ python -u efficientad_separatebranches_patchup.py \
   --logical_teacher_image_size 1024 \
   --analysis_heatmap \
   --output_dir "outputs/folder_sepa_pvt_stage3/output_20231018_233707_44_81_[bb]" \
+  --pvt2_stage3 \
 
 # FIXME: update job-name, weights, pretrained_network, subdataset, note
 ##Log this job's resource usage stats###
