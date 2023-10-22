@@ -25,6 +25,7 @@ from datetime import datetime
 from functools import partial
 from pvt_v2 import pvt_v2_b2_li
 import torch.nn.functional as F
+import cv2
 
 timestamp = (
     datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -33,6 +34,13 @@ timestamp = (
     + "_"
     + str(random.randint(0, 100))
 )
+
+
+def normalizeData(data, minval, maxval):
+    return (data - minval) / (maxval - minval)
+
+
+heatmap_alpha = 0.5
 
 
 def get_argparse():
@@ -102,6 +110,12 @@ def get_argparse():
         "--patchify",
         action="store_true",
         help="if set to True, then augment features using PatchCore",
+    )
+    # TODO: add it to code and slurm file
+    parser.add_argument(
+        "--analysis_heatmap",
+        action="store_true",
+        help="if set to True, then generate branch-wise analysis heatmap",
     )
 
     # the following are necessary if teacher is directly a vit/pvt
@@ -569,50 +583,6 @@ def main():
                 iteration,
                 "Current loss: {:.4f}".format(loss_total.item()),
             )
-            # tqdm_obj.set_description("Current loss: {:.4f}  ".format(loss_total.item()))
-
-        # if iteration % 1000 == 0:
-        #     torch.save(teacher, os.path.join(train_output_dir, "teacher_tmp.pth"))
-        #     torch.save(student, os.path.join(train_output_dir, "student_tmp.pth"))
-        #     torch.save(
-        #         autoencoder, os.path.join(train_output_dir, "autoencoder_tmp.pth")
-        #     )
-
-        # if iteration % 10000 == 0 and iteration > 0:
-        #     # run intermediate evaluation
-        #     teacher.eval()
-        #     student.eval()
-        #     autoencoder.eval()
-
-        #     q_st_start, q_st_end, q_ae_start, q_ae_end = map_normalization(
-        #         validation_loader=validation_loader,
-        #         teacher=teacher,
-        #         student=student,
-        #         autoencoder=autoencoder,
-        #         teacher_mean=teacher_mean,
-        #         teacher_std=teacher_std,
-        #         desc="Intermediate map normalization",
-        #     )
-        #     auc = test(
-        #         test_set=test_set,
-        #         teacher=teacher,
-        #         student=student,
-        #         autoencoder=autoencoder,
-        #         teacher_mean=teacher_mean,
-        #         teacher_std=teacher_std,
-        #         q_st_start=q_st_start,
-        #         q_st_end=q_st_end,
-        #         q_ae_start=q_ae_start,
-        #         q_ae_end=q_ae_end,
-        #         test_output_dir=None,
-        #         desc="Intermediate inference",
-        #     )
-        #     print("Intermediate image auc: {:.4f}".format(auc))
-
-        #     # teacher frozen
-        #     teacher.eval()
-        #     student.train()
-        #     autoencoder.train()
 
     teacher.eval()
     student.eval()
@@ -671,6 +641,11 @@ def test(
 ):
     y_true = []
     y_score = []
+
+    if config.analysis_heatmap:
+        map_comb_min = None
+        map_comb_max = None
+
     for image, target, path in tqdm(test_set, desc=desc):
         orig_width = image.width
         orig_height = image.height
@@ -713,15 +688,19 @@ def test(
             q_ae_end=q_ae_end,
         )
 
+        if config.analysis_heatmap:
+            if map_comb_min is None:
+                map_comb_min = torch.min(map_combined)
+                map_comb_max = torch.max(map_combined)
+            else:
+                map_comb_min = min(map_comb_min, torch.min(map_combined))
+                map_comb_max = max(map_comb_max, torch.max(map_combined))
+
         defect_class = os.path.basename(os.path.dirname(path))
         y_true_image = 0 if defect_class == "good" else 1
         y_score_image = np.max(map_combined[0, 0].cpu().numpy())
         y_true.append(y_true_image)
         y_score.append(y_score_image)
-
-        # map_combined = torch.nn.functional.pad(
-        #     map_combined, (4, 4, 4, 4)
-        # )  # pad last dim by (4, 4) and 2nd to last by (4, 4), the value in padding area is 0
 
         # save into riff format
         map_combined = torch.nn.functional.interpolate(
@@ -735,6 +714,88 @@ def test(
                 os.makedirs(os.path.join(test_output_dir, defect_class))
             file = os.path.join(test_output_dir, defect_class, img_nm + ".tiff")
             tifffile.imwrite(file, map_combined)
+
+    if config.analysis_heatmap:
+        map_comb_min = map_comb_min.cpu().numpy()
+        map_comb_max = map_comb_max.cpu().numpy()
+
+        heatmap_folder = os.path.join(config.output_dir, "analysis_heatmap/")
+        os.makedirs(heatmap_folder, exist_ok=True)
+
+        # output heatmaps for separate branches
+        for image, target, path in tqdm(test_set, desc=desc):
+            images = train_transform(image, config=config)
+
+            (
+                img_structural,
+                img_structural_upsize,
+                _,
+                _,
+            ) = images
+
+            img_structural = img_structural.to(device)
+            img_structural = img_structural.unsqueeze(0)
+            img_structural_upsize = img_structural_upsize.to(device)
+            img_structural_upsize = img_structural_upsize.unsqueeze(0)
+
+            _, map_structural, map_logical = predict(
+                config=config,
+                out_channels=out_channels,
+                image=image,
+                image_teacher=image_teacher,
+                teacher=teacher,
+                student=student,
+                autoencoder=autoencoder,
+                teacher_mean=teacher_mean,
+                teacher_std=teacher_std,
+                q_st_start=q_st_start,
+                q_st_end=q_st_end,
+                q_ae_start=q_ae_start,
+                q_ae_end=q_ae_end,
+            )
+
+            map_structural = map_structural.squeeze().cpu().numpy()  # shape: (256, 256)
+            map_logical = map_logical.squeeze().cpu().numpy()
+            map_structural = np.expand_dims(map_structural, axis=2)
+            map_logical = np.expand_dims(map_logical, axis=2)
+
+            raw_img_path = os.path.join(path)
+            raw_img = np.array(cv2.imread(raw_img_path, cv2.IMREAD_COLOR))
+            raw_img = cv2.resize(raw_img, dsize=(256, 256))
+
+            # get heatmap
+            pred_mask_structural = np.uint8(
+                normalizeData(map_structural, map_comb_min, map_comb_max) * 255
+            )
+            heatmap_structural = cv2.applyColorMap(
+                pred_mask_structural, cv2.COLORMAP_JET
+            )
+            hmap_overlay_gt_img_structural = (
+                heatmap_structural * heatmap_alpha + raw_img * (1.0 - heatmap_alpha)
+            )
+
+            pred_mask_logical = np.uint8(
+                normalizeData(map_logical, map_comb_min, map_comb_max) * 255
+            )
+            heatmap_logical = cv2.applyColorMap(pred_mask_logical, cv2.COLORMAP_JET)
+            hmap_overlay_gt_img_logical = heatmap_logical * heatmap_alpha + raw_img * (
+                1.0 - heatmap_alpha
+            )
+
+            cv2.imwrite(
+                os.path.join(
+                    heatmap_folder,
+                    f"{'_'.join(path.split('/')[-2:])[:-4]}_structural.jpg",
+                ),
+                hmap_overlay_gt_img_structural,
+            )
+            cv2.imwrite(
+                os.path.join(
+                    heatmap_folder,
+                    f"{'_'.join(path.split('/')[-2:])[:-4]}_logical.jpg",
+                ),
+                hmap_overlay_gt_img_logical,
+            )
 
     auc = roc_auc_score(y_true=y_true, y_score=y_score)
     return auc * 100

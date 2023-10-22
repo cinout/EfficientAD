@@ -11,7 +11,7 @@
 
 #SBATCH --job-name="train_bb"
 #SBATCH --account=punim1623
-#SBATCH --time=0-01:20:00
+#SBATCH --time=0-06:20:00
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -29,16 +29,12 @@ conda activate ds2
 set -e
 set -x
 
-python -u efficientad_separatebranches_patchup.py \
+python -u efficientad.py \
   --dataset mvtec_loco \
   --subdataset breakfast_box \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
-  --note "sepa pvt2 patchup" \
-  --logical_teacher pvt2 \
-  --logical_teacher_image_size 1024 \
+  --note "baseline" \
   --analysis_heatmap \
-  --output_dir "outputs/folder_sepa_pvt_stage3/output_20231018_233707_44_81_[bb]" \
-  --pvt2_stage3 \
 
 # FIXME: update job-name, weights, pretrained_network, subdataset, note
 ##Log this job's resource usage stats###
