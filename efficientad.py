@@ -132,7 +132,9 @@ def get_argparse():
     )
     parser.add_argument("--image_size_pvt2_teacher", type=int, default=512)
 
-    parser.add_argument("-t", "--train_steps", type=int, default=20) # TODO: change back to 70000
+    parser.add_argument(
+        "-t", "--train_steps", type=int, default=20
+    )  # TODO: change back to 70000
     parser.add_argument("--note", type=str, default="")
     return parser.parse_args()
 
@@ -726,17 +728,25 @@ def test(
         for image, target, path in tqdm(test_set, desc=desc):
             images = train_transform(image, config=config)
 
-            (
-                img_structural,
-                img_structural_upsize,
-                _,
-                _,
-            ) = images
+            if config.vit_teacher or config.pvt2_teacher:
+                (
+                    image,
+                    image_teacher,
+                    _,
+                    _,
+                ) = images
+            else:
+                (image, _) = images
+                image_teacher = None
 
-            img_structural = img_structural.to(device)
-            img_structural = img_structural.unsqueeze(0)
-            img_structural_upsize = img_structural_upsize.to(device)
-            img_structural_upsize = img_structural_upsize.unsqueeze(0)
+            image = image[None]
+            if image_teacher is not None:
+                image_teacher = image_teacher[None]
+
+            if on_gpu:
+                image = image.cuda()
+                if image_teacher is not None:
+                    image_teacher = image_teacher.cuda()
 
             _, map_structural, map_logical = predict(
                 config=config,
