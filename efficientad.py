@@ -132,9 +132,7 @@ def get_argparse():
     )
     parser.add_argument("--image_size_pvt2_teacher", type=int, default=512)
 
-    parser.add_argument(
-        "-t", "--train_steps", type=int, default=20
-    )  # TODO: change back to 70000
+    parser.add_argument("-t", "--train_steps", type=int, default=70000)
     parser.add_argument("--note", type=str, default="")
     return parser.parse_args()
 
