@@ -169,7 +169,8 @@ class Embeddings(nn.Module):
         self.dropout = Dropout(config.transformer["dropout_rate"])
 
     def forward(self, x):
-        # x.shape: (16, 3, 512, 512)
+        # x.shape: (bs, 3, image_size, image_size)
+
         B = x.shape[0]
         cls_tokens = self.cls_token.expand(B, -1, -1)
 

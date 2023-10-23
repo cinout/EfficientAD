@@ -9,12 +9,12 @@ import numpy as np
 
 def is_dict_order_stable():
     """Returns true, if and only if dicts always iterate in the same order."""
-    if platform.python_implementation() == 'CPython':
+    if platform.python_implementation() == "CPython":
         required_minor = 6
     else:
         required_minor = 7
     major, minor, _ = platform.python_version_tuple()
-    assert major == '3' and all(s.isdigit() for s in minor)
+    assert major == "3" and all(s.isdigit() for s in minor)
     return int(minor) >= required_minor
 
 
@@ -23,7 +23,7 @@ def listdir(path, sort=True, include_hidden=False):
     if sort:
         file_names = sorted(file_names)
     if not include_hidden:
-        file_names = [f for f in file_names if not f.startswith('.')]
+        file_names = [f for f in file_names if not f.startswith(".")]
     return file_names
 
 
@@ -46,14 +46,14 @@ def flatten_2d(seq: Sequence[Sequence]) -> List:
 
 
 def get_sorted_nested_arrays(nested_arrays, sort_indices, nest_level=1):
-    return map_nested(nested_objects=nested_arrays,
-                      fun=lambda a: a[sort_indices],
-                      nest_level=nest_level)
+    return map_nested(
+        nested_objects=nested_arrays,
+        fun=lambda a: a[sort_indices],
+        nest_level=nest_level,
+    )
 
 
-def concat_nested_arrays(head_arrays: Sequence,
-                         tail_arrays: Sequence,
-                         nest_level=1):
+def concat_nested_arrays(head_arrays: Sequence, tail_arrays: Sequence, nest_level=1):
     """Concatenate numpy arrays nested in a sequence (of sequences ...
     of sequences).
 
@@ -74,16 +74,15 @@ def concat_nested_arrays(head_arrays: Sequence,
     """
 
     # Zip the heads and tails at the deepest level.
-    head_tail_arrays = zip_nested(head_arrays, tail_arrays,
-                                  nest_level=nest_level)
+    head_tail_arrays = zip_nested(head_arrays, tail_arrays, nest_level=nest_level)
 
     def concat(args):
         head, tail = args
         return np.concatenate([head, tail])
 
-    return map_nested(nested_objects=head_tail_arrays,
-                      fun=concat,
-                      nest_level=nest_level)
+    return map_nested(
+        nested_objects=head_tail_arrays, fun=concat, nest_level=nest_level
+    )
 
 
 def map_nested(nested_objects: Sequence, fun: Callable, nest_level=1):
@@ -111,9 +110,7 @@ def map_nested(nested_objects: Sequence, fun: Callable, nest_level=1):
         for lower_nested_objects in nested_objects:
             # Map the nested sequence of objects.
             lower_mapped = map_nested(
-                nested_objects=lower_nested_objects,
-                fun=fun,
-                nest_level=nest_level - 1
+                nested_objects=lower_nested_objects, fun=fun, nest_level=nest_level - 1
             )
             mapped.append(lower_mapped)
         return mapped
@@ -157,9 +154,7 @@ def zip_nested(*seqs: Sequence, nest_level=1):
 def get_auc_for_max_fpr(fprs, y_values, max_fpr, scale_to_one=True):
     """Compute AUCs for varying maximum FPRs."""
     assert fprs[0] == 0 and fprs[-1] == 1
-    auc = trapz(x=fprs,
-                y=y_values,
-                x_max=max_fpr)
+    auc = trapz(x=fprs, y=y_values, x_max=max_fpr)
     if scale_to_one:
         auc /= max_fpr
     return auc
@@ -191,15 +186,18 @@ def trapz(x, y, x_max=None):
 
     x = np.array(x)
     y = np.array(y)
+
     finite_mask = np.logical_and(np.isfinite(x), np.isfinite(y))
     if not finite_mask.all():
-        print("""WARNING: Not all x and y values passed to trapezoid(...)
-                 are finite. Will continue with only the finite values.""")
+        print(
+            """WARNING: Not all x and y values passed to trapezoid(...)
+                 are finite. Will continue with only the finite values."""
+        )
     x = x[finite_mask]
     y = y[finite_mask]
 
     # Introduce a correction term if max_x is not an element of x.
-    correction = 0.
+    correction = 0.0
     if x_max is not None:
         if x_max not in x:
             # Get the insertion index that would keep x sorted after
@@ -212,9 +210,9 @@ def trapz(x, y, x_max=None):
             # Calculate the correction term which is the integral between
             # the last x[ins-1] and x_max. Since we do not know the exact value
             # of y at x_max, we interpolate between y[ins] and y[ins-1].
-            y_interp = y[ins - 1] + ((y[ins] - y[ins - 1]) *
-                                     (x_max - x[ins - 1]) /
-                                     (x[ins] - x[ins - 1]))
+            y_interp = y[ins - 1] + (
+                (y[ins] - y[ins - 1]) * (x_max - x[ins - 1]) / (x[ins] - x[ins - 1])
+            )
             correction = 0.5 * (y_interp + y[ins - 1]) * (x_max - x[ins - 1])
 
         # Cut off at x_max.
@@ -226,9 +224,7 @@ def trapz(x, y, x_max=None):
     return np.sum(0.5 * (y[1:] + y[:-1]) * (x[1:] - x[:-1])) + correction
 
 
-def compute_classification_roc(
-        anomaly_scores_ok,
-        anomaly_scores_nok):
+def compute_classification_roc(anomaly_scores_ok, anomaly_scores_nok):
     """
     Compute the ROC curve for anomaly classification on the image level.
 
@@ -276,8 +272,7 @@ def compute_classification_roc(
         else:
             num_tp -= 1
 
-        if (prev_score is None) or (score != prev_score) or (
-                i == num_scores - 1):
+        if (prev_score is None) or (score != prev_score) or (i == num_scores - 1):
             fprs.append(num_fp / num_ok)
             tprs.append(num_tp / num_nok)
             prev_score = score
@@ -289,9 +284,7 @@ def compute_classification_roc(
     return fprs, tprs
 
 
-def compute_classification_auc_roc(
-        anomaly_scores_ok,
-        anomaly_scores_nok):
+def compute_classification_auc_roc(anomaly_scores_ok, anomaly_scores_nok):
     """
     Compute the area under the ROC curve for anomaly classification.
 
@@ -305,8 +298,7 @@ def compute_classification_auc_roc(
         auc_roc: Area under the ROC curve.
     """
     # Compute the ROC curve.
-    fprs, tprs = \
-        compute_classification_roc(anomaly_scores_ok, anomaly_scores_nok)
+    fprs, tprs = compute_classification_roc(anomaly_scores_ok, anomaly_scores_nok)
 
     # Integrate its area.
     return trapz(fprs, tprs)
