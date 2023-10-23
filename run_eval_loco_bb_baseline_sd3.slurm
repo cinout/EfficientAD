@@ -2,7 +2,7 @@
 
 #SBATCH --partition=cascade
 
-#SBATCH --job-name="eval_sb"
+#SBATCH --job-name="eval_bb"
 #SBATCH --account=punim1623
 #SBATCH --time=0-01:10:00
 
@@ -20,11 +20,11 @@ module purge
 eval "$(conda shell.bash hook)"
 conda activate ds2
 
-timestamp="20231023_055158_38_18_[sb]"
-folder_name="folder_default"
+timestamp="20231023_175644_72_6_sd10_[bb]"
+folder_name="folder_default_run3"
 
 python -u mvtec_loco_ad_evaluation/evaluate_experiment.py \
-  --object_name "screw_bag" \
+  --object_name "breakfast_box" \
   --dataset_base_dir "./datasets/loco/" \
   --anomaly_maps_dir "./outputs/${folder_name}/output_${timestamp}/anomaly_maps/mvtec_loco/" \
   --output_dir "./outputs/${folder_name}/output_${timestamp}/metrics/mvtec_loco/" \
@@ -33,6 +33,6 @@ python -u mvtec_loco_ad_evaluation/evaluate_experiment.py \
   --generate_visual \
 
 ## FIXME: update timestamp
-##Log this job's resource usage stats###
+##Log this job's resource usage stats### 
 my-job-stats -a -n -s
 ##
