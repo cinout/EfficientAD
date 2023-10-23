@@ -12,6 +12,7 @@
 #SBATCH --job-name="train_bb"
 #SBATCH --account=punim1623
 #SBATCH --time=0-06:20:00
+### TODO: change time
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -34,7 +35,10 @@ python -u efficientad.py \
   --subdataset breakfast_box \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
   --note "baseline" \
-  --analysis_heatmap \
+  --seeds 10 20 30 \
+  --train_steps 10 \
+  # --analysis_heatmap \
+###TODO: change train_steps
 
 # FIXME: update job-name, weights, pretrained_network, subdataset, note
 ##Log this job's resource usage stats###

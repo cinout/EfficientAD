@@ -134,16 +134,15 @@ def get_argparse():
 
     parser.add_argument("-t", "--train_steps", type=int, default=70000)
     parser.add_argument("--note", type=str, default="")
+    # TODO: add to slurm
+    parser.add_argument("--seeds", type=int, default=[42], nargs="+")
     return parser.parse_args()
 
 
 # constants
-seed = 42
 on_gpu = torch.cuda.is_available()
 device = "cuda" if on_gpu else "cpu"
 image_size = 256
-
-# data loading
 
 
 def process_vit_features(features):
@@ -248,23 +247,22 @@ def train_transform(image, config):
         )
 
 
-def main():
+def main(config, seed):
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
-
-    config = get_argparse()
+    torch.cuda.manual_seed_all(seed)
 
     if config.subdataset == "breakfast_box":
-        config.output_dir = config.output_dir + "_[bb]"
+        config.output_dir = config.output_dir + f"_sd{seed}" + "_[bb]"
     elif config.subdataset == "juice_bottle":
-        config.output_dir = config.output_dir + "_[jb]"
+        config.output_dir = config.output_dir + f"_sd{seed}" + "_[jb]"
     elif config.subdataset == "pushpins":
-        config.output_dir = config.output_dir + "_[pp]"
+        config.output_dir = config.output_dir + f"_sd{seed}" + "_[pp]"
     elif config.subdataset == "screw_bag":
-        config.output_dir = config.output_dir + "_[sb]"
+        config.output_dir = config.output_dir + f"_sd{seed}" + "_[sb]"
     elif config.subdataset == "splicing_connectors":
-        config.output_dir = config.output_dir + "_[sc]"
+        config.output_dir = config.output_dir + f"_sd{seed}" + "_[sc]"
     else:
         raise ValueError(f"unknown subdataset name {config.subdataset}")
 
@@ -986,4 +984,6 @@ def teacher_normalization(teacher, train_loader, config):
 
 
 if __name__ == "__main__":
-    main()
+    config = get_argparse()
+    for seed in config.seeds:
+        main(config, seed)
