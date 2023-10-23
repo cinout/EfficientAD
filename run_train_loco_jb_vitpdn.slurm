@@ -1,15 +1,15 @@
 #!/bin/bash
 
-###SBATCH --partition=gpu-a100
+#SBATCH --partition=gpu-a100
 
 ###SBATCH --partition=feit-gpu-a100
 ###SBATCH --qos=feit
 
-#SBATCH --partition=deeplearn
-#SBATCH --qos=gpgpudeeplearn
-#SBATCH --constraint=dlg4|dlg5
+###SBATCH --partition=deeplearn
+###SBATCH --qos=gpgpudeeplearn
+###SBATCH --constraint=dlg4|dlg5
 
-#SBATCH --job-name="train_sc"
+#SBATCH --job-name="train_jb"
 #SBATCH --account=punim1623
 #SBATCH --time=0-18:00:00
 
@@ -31,11 +31,13 @@ set -x
 
 python -u efficientad.py \
   --dataset mvtec_loco \
-  --subdataset splicing_connectors \
+  --subdataset juice_bottle \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
-  --note "baseline" \
+  --note "vitpretrainedpdn" \
   --seeds 10 20 30 \
   --analysis_heatmap \
+  --pretrained_network vit \
+  --weights ./pretrained_pdn/pretrained_pdn_vit_lastlayer_bs8_sz512/teacher_small_state_vit_b16.pth \
 
 # FIXME: update job-name, weights, pretrained_network, subdataset, note
 ##Log this job's resource usage stats###

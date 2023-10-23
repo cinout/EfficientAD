@@ -35,7 +35,7 @@ python -u efficientad.py \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
   --note "baseline" \
   --seeds 10 20 30 \
-  # --analysis_heatmap \
+  --analysis_heatmap \
 
 # FIXME: update job-name, weights, pretrained_network, subdataset, note
 ##Log this job's resource usage stats###
