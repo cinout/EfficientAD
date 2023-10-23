@@ -11,7 +11,7 @@
 
 #SBATCH --job-name="train_jb"
 #SBATCH --account=punim1623
-#SBATCH --time=0-06:20:00
+#SBATCH --time=0-18:00:00
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -34,7 +34,8 @@ python -u efficientad.py \
   --subdataset juice_bottle \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
   --note "baseline" \
-  --analysis_heatmap \
+  --seeds 10 20 30 \
+  # --analysis_heatmap \
 
 # FIXME: update job-name, weights, pretrained_network, subdataset, note
 ##Log this job's resource usage stats###

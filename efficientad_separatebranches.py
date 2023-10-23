@@ -105,14 +105,14 @@ def get_argparse():
         action="store_true",
         help="if set to True, then use final stage output",
     )
-
+    # TODO: add to slurm
+    parser.add_argument("--seeds", type=int, default=[42], nargs="+")
     parser.add_argument("-t", "--train_steps", type=int, default=70000)
     parser.add_argument("--note", type=str, default="")
     return parser.parse_args()
 
 
 # constants
-seed = 42
 on_gpu = torch.cuda.is_available()
 device = "cuda" if on_gpu else "cpu"
 image_size = 256
@@ -198,23 +198,22 @@ def train_transform(image, config):
     )
 
 
-def main():
+def main(config, seed):
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
-
-    config = get_argparse()
+    torch.cuda.manual_seed_all(seed)
 
     if config.subdataset == "breakfast_box":
-        config.output_dir = config.output_dir + "_[bb]"
+        output_dir = config.output_dir + f"_sd{seed}" + "_[bb]"
     elif config.subdataset == "juice_bottle":
-        config.output_dir = config.output_dir + "_[jb]"
+        output_dir = config.output_dir + f"_sd{seed}" + "_[jb]"
     elif config.subdataset == "pushpins":
-        config.output_dir = config.output_dir + "_[pp]"
+        output_dir = config.output_dir + f"_sd{seed}" + "_[pp]"
     elif config.subdataset == "screw_bag":
-        config.output_dir = config.output_dir + "_[sb]"
+        output_dir = config.output_dir + f"_sd{seed}" + "_[sb]"
     elif config.subdataset == "splicing_connectors":
-        config.output_dir = config.output_dir + "_[sc]"
+        output_dir = config.output_dir + f"_sd{seed}" + "_[sc]"
     else:
         raise ValueError(f"unknown subdataset name {config.subdataset}")
 
@@ -235,10 +234,10 @@ def main():
 
     # create output dir
     train_output_dir = os.path.join(
-        config.output_dir, "trainings", config.dataset, config.subdataset
+        output_dir, "trainings", config.dataset, config.subdataset
     )
     test_output_dir = os.path.join(
-        config.output_dir, "anomaly_maps", config.dataset, config.subdataset, "test"
+        output_dir, "anomaly_maps", config.dataset, config.subdataset, "test"
     )
     os.makedirs(train_output_dir)
     os.makedirs(test_output_dir)
@@ -569,6 +568,7 @@ def main():
         q_logical_start=q_logical_start,
         q_logical_end=q_logical_end,
         config=config,
+        output_dir=output_dir,
         test_output_dir=test_output_dir,
         desc="Final inference",
     )
@@ -599,6 +599,7 @@ def test(
     q_logical_start,
     q_logical_end,
     config,
+    output_dir,
     test_output_dir=None,
     desc="Running inference",
 ):
@@ -683,7 +684,7 @@ def test(
         map_comb_min = map_comb_min.cpu().numpy()
         map_comb_max = map_comb_max.cpu().numpy()
 
-        heatmap_folder = os.path.join(config.output_dir, "analysis_heatmap/")
+        heatmap_folder = os.path.join(output_dir, "analysis_heatmap/")
         os.makedirs(heatmap_folder, exist_ok=True)
 
         # output heatmaps for separate branches
@@ -1016,4 +1017,6 @@ def teacher_normalization(teacher_structural, teacher_logical, train_loader, con
 
 
 if __name__ == "__main__":
-    main()
+    config = get_argparse()
+    for seed in config.seeds:
+        main(config, seed)

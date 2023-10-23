@@ -254,7 +254,6 @@ def main(config, seed):
     torch.cuda.manual_seed_all(seed)
 
     if config.subdataset == "breakfast_box":
-        # TODO: fix
         output_dir = config.output_dir + f"_sd{seed}" + "_[bb]"
     elif config.subdataset == "juice_bottle":
         output_dir = config.output_dir + f"_sd{seed}" + "_[jb]"
