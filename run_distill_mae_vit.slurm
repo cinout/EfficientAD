@@ -39,12 +39,10 @@ set -e
 set -x
 
 srun python -u pretraining.py \
-  --network "pvt2_b2li" \
-  --batch_size 16  \
+  --network "mae_vit" \
+  --batch_size 8  \
   --extractor_input_size 512 \
-  --pvt2_stage3 \
-  --patchify \
-  --note "pvt, stage3 only, and patchify" \
+  --note "mae_vit, bs=8, size=512" \
 
 ##Log this job's resource usage stats###
 my-job-stats -a -n -s

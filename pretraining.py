@@ -26,6 +26,8 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from datetime import datetime
 from pvt_v2 import pvt_v2_b2_li
+from mae.pos_embed import interpolate_pos_embed
+import mae.models_vit as models_vit
 
 
 def get_argparse():
@@ -39,7 +41,7 @@ def get_argparse():
     )
     parser.add_argument(
         "--network",
-        choices=["wide_resnet101_2", "vit", "pvt2_b2li"],
+        choices=["wide_resnet101_2", "vit", "mae_vit", "pvt2_b2li"],
         type=str,
         default="wide_resnet101_2",
     )
@@ -237,11 +239,13 @@ def process_pvt_features(features, args):
         return features
 
 
-def process_vit_features(features, args):
+def process_vit_features(features, args, cls_token=False):
     target_size = 64
     out_channels = 768
 
-    features = features[:, 1:, :]
+    if cls_token:
+        features = features[:, 1:, :]
+
     B, N, C = features.shape
     H = int(math.sqrt(N))
     W = int(math.sqrt(N))
@@ -401,18 +405,11 @@ def main(args):
         input_transform_func = partial(train_transform, size=args.extractor_input_size)
         suffix = "pvt2_b2li"
 
-    elif args.network == "vit":
-        from urllib.request import urlretrieve
+    elif args.network in ["vit", "mae_vit"]:
         from vit_models.modeling import VisionTransformer, CONFIGS
 
         if not on_gpu or dist.get_rank() == 0:
             os.makedirs("vit_model_checkpoints", exist_ok=True)
-
-        if not os.path.isfile("vit_model_checkpoints/ViT-B_16-224.npz"):
-            urlretrieve(
-                "https://storage.googleapis.com/vit_models/imagenet21k+imagenet2012/ViT-B_16-224.npz",
-                "vit_model_checkpoints/ViT-B_16-224.npz",
-            )
 
         config = CONFIGS["ViT-B_16"]
         model = VisionTransformer(
@@ -423,14 +420,55 @@ def main(args):
             vis=True,
             vit_mid=args.vit_mid,
         )
-        model.load_from(np.load("vit_model_checkpoints/ViT-B_16-224.npz"))
-        extractor = torch.nn.Sequential(
-            *[model.transformer.embeddings, model.transformer.encoder]
-        )
+
+        if args.network == "vit":
+            from urllib.request import urlretrieve
+
+            if not os.path.isfile("vit_model_checkpoints/ViT-B_16-224.npz"):
+                urlretrieve(
+                    "https://storage.googleapis.com/vit_models/imagenet21k+imagenet2012/ViT-B_16-224.npz",
+                    "vit_model_checkpoints/ViT-B_16-224.npz",
+                )
+            model.load_from(np.load("vit_model_checkpoints/ViT-B_16-224.npz"))
+            extractor = torch.nn.Sequential(
+                *[model.transformer.embeddings, model.transformer.encoder]
+            )
+            suffix = "vit_b16"
+        elif args.network == "mae_vit":
+            model = models_vit.__dict__["vit_base_patch16"](
+                num_classes=1000,
+                drop_path_rate=0.1,
+                global_pool=False,
+                img_size=args.extractor_input_size,
+            )
+            checkpoint = torch.load(
+                "vit_model_checkpoints/mae_pretrain_vit_base.pth", map_location=device
+            )
+            checkpoint_model = checkpoint["model"]
+            state_dict = model.state_dict()
+            for k in ["head.weight", "head.bias"]:
+                if (
+                    k in checkpoint_model
+                    and checkpoint_model[k].shape != state_dict[k].shape
+                ):
+                    print(f"Removing key {k} from pretrained checkpoint")
+                    del checkpoint_model[k]
+
+            interpolate_pos_embed(model, checkpoint_model)
+            extractor = torch.nn.Sequential(
+                model.patch_embed,
+                model.pos_drop,
+                model.patch_drop,
+                model.norm_pre,
+                model.blocks,
+                model.norm,
+            )
+            suffix = "mae_vit_b16"
+
         extractor.eval()
         input_transform_func = partial(train_transform, size=args.extractor_input_size)
+        # TODO: double check
         out_channels = 768
-        suffix = "vit_b16"
 
     if args.pdn_size == "small":
         # pdn = get_pdn_small(out_channels, padding=True)
@@ -498,7 +536,10 @@ def main(args):
 
         if args.network == "vit":
             target = extractor(image_fe)[0]
-            target = process_vit_features(target, args)
+            target = process_vit_features(target, args, cls_token=True)
+        elif args.network == "mae_vit":
+            output = extractor(image_fe)
+            output = process_vit_features(output, args)
         elif args.network == "wide_resnet101_2":
             target = extractor.embed(image_fe)
         elif args.network == "pvt2_b2li":
@@ -554,6 +595,9 @@ def feature_normalization(args, extractor, train_loader, steps=10000):
 
             if args.network == "vit":
                 output = extractor(image_fe)[0]
+                output = process_vit_features(output, args, cls_token=True)
+            elif args.network == "mae_vit":
+                output = extractor(image_fe)
                 output = process_vit_features(output, args)
             elif args.network == "wide_resnet101_2":
                 output = extractor.embed(image_fe)
@@ -580,6 +624,9 @@ def feature_normalization(args, extractor, train_loader, steps=10000):
 
             if args.network == "vit":
                 output = extractor(image_fe)[0]
+                output = process_vit_features(output, args, cls_token=True)
+            elif args.network == "mae_vit":
+                output = extractor(image_fe)
                 output = process_vit_features(output, args)
             elif args.network == "wide_resnet101_2":
                 output = extractor.embed(image_fe)
