@@ -33,11 +33,12 @@ python -u efficientad.py \
   --dataset mvtec_loco \
   --subdataset breakfast_box \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
-  --note "vitpretrainedpdn" \
   --seeds 10 20 30 \
   --analysis_heatmap \
-  --pretrained_network vit \
-  --weights ./pretrained_pdn/pretrained_pdn_vit_lastlayer_bs8_sz512/teacher_small_state_vit_b16.pth \
+  --pretrained_network mae_vit \
+  --mae_vit_teacher \
+  --image_size_mae_vit_teacher 512 \
+  --note "mae_vit_as_teacher" \
 
 # FIXME: update job-name, weights, pretrained_network, subdataset, note
 ##Log this job's resource usage stats###

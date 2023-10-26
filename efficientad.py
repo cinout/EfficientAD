@@ -60,7 +60,7 @@ def get_argparse():
     parser.add_argument(
         "-m", "--model_size", default="small", choices=["small", "medium"]
     )
-    # TODO: import choice
+    # TODO: import choice (used when teacher pdn distilled knowledge in pretraining stage)
     parser.add_argument(
         "-w",
         "--weights",
@@ -86,7 +86,7 @@ def get_argparse():
         default="./datasets/loco",
         help="Downloaded Mvtec LOCO dataset",
     )
-    # TODO: important choice
+    # TODO: important choice (used in both xxxasteacher and xxxpretrainedPDN cases)
     parser.add_argument(
         "--pretrained_network",
         choices=["wide_resnet101_2", "vit", "mae_vit", "pvt2_b2li"],
@@ -120,7 +120,7 @@ def get_argparse():
         help="if set to True, then generate branch-wise analysis heatmap",
     )
 
-    # the following are necessary if teacher is directly a vit/pvt
+    # TODO: the following are necessary if teacher is directly a vit/pvt
     parser.add_argument(
         "--vit_teacher",
         action="store_true",
@@ -132,7 +132,7 @@ def get_argparse():
         action="store_true",
         help="if set to True, then use mae_vit for teacher",
     )
-    parser.add_argument("--image_size_vit_teacher", type=int, default=512)
+    parser.add_argument("--image_size_mae_vit_teacher", type=int, default=512)
     parser.add_argument(
         "--pvt2_teacher",
         action="store_true",
@@ -894,7 +894,7 @@ def predict(
     # no need as I commented out the code related to predict()
     if config.vit_teacher:
         teacher_output = teacher(image_teacher)[0]
-        teacher_output = process_vit_features(teacher_output,cls_token=True)
+        teacher_output = process_vit_features(teacher_output, cls_token=True)
     elif config.mae_vit_teacher:
         teacher_output = teacher(image_teacher)
         teacher_output = process_vit_features(teacher_output)
@@ -1008,7 +1008,7 @@ def teacher_normalization(teacher, train_loader, config):
 
         if config.vit_teacher:
             teacher_output = teacher(train_image)[0]
-            teacher_output = process_vit_features(teacher_output,cls_token=True)
+            teacher_output = process_vit_features(teacher_output, cls_token=True)
         elif config.mae_vit_teacher:
             teacher_output = teacher(train_image)
             teacher_output = process_vit_features(teacher_output)
@@ -1040,7 +1040,7 @@ def teacher_normalization(teacher, train_loader, config):
 
         if config.vit_teacher:
             teacher_output = teacher(train_image)[0]
-            teacher_output = process_vit_features(teacher_output,cls_token=True)
+            teacher_output = process_vit_features(teacher_output, cls_token=True)
         elif config.mae_vit_teacher:
             teacher_output = teacher(train_image)
             teacher_output = process_vit_features(teacher_output)
