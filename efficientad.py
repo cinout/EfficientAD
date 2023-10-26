@@ -440,9 +440,9 @@ def main(config, seed):
             interpolate_pos_embed(model, checkpoint_model)
             teacher = torch.nn.Sequential(
                 model.patch_embed,
-                model.pos_drop,
-                model.patch_drop,
-                model.norm_pre,
+                # model.pos_drop,
+                # model.patch_drop,
+                # model.norm_pre,
                 model.blocks,
                 model.norm,
             )
