@@ -20,8 +20,8 @@ module purge
 eval "$(conda shell.bash hook)"
 conda activate ds2
 
-timestamp="20231023_221456_10_63_sd20_[bb]"
-folder_name="folder_vitpdn_run4"
+timestamp="20231026_202920_76_100_sd20_[bb]"
+folder_name="folder_maevitteacher_run2"
 
 python -u mvtec_loco_ad_evaluation/evaluate_experiment.py \
   --object_name "breakfast_box" \
