@@ -11,7 +11,7 @@
 
 #SBATCH --job-name="pvt_patch"
 #SBATCH --account=punim1623
-#SBATCH --time=1-00:00:00
+#SBATCH --time=0-10:00:00
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=2
