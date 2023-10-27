@@ -538,8 +538,8 @@ def main(args):
             target = extractor(image_fe)[0]
             target = process_vit_features(target, args, cls_token=True)
         elif args.network == "mae_vit":
-            output = extractor(image_fe)
-            output = process_vit_features(output, args)
+            target = extractor(image_fe)
+            target = process_vit_features(target, args)
         elif args.network == "wide_resnet101_2":
             target = extractor.embed(image_fe)
         elif args.network == "pvt2_b2li":
