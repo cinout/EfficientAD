@@ -7,9 +7,9 @@
 
 #SBATCH --partition=deeplearn
 #SBATCH --qos=gpgpudeeplearn
-#SBATCH --constraint=dlg4|dlg5
+#SBATCH --constraint=dlg3|dlg4|dlg5
 
-#SBATCH --job-name="train_sc"
+#SBATCH --job-name="core_bb"
 #SBATCH --account=punim1623
 #SBATCH --time=0-02:00:00
 
@@ -32,7 +32,7 @@ set -x
 python -u coreset_generate.py \
   --subdataset "breakfast_box" \
 
-# FIXME: update job-name, weights, pretrained_network, subdataset, note
+# FIXME: update job-name, subdataset, note
 ##Log this job's resource usage stats###
 my-job-stats -a -n -s
 ##
