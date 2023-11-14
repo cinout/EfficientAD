@@ -11,7 +11,6 @@ from common import (
     ImageFolderWithoutTarget,
 )
 from datetime import datetime
-from torchvision.models import Wide_ResNet101_2_Weights
 import copy
 import torch.nn.functional as F
 
@@ -85,6 +84,8 @@ def main(config):
     """
     feature extractor
     """
+    from torchvision.models import Wide_ResNet101_2_Weights
+
     backbone = torchvision.models.wide_resnet101_2(
         weights=Wide_ResNet101_2_Weights.IMAGENET1K_V1
     )
