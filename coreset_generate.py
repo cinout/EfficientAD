@@ -127,14 +127,16 @@ def main(config):
         output = extractor.embed(image)  # shape: (bs, out_channel*16*16)
         train_image_features.append(output)
 
-    train_image_features = torch.cat(train_image_features, dim=0)
-    print(train_image_features.shape)
+    train_image_features = torch.cat(
+        train_image_features, dim=0
+    )  # shape: [#images, 4096]
 
     coresetsampler = GreedyCoresetSampler(
         percentage=0.02, device=device, dimension_to_project_features_to=1024
     )
 
     sample_indices = coresetsampler.run(train_image_features)
+    print(config.subdataset)
     print(sample_indices)
 
 

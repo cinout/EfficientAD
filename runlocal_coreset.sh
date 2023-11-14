@@ -1,3 +1,3 @@
 python -u coreset_generate.py \
-  --subdataset "breakfast_box" \
+  --subdataset "screw_bag" \
   --batch_size 2 \

@@ -1,3 +1,9 @@
+# My Personal Packages
+
+python=3.9
+conda install --insecure pytorch==1.12.1 torchvision==0.13.1 cudatoolkit=11.3 -c pytorch
+pip install torch==1.12.1+cu113 torchvision==0.13.1+cu113 --extra-index-url https://download.pytorch.org/whl/cu113
+
 # EfficientAD
 
 Unofficial implementation of paper https://arxiv.org/abs/2303.14535
