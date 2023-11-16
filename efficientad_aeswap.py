@@ -213,7 +213,7 @@ def generate_ae_output(
             [t[0] != k[0] and t[1] != k[1] for k in swap_guide]
         ):
             swap_guide.append(t)
-    
+
     # perform replacing
     for index_ae, index_ref in swap_guide:
         image_ae_features[:, index_ae] = closest_ref_features[:, index_ref]
@@ -348,6 +348,7 @@ def main(config, seed):
         backbone.layer3,
         backbone.layer4,
     )
+    feature_extractor.to(device)
     feature_extractor.eval()
     ref_loader = DataLoader(
         ImageFolderWithPath(
