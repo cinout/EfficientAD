@@ -199,7 +199,7 @@ def generate_ae_output(
         image_ae_features.T, closest_ref_features
     )  # shape: [H*W, H*W]
     similarity_matrix = similarity_matrix.flatten()
-    descending_similarity = torch.argsort(similarity_matrix, descending=True).numpy()
+    descending_similarity = torch.argsort(similarity_matrix, descending=True).cpu().numpy()
 
     # turn absolute index into (row, col) index
     similarity_desc_index = [
