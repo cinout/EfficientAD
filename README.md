@@ -1,8 +1,18 @@
 # My Personal Packages
 
 python=3.9
-conda install --insecure pytorch==1.12.1 torchvision==0.13.1 cudatoolkit=11.3 -c pytorch
+
+<!-- conda install --insecure pytorch==1.12.1 torchvision==0.13.1 cudatoolkit=11.3 -c pytorch -->
+
+conda install -c conda-forge tqdm
 pip install torch==1.12.1+cu113 torchvision==0.13.1+cu113 --extra-index-url https://download.pytorch.org/whl/cu113
+conda install -c conda-forge tifffile
+conda install scikit-learn
+
+<!-- conda install -c conda-forge opencv -->
+
+pip install opencv-python
+conda install -c conda-forge tabulate
 
 # EfficientAD
 

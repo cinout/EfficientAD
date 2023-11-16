@@ -149,6 +149,118 @@ class VectorQuantizerEMA(nn.Module):
 #     )
 
 
+class AESwap(nn.Module):
+    def __init__(self, out_channels) -> None:
+        super().__init__()
+        self.out_channels = out_channels
+
+        # common
+        self.relu = nn.ReLU(inplace=True)
+
+        self.enc_conv1 = nn.Conv2d(
+            in_channels=2048, out_channels=512, kernel_size=4, stride=2, padding=1
+        )
+        self.enc_conv2 = nn.Conv2d(
+            in_channels=512, out_channels=128, kernel_size=4, stride=2, padding=1
+        )
+        self.enc_conv3 = nn.Conv2d(
+            in_channels=128, out_channels=64, kernel_size=4, stride=2, padding=0
+        )
+
+        # decoder
+        self.dropout = nn.Dropout(0.2)
+        self.dec_up1 = nn.Upsample(size=3, mode="bilinear")
+        self.dec_up2 = nn.Upsample(size=8, mode="bilinear")
+        self.dec_up3 = nn.Upsample(size=15, mode="bilinear")
+        self.dec_up4 = nn.Upsample(size=32, mode="bilinear")
+        self.dec_up5 = nn.Upsample(size=63, mode="bilinear")
+        self.dec_up6 = nn.Upsample(size=127, mode="bilinear")
+        self.dec_up7 = nn.Upsample(
+            size=64, mode="bilinear"
+        )  # size=64 if padding==True else size=64-8
+
+        self.dec_conv1 = nn.Conv2d(
+            in_channels=64, out_channels=64, kernel_size=4, stride=1, padding=2
+        )
+        self.dec_conv2 = nn.Conv2d(
+            in_channels=64, out_channels=64, kernel_size=4, stride=1, padding=2
+        )
+        self.dec_conv3 = nn.Conv2d(
+            in_channels=64, out_channels=64, kernel_size=4, stride=1, padding=2
+        )
+        self.dec_conv4 = nn.Conv2d(
+            in_channels=64, out_channels=64, kernel_size=4, stride=1, padding=2
+        )
+        self.dec_conv5 = nn.Conv2d(
+            in_channels=64, out_channels=64, kernel_size=4, stride=1, padding=2
+        )
+        self.dec_conv6 = nn.Conv2d(
+            in_channels=64, out_channels=64, kernel_size=4, stride=1, padding=2
+        )
+        self.dec_conv7 = nn.Conv2d(
+            in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1
+        )
+        self.dec_conv8 = nn.Conv2d(
+            in_channels=64,
+            out_channels=out_channels,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+        )
+
+    def forward(self, x):
+        """
+        x: [1, 2048, 16, 16]
+        """
+        # encoder
+        x = self.enc_conv1(x)
+        x = self.relu(x)  # shape: [1, 512, 8, 8]
+
+        x = self.enc_conv2(x)
+        x = self.relu(x)  # shape: [1, 128, 4, 4]
+
+        x = self.enc_conv3(x)  # target shape: [1, 64, 1, 1]
+
+        # decoder
+        x = self.dec_up1(x)
+        x = self.dec_conv1(x)
+        x = self.relu(x)
+        x = self.dropout(x)  # shape: [1, 64, 4, 4]
+
+        x = self.dec_up2(x)
+        x = self.dec_conv2(x)
+        x = self.relu(x)
+        x = self.dropout(x)  # shape: [1, 64, 9, 9]
+
+        x = self.dec_up3(x)
+        x = self.dec_conv3(x)
+        x = self.relu(x)
+        x = self.dropout(x)  # shape: [1, 64, 16, 16]
+
+        x = self.dec_up4(x)
+        x = self.dec_conv4(x)
+        x = self.relu(x)
+        x = self.dropout(x)  # shape: [1, 64, 33, 33]
+
+        x = self.dec_up5(x)
+        x = self.dec_conv5(x)
+        x = self.relu(x)
+        x = self.dropout(x)  # shape: [1, 64, 64, 64]
+
+        x = self.dec_up6(x)
+        x = self.dec_conv6(x)
+        x = self.relu(x)
+        x = self.dropout(x)  # shape: [1, 64, 128, 128]
+
+        x = self.dec_up7(x)
+        x = self.dec_conv7(x)
+        x = self.relu(x)  # shape: [1, 64, 64, 64]
+
+        x = self.dec_conv8(x)  # shape: [1, 384, 64, 64]
+
+        return x
+
+
 class Autoencoder(nn.Module):
     def __init__(self, out_channels=384) -> None:
         super().__init__()

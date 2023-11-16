@@ -116,7 +116,7 @@ def main(config):
         train_set,
         batch_size=config.batch_size,
         shuffle=False,
-        num_workers=4,
+        num_workers=1,
         pin_memory=True,
     )
     # TODO: do I need to feature_normalization in channel direction?

@@ -9,9 +9,9 @@
 #SBATCH --qos=gpgpudeeplearn
 #SBATCH --constraint=dlg4|dlg5
 
-#SBATCH --job-name="train_bb"
+#SBATCH --job-name="train_jb"
 #SBATCH --account=punim1623
-#SBATCH --time=0-15:00:00
+#SBATCH --time=0-00:40:00
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -29,15 +29,16 @@ conda activate eff
 set -e
 set -x
 
-python -u efficientad.py \
+python -u efficientad_aeswap.py \
+  --train_steps 20 \
   --dataset mvtec_loco \
-  --subdataset breakfast_box \
+  --subdataset juice_bottle \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
-  --note "baseline" \
+  --note "aeswap" \
   --seeds 10 20 30 \
   --analysis_heatmap \
 
-# FIXME: update job-name, weights, pretrained_network, subdataset, note
+# FIXME: update job-name, subdataset, note
 ##Log this job's resource usage stats###
 my-job-stats -a -n -s
 ##
