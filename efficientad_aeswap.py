@@ -367,6 +367,7 @@ def main(config, seed):
         image_id = (path[0].split("/")[-1]).split(".")[0]
         if image_id in ref_ids:
             _, image = images
+            image = image.to(device)
             feature = feature_extractor(image)  # shape: [1, 2048, 16, 16]
             ref_features[image_id] = feature
     """
