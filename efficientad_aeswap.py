@@ -223,7 +223,7 @@ def generate_ae_output(
         image_ae_features[:, index_ae] = closest_ref_features[:, index_ref]
 
     # ae features after replacing
-    image_ae_features = image_ae_features.reshape(C, H, W).unsqueeze(0)
+    image_ae_features = image_ae_features.reshape(C, H, W).unsqueeze(0).detach()
 
     return autoencoder(image_ae_features)
 
@@ -372,7 +372,7 @@ def main(config, seed):
         if image_id in ref_ids:
             _, image = images
             image = image.to(device)
-            feature = feature_extractor(image)  # shape: [1, 2048, 16, 16]
+            feature = feature_extractor(image).detach()  # shape: [1, 2048, 16, 16]
             ref_features[image_id] = feature
     """
     # create models
