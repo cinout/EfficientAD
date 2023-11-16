@@ -1,15 +1,15 @@
 #!/bin/bash
 
-###SBATCH --partition=gpu-a100
+#SBATCH --partition=gpu-a100
 
-#SBATCH --partition=feit-gpu-a100
-#SBATCH --qos=feit
+###SBATCH --partition=feit-gpu-a100
+###SBATCH --qos=feit
 
 ###SBATCH --partition=deeplearn
 ###SBATCH --qos=gpgpudeeplearn
 ###SBATCH --constraint=dlg4|dlg5
 
-#SBATCH --job-name="train_jb"
+#SBATCH --job-name="train_sc"
 #SBATCH --account=punim1623
 #SBATCH --time=0-20:00:00
 
@@ -31,7 +31,7 @@ set -x
 
 python -u efficientad_aeswap.py \
   --dataset mvtec_loco \
-  --subdataset juice_bottle \
+  --subdataset splicing_connectors \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
   --note "aeswap" \
   --seeds 10 20 30 \
