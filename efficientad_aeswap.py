@@ -199,7 +199,9 @@ def generate_ae_output(
         image_ae_features.T, closest_ref_features
     )  # shape: [H*W, H*W]
     similarity_matrix = similarity_matrix.flatten()
-    descending_similarity = torch.argsort(similarity_matrix, descending=True).cpu().numpy()
+    descending_similarity = (
+        torch.argsort(similarity_matrix, descending=True).cpu().numpy()
+    )
 
     # turn absolute index into (row, col) index
     similarity_desc_index = [
@@ -216,6 +218,7 @@ def generate_ae_output(
 
     assert len(swap_guide) == H * W, "length of swap_guide is incorrect"
     # perform replacing
+    image_ae_features = image_ae_features.clone()
     for index_ae, index_ref in swap_guide:
         image_ae_features[:, index_ae] = closest_ref_features[:, index_ref]
 
@@ -351,6 +354,7 @@ def main(config, seed):
     )
     feature_extractor.to(device)
     feature_extractor.eval()
+
     ref_loader = DataLoader(
         ImageFolderWithPath(
             os.path.join(dataset_path, config.subdataset, "train"),
