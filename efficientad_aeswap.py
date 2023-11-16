@@ -214,6 +214,7 @@ def generate_ae_output(
         ):
             swap_guide.append(t)
 
+    assert len(swap_guide) == H * W, "length of swap_guide is incorrect"
     # perform replacing
     for index_ae, index_ref in swap_guide:
         image_ae_features[:, index_ae] = closest_ref_features[:, index_ref]
