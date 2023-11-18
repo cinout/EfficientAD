@@ -150,22 +150,32 @@ class VectorQuantizerEMA(nn.Module):
 
 
 class AESwap(nn.Module):
-    def __init__(self, out_channels) -> None:
+    def __init__(self, out_channels, config) -> None:
         super().__init__()
+        self.reduce_channel_dim = config.reduce_channel_dim
         self.out_channels = out_channels
 
         # common
         self.relu = nn.ReLU(inplace=True)
 
-        self.enc_conv1 = nn.Conv2d(
-            in_channels=2048, out_channels=512, kernel_size=4, stride=2, padding=1
-        )
-        self.enc_conv2 = nn.Conv2d(
-            in_channels=512, out_channels=128, kernel_size=4, stride=2, padding=1
-        )
-        self.enc_conv3 = nn.Conv2d(
-            in_channels=128, out_channels=64, kernel_size=4, stride=2, padding=0
-        )
+        # encoder
+        if self.reduce_channel_dim:
+            self.enc_conv1 = nn.Conv2d(
+                in_channels=64, out_channels=64, kernel_size=4, stride=4, padding=0
+            )
+            self.enc_conv2 = nn.Conv2d(
+                in_channels=64, out_channels=64, kernel_size=4, stride=4, padding=0
+            )
+        else:
+            self.enc_conv1 = nn.Conv2d(
+                in_channels=2048, out_channels=512, kernel_size=4, stride=2, padding=1
+            )
+            self.enc_conv2 = nn.Conv2d(
+                in_channels=512, out_channels=128, kernel_size=4, stride=2, padding=1
+            )
+            self.enc_conv3 = nn.Conv2d(
+                in_channels=128, out_channels=64, kernel_size=4, stride=2, padding=0
+            )
 
         # decoder
         self.dropout = nn.Dropout(0.2)
@@ -213,13 +223,19 @@ class AESwap(nn.Module):
         x: [1, 2048, 16, 16]
         """
         # encoder
-        x = self.enc_conv1(x)
-        x = self.relu(x)  # shape: [1, 512, 8, 8]
+        if self.reduce_channel_dim:
+            x = self.enc_conv1(x)  # shape: [1, 64, 4, 4]
+            x = self.relu(x)
 
-        x = self.enc_conv2(x)
-        x = self.relu(x)  # shape: [1, 128, 4, 4]
+            x = self.enc_conv2(x)  # target shape: [1, 64, 1, 1]
+        else:
+            x = self.enc_conv1(x)
+            x = self.relu(x)  # shape: [1, 512, 8, 8]
 
-        x = self.enc_conv3(x)  # target shape: [1, 64, 1, 1]
+            x = self.enc_conv2(x)
+            x = self.relu(x)  # shape: [1, 128, 4, 4]
+
+            x = self.enc_conv3(x)  # target shape: [1, 64, 1, 1]
 
         # decoder
         x = self.dec_up1(x)

@@ -161,10 +161,11 @@ def generate_ae_output(
         B, C, H, W = image_ae_features.shape
         image_ae_features = image_ae_features.reshape(B, C, -1)
         image_ae_features = image_ae_features.transpose(1, 2)
-        image_ae_features = F.adaptive_avg_pool1d(image_ae_features, output_size=reduced_c_dim)
+        image_ae_features = F.adaptive_avg_pool1d(
+            image_ae_features, output_size=reduced_c_dim
+        )
         image_ae_features = image_ae_features.transpose(1, 2)
         image_ae_features = image_ae_features.reshape(B, reduced_c_dim, H, W)
-
 
     closest_ref_features = None
     max_similarity = -1000
@@ -207,9 +208,7 @@ def generate_ae_output(
     # )
 
     B, C, H, W = image_ae_features.shape
-    image_ae_features = image_ae_features.squeeze(0).reshape(
-        C, -1
-    )  # shape: [C, H*W]
+    image_ae_features = image_ae_features.squeeze(0).reshape(C, -1)  # shape: [C, H*W]
     closest_ref_features = closest_ref_features.squeeze(0).reshape(
         C, -1
     )  # shape: [C, H*W]
@@ -391,7 +390,7 @@ def main(config, seed):
             _, image = images
             image = image.to(device)
             feature = feature_extractor(image).detach()  # shape: [1, 2048, 16, 16]
-            # TODO: decide if we should reduce c dim here
+            
             if config.reduce_channel_dim:
                 B, C, H, W = feature.shape
                 feature = feature.reshape(B, C, -1)
@@ -440,7 +439,7 @@ def main(config, seed):
     else:
         raise Exception("pretrained_network is unrecognizable")
 
-    autoencoder = AESwap(out_channels)
+    autoencoder = AESwap(out_channels, config)
 
     # teacher frozen
     teacher.eval()
@@ -453,11 +452,11 @@ def main(config, seed):
         autoencoder.cuda()
 
     # TODO:
-    # teacher_mean, teacher_std = teacher_normalization(teacher, train_loader, config)
-    with open("teacher_mean_jb_respretrainedPDN.t", "rb") as f:
-        teacher_mean = torch.load(f)
-    with open("teacher_std_jb_respretrainedPDN.t", "rb") as f:
-        teacher_std = torch.load(f)
+    teacher_mean, teacher_std = teacher_normalization(teacher, train_loader, config)
+    # with open("teacher_mean_jb_respretrainedPDN.t", "rb") as f:
+    #     teacher_mean = torch.load(f)
+    # with open("teacher_std_jb_respretrainedPDN.t", "rb") as f:
+    #     teacher_std = torch.load(f)
 
     optimizer = torch.optim.Adam(
         itertools.chain(student.parameters(), autoencoder.parameters()),
