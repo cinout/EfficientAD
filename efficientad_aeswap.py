@@ -301,7 +301,7 @@ def main(config, seed):
         raise Exception("Unknown config.dataset")
 
     train_loader = DataLoader(
-        train_set, batch_size=1, shuffle=True, num_workers=4, pin_memory=True
+        train_set, batch_size=1, shuffle=True, num_workers=1, pin_memory=True
     )
 
     train_loader_infinite = InfiniteDataloader(train_loader)
@@ -324,7 +324,7 @@ def main(config, seed):
             config.imagenet_train_path, transform=penalty_transform
         )
         penalty_loader = DataLoader(
-            penalty_set, batch_size=1, shuffle=True, num_workers=4, pin_memory=True
+            penalty_set, batch_size=1, shuffle=True, num_workers=1, pin_memory=True
         )
         penalty_loader_infinite = InfiniteDataloader(penalty_loader)
     else:
@@ -362,7 +362,7 @@ def main(config, seed):
         ),
         batch_size=1,
         shuffle=False,
-        num_workers=4,
+        num_workers=1,
         pin_memory=True,
     )
 
