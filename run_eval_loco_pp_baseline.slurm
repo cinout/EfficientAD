@@ -2,7 +2,7 @@
 
 #SBATCH --partition=cascade
 
-#SBATCH --job-name="eval_jb"
+#SBATCH --job-name="eval_pp"
 #SBATCH --account=punim1623
 #SBATCH --time=0-01:10:00
 
@@ -20,11 +20,11 @@ module purge
 eval "$(conda shell.bash hook)"
 conda activate eff
 
-timestamp="20231027_210601_57_88_sd20_[jb]"
-folder_name="folder_maepdn_run2"
+timestamp="20231023_184725_73_72_sd10_[pp]"
+folder_name="folder_default_run3"
 
 python -u mvtec_loco_ad_evaluation/evaluate_experiment.py \
-  --object_name "juice_bottle" \
+  --object_name "pushpins" \
   --dataset_base_dir "./datasets/loco/" \
   --anomaly_maps_dir "./outputs/${folder_name}/output_${timestamp}/anomaly_maps/mvtec_loco/" \
   --output_dir "./outputs/${folder_name}/output_${timestamp}/metrics/mvtec_loco/" \
