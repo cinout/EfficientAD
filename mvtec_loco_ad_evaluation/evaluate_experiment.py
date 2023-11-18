@@ -148,18 +148,18 @@ def main():
         defects_config=defects_config,
     )
 
-    anomaly_maps_values = [i.np_array for i in anomaly_maps]
-    anomaly_maps_values = np.stack(anomaly_maps_values, axis=0)
-
-    minval = np.min(anomaly_maps_values)
-    maxval = np.max(anomaly_maps_values)
-
     """
     >>>>>>>>>>>>>>>>
     generate visual maps
     >>>>>>>>>>>>>>>>
     """
     if args.generate_visual:
+        anomaly_maps_values = [i.np_array for i in anomaly_maps]
+        anomaly_maps_values = np.stack(anomaly_maps_values, axis=0)
+
+        minval = np.min(anomaly_maps_values)
+        maxval = np.max(anomaly_maps_values)
+
         subclass = args.object_name
         timestamp = args.timestamp
         folder_name = args.folder_name
@@ -183,16 +183,29 @@ def main():
             raw_img = np.array(cv2.imread(raw_img_path, cv2.IMREAD_COLOR))
 
             # get heatmap
-            pred_mask = np.uint8(normalizeData(file_map, minval, maxval) * 255)
-            heatmap = cv2.applyColorMap(pred_mask, cv2.COLORMAP_JET)
-            hmap_overlay_gt_img = heatmap * heatmap_alpha + raw_img * (
-                1.0 - heatmap_alpha
-            )
+            for map_type in ["overall", "single"]:
+                if map_type == "overall":
+                    pred_mask = np.uint8(normalizeData(file_map, minval, maxval) * 255)
+                    heatmap_route = (
+                        f"{visual_folder}/{anomaly_type}_{filename}_heatmap.jpg"
+                    )
+                elif map_type == "single":
+                    pred_mask = np.uint8(
+                        normalizeData(file_map, np.min(file_map), np.max(file_map))
+                        * 255
+                    )
+                    heatmap_route = (
+                        f"{visual_folder}/{anomaly_type}_{filename}_heatmap_single.jpg"
+                    )
 
-            cv2.imwrite(
-                f"{visual_folder}/{anomaly_type}_{filename}_heatmap.jpg",
-                hmap_overlay_gt_img,
-            )
+                heatmap = cv2.applyColorMap(pred_mask, cv2.COLORMAP_JET)
+                hmap_overlay_gt_img = heatmap * heatmap_alpha + raw_img * (
+                    1.0 - heatmap_alpha
+                )
+                cv2.imwrite(
+                    heatmap_route,
+                    hmap_overlay_gt_img,
+                )
 
             if anomaly_type == "structural_anomalies":
                 # get structural gt mask

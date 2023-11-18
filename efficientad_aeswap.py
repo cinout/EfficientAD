@@ -6,6 +6,7 @@ import tifffile
 import torch
 from torch.utils.data import DataLoader
 from torchvision import transforms
+import torch.nn.functional as F
 import torchvision
 import argparse
 import itertools
@@ -49,6 +50,7 @@ ref_images = {
     "screw_bag": ["217", "147", "359", "311", "279", "246", "093"],
     "splicing_connectors": ["302", "023", "242", "214", "081", "331", "131"],
 }
+reduced_c_dim = 64  # only used if config.reduce_channel_dim==True
 
 
 def normalizeData(data, minval, maxval):
@@ -106,9 +108,17 @@ def get_argparse():
         action="store_true",
         help="if set to True, then generate branch-wise analysis heatmap",
     )
+    # TODO: add to slurm
+    parser.add_argument(
+        "--reduce_channel_dim",
+        action="store_true",
+        help="if set to True, then reduce channel dimension to 64 before swapping",
+    )
+
     parser.add_argument("-t", "--train_steps", type=int, default=70000)
     parser.add_argument("--note", type=str, default="")
     parser.add_argument("--seeds", type=int, default=[42], nargs="+")
+
     return parser.parse_args()
 
 
@@ -138,7 +148,7 @@ cos_sim = torch.nn.CosineSimilarity(dim=1)
 
 
 def generate_ae_output(
-    image_ae, ref_features, feature_extractor, autoencoder, path=None
+    config, image_ae, ref_features, feature_extractor, autoencoder, path=None
 ):
     """
     image_ae: tensor
@@ -147,6 +157,14 @@ def generate_ae_output(
     autoencoder: model
     """
     image_ae_features = feature_extractor(image_ae)
+    if config.reduce_channel_dim:
+        B, C, H, W = image_ae_features.shape
+        image_ae_features = image_ae_features.reshape(B, C, -1)
+        image_ae_features = image_ae_features.transpose(1, 2)
+        image_ae_features = F.adaptive_avg_pool1d(image_ae_features, output_size=reduced_c_dim)
+        image_ae_features = image_ae_features.transpose(1, 2)
+        image_ae_features = image_ae_features.reshape(B, reduced_c_dim, H, W)
+
 
     closest_ref_features = None
     max_similarity = -1000
@@ -191,7 +209,7 @@ def generate_ae_output(
     B, C, H, W = image_ae_features.shape
     image_ae_features = image_ae_features.squeeze(0).reshape(
         C, -1
-    )  # shape: [C, H*W] = [2048, 256]
+    )  # shape: [C, H*W]
     closest_ref_features = closest_ref_features.squeeze(0).reshape(
         C, -1
     )  # shape: [C, H*W]
@@ -373,6 +391,15 @@ def main(config, seed):
             _, image = images
             image = image.to(device)
             feature = feature_extractor(image).detach()  # shape: [1, 2048, 16, 16]
+            # TODO: decide if we should reduce c dim here
+            if config.reduce_channel_dim:
+                B, C, H, W = feature.shape
+                feature = feature.reshape(B, C, -1)
+                feature = feature.transpose(1, 2)
+                feature = F.adaptive_avg_pool1d(feature, output_size=reduced_c_dim)
+                feature = feature.transpose(1, 2)
+                feature = feature.reshape(B, reduced_c_dim, H, W)
+
             ref_features[image_id] = feature
     """
     # create models
@@ -425,11 +452,12 @@ def main(config, seed):
         student.cuda()
         autoencoder.cuda()
 
-    teacher_mean, teacher_std = teacher_normalization(teacher, train_loader, config)
-    # with open("teacher_mean_jb_respretrainedPDN.t", "rb") as f:
-    #     teacher_mean = torch.load(f)
-    # with open("teacher_std_jb_respretrainedPDN.t", "rb") as f:
-    #     teacher_std = torch.load(f)
+    # TODO:
+    # teacher_mean, teacher_std = teacher_normalization(teacher, train_loader, config)
+    with open("teacher_mean_jb_respretrainedPDN.t", "rb") as f:
+        teacher_mean = torch.load(f)
+    with open("teacher_std_jb_respretrainedPDN.t", "rb") as f:
+        teacher_std = torch.load(f)
 
     optimizer = torch.optim.Adam(
         itertools.chain(student.parameters(), autoencoder.parameters()),
@@ -474,7 +502,7 @@ def main(config, seed):
             loss_st = loss_hard
 
         ae_output = generate_ae_output(
-            image_ae, ref_features, feature_extractor, autoencoder, path
+            config, image_ae, ref_features, feature_extractor, autoencoder, path
         )
 
         # with torch.no_grad():
@@ -729,7 +757,7 @@ def predict(
     teacher_output = (teacher_output - teacher_mean) / teacher_std
     student_output = student(image)
     autoencoder_output = generate_ae_output(
-        image_ae, ref_features, feature_extractor, autoencoder
+        config, image_ae, ref_features, feature_extractor, autoencoder
     )
     map_st = torch.mean(
         (teacher_output - student_output[:, :out_channels]) ** 2, dim=1, keepdim=True
