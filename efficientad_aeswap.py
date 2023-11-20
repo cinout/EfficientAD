@@ -108,11 +108,15 @@ def get_argparse():
         action="store_true",
         help="if set to True, then generate branch-wise analysis heatmap",
     )
-    # TODO: add to slurm
     parser.add_argument(
         "--reduce_channel_dim",
         action="store_true",
         help="if set to True, then reduce channel dimension to 64 before swapping",
+    )
+    parser.add_argument(
+        "--norm_c",
+        action="store_true",
+        help="if set to True, then normalize channel values",
     )
 
     parser.add_argument("-t", "--train_steps", type=int, default=70000)
@@ -166,6 +170,9 @@ def generate_ae_output(
         )
         image_ae_features = image_ae_features.transpose(1, 2)
         image_ae_features = image_ae_features.reshape(B, reduced_c_dim, H, W)
+
+    if config.norm_c:
+        image_ae_features = F.normalize(image_ae_features, dim=1)
 
     closest_ref_features = None
     max_similarity = -1000
@@ -390,7 +397,7 @@ def main(config, seed):
             _, image = images
             image = image.to(device)
             feature = feature_extractor(image).detach()  # shape: [1, 2048, 16, 16]
-            
+
             if config.reduce_channel_dim:
                 B, C, H, W = feature.shape
                 feature = feature.reshape(B, C, -1)
@@ -398,6 +405,9 @@ def main(config, seed):
                 feature = F.adaptive_avg_pool1d(feature, output_size=reduced_c_dim)
                 feature = feature.transpose(1, 2)
                 feature = feature.reshape(B, reduced_c_dim, H, W)
+
+            if config.norm_c:
+                feature = F.normalize(feature, dim=1)
 
             ref_features[image_id] = feature
     """

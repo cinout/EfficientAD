@@ -36,7 +36,8 @@ python -u efficientad_aeswap.py \
   --note "aeswap" \
   --seeds 10 \
   --analysis_heatmap \
-  --reduce_channel_dim \
+  --norm_c \
+  # --reduce_channel_dim \
 
 # FIXME: update job-name, subdataset, note
 ##Log this job's resource usage stats###
