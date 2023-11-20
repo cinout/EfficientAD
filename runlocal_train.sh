@@ -1,6 +1,6 @@
 python -u efficientad_aeswap.py \
   --dataset mvtec_loco \
-  --subdataset splicing_connectors \
+  --subdataset breakfast_box \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
   --analysis_heatmap \
   --debug_mode \
@@ -10,4 +10,6 @@ python -u efficientad_aeswap.py \
 
 # breakfast_box
 # juice_bottle
+# pushpins
+# screw_bag
 # splicing_connectors

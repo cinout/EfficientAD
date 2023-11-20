@@ -34,6 +34,7 @@ python -u efficientad_aeswap.py \
   --subdataset breakfast_box \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
   --debug_mode \
+  --norm_c \
   # --train_steps 20 \
   # --note "aeswap" \
   # --seeds 10 20 30 \
