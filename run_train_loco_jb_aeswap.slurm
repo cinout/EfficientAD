@@ -11,7 +11,7 @@
 
 #SBATCH --job-name="train_jb"
 #SBATCH --account=punim1623
-#SBATCH --time=1-04:00:00
+#SBATCH --time=1-08:00:00
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
