@@ -3,7 +3,8 @@ python -u efficientad_aeswap.py \
   --subdataset splicing_connectors \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
   --analysis_heatmap \
-  --reduce_channel_dim \
+  # --norm_c \
+  # --reduce_channel_dim \
   # --seeds 10 20 30 \
 
 # breakfast_box

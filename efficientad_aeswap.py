@@ -26,6 +26,7 @@ from datetime import datetime
 from functools import partial
 from torchvision.models import Wide_ResNet101_2_Weights
 import cv2
+from PIL import Image
 
 
 """
@@ -118,6 +119,10 @@ def get_argparse():
         action="store_true",
         help="if set to True, then normalize channel values",
     )
+    parser.add_argument(
+        "--debug_mode",
+        action="store_true",
+    )
 
     parser.add_argument("-t", "--train_steps", type=int, default=70000)
     parser.add_argument("--note", type=str, default="")
@@ -152,7 +157,13 @@ cos_sim = torch.nn.CosineSimilarity(dim=1)
 
 
 def generate_ae_output(
-    config, image_ae, ref_features, feature_extractor, autoencoder, path=None
+    config,
+    image_ae,
+    ref_features,
+    feature_extractor,
+    autoencoder,
+    path=None,
+    debug=False,
 ):
     """
     image_ae: tensor
@@ -176,7 +187,8 @@ def generate_ae_output(
 
     closest_ref_features = None
     max_similarity = -1000
-    # closest_ref_id = None
+    if debug:
+        closest_ref_id = None
 
     for ref_id, ref_feature in ref_features.items():
         similarity = (
@@ -190,7 +202,8 @@ def generate_ae_output(
         if similarity > max_similarity:
             max_similarity = similarity
             closest_ref_features = ref_feature
-            # closest_ref_id = ref_id
+            if debug:
+                closest_ref_id = ref_id
 
     assert closest_ref_features is not None, "closest ref feature cannot be None"
     ## for debugging
@@ -241,15 +254,90 @@ def generate_ae_output(
             swap_guide.append(t)
 
     assert len(swap_guide) == H * W, "length of swap_guide is incorrect"
-    # perform replacing
-    image_ae_features = image_ae_features.clone()
-    for index_ae, index_ref in swap_guide:
-        image_ae_features[:, index_ae] = closest_ref_features[:, index_ref]
 
-    # ae features after replacing
-    image_ae_features = image_ae_features.reshape(C, H, W).unsqueeze(0).detach()
+    if debug:
+        # path example: "./datasets/loco/splicing_connectors/test/good/000.png"
+        # closest_ref_id example: "023"
 
-    return autoencoder(image_ae_features)
+        # generate input image
+        path_split = path.split("/")
+        condition = path_split[-2]
+        image_id = path_split[-1].split(".png")[0]
+        input_image = Image.open(path)
+        input_image.save(
+            os.path.join(config.debug_dir, f"input_{condition}_{image_id}.png"), "PNG"
+        )
+
+        # generate ref image
+        ref_image_path = os.path.join(
+            "./datasets/loco",
+            config.subdataset,
+            "train",
+            "good",
+            f"{closest_ref_id}.png",
+        )
+        ref_image = Image.open(ref_image_path)
+        ref_image.save(
+            os.path.join(
+                config.debug_dir,
+                f"input_{condition}_{image_id}_ref_{closest_ref_id}.png",
+            ),
+            "PNG",
+        )
+
+        # generate image after swapping
+        height = input_image.height
+        width = input_image.width
+        transform_ae = transforms.Compose(
+            [
+                transforms.Resize((image_size_ae, image_size_ae)),
+                transforms.ToTensor(),
+            ]
+        )
+        divider = 16
+        patch_resolution = int(image_size_ae / divider)
+
+        input_image = transform_ae(input_image)
+        ref_image = transform_ae(ref_image)
+
+        unfolding_op = torch.nn.Unfold(
+            kernel_size=patch_resolution, stride=patch_resolution
+        )
+        input_image = unfolding_op(
+            input_image
+        )  # [C*patch_resolution*patch_resolution, divider*divider]
+        ref_image = unfolding_op(ref_image)
+
+        for index_ae, index_ref in swap_guide:
+            input_image[:, index_ae] = ref_image[:, index_ref]
+
+        fold_op = torch.nn.Fold(
+            output_size=image_size_ae,
+            kernel_size=patch_resolution,
+            stride=patch_resolution,
+        )
+        input_image = fold_op(input_image)
+
+        input_image = np.array(input_image * 255, dtype=np.uint8)
+        input_image = np.transpose(input_image, (1, 2, 0))
+        input_image = Image.fromarray(input_image)
+        input_image = input_image.resize(size=(width, height))
+        input_image.save(
+            os.path.join(config.debug_dir, f"input_{condition}_{image_id}_swap.png"),
+            "PNG",
+        )
+
+        exit()
+    else:
+        # perform replacing
+        image_ae_features = image_ae_features.clone()
+        for index_ae, index_ref in swap_guide:
+            image_ae_features[:, index_ae] = closest_ref_features[:, index_ref]
+
+        # ae features after replacing
+        image_ae_features = image_ae_features.reshape(C, H, W).unsqueeze(0).detach()
+
+        return autoencoder(image_ae_features)
 
 
 def main(config, seed):
@@ -293,8 +381,11 @@ def main(config, seed):
     test_output_dir = os.path.join(
         output_dir, "anomaly_maps", config.dataset, config.subdataset, "test"
     )
+    debug_dir = os.path.join("debug", config.subdataset)
     os.makedirs(train_output_dir)
     os.makedirs(test_output_dir)
+    os.makedirs(debug_dir, exist_ok=True)
+    config.debug_dir = debug_dir
 
     """
     # load data
@@ -410,6 +501,7 @@ def main(config, seed):
                 feature = F.normalize(feature, dim=1)
 
             ref_features[image_id] = feature
+
     """
     # create models
     """
@@ -460,6 +552,42 @@ def main(config, seed):
         teacher.cuda()
         student.cuda()
         autoencoder.cuda()
+
+    """
+    debug mode
+    """
+    if config.debug_mode:
+        # # training images
+        # for train_images, _, path in train_loader_infinite:
+        #     (_, image_ae) = train_images
+        #     image_ae = image_ae.to(device)
+        #     ae_output = generate_ae_output(
+        #         config,
+        #         image_ae,
+        #         ref_features,
+        #         feature_extractor,
+        #         autoencoder,
+        #         path,
+        #         debug=True,
+        #     )
+
+        # test images
+        for raw_image, _, path in test_set:
+            images = train_transform(raw_image, config=config)
+            (_, image_ae) = images
+            image_ae = image_ae.unsqueeze(0)
+            image_ae = image_ae.to(device)
+
+            generate_ae_output(
+                config,
+                image_ae,
+                ref_features,
+                feature_extractor,
+                autoencoder,
+                path,
+                debug=True,
+            )
+        exit()
 
     # TODO:
     teacher_mean, teacher_std = teacher_normalization(teacher, train_loader, config)
