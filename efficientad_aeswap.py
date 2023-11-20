@@ -265,7 +265,8 @@ def generate_ae_output(
         image_id = path_split[-1].split(".png")[0]
         input_image = Image.open(path)
         input_image.save(
-            os.path.join(config.debug_dir, f"input_{condition}_{image_id}.png"), "PNG"
+            os.path.join(config.debug_dir, f"input_{condition}_{image_id}_origin.png"),
+            "PNG",
         )
 
         # generate ref image
@@ -297,19 +298,22 @@ def generate_ae_output(
         divider = 16
         patch_resolution = int(image_size_ae / divider)
 
-        input_image = transform_ae(input_image)
+        input_image = transform_ae(input_image)  # [3, 512, 512]
         ref_image = transform_ae(ref_image)
+
+        input_image = input_image.unsqueeze(0)  # [1, 3, 512, 512]
+        ref_image = ref_image.unsqueeze(0)
 
         unfolding_op = torch.nn.Unfold(
             kernel_size=patch_resolution, stride=patch_resolution
         )
         input_image = unfolding_op(
             input_image
-        )  # [C*patch_resolution*patch_resolution, divider*divider]
+        )  # [1, C*patch_resolution*patch_resolution, divider*divider]
         ref_image = unfolding_op(ref_image)
 
         for index_ae, index_ref in swap_guide:
-            input_image[:, index_ae] = ref_image[:, index_ref]
+            input_image[:, :, index_ae] = ref_image[:, :, index_ref]
 
         fold_op = torch.nn.Fold(
             output_size=image_size_ae,
@@ -317,6 +321,7 @@ def generate_ae_output(
             stride=patch_resolution,
         )
         input_image = fold_op(input_image)
+        input_image = input_image.squeeze(0)  # [3, 512, 512]
 
         input_image = np.array(input_image * 255, dtype=np.uint8)
         input_image = np.transpose(input_image, (1, 2, 0))
@@ -327,7 +332,6 @@ def generate_ae_output(
             "PNG",
         )
 
-        exit()
     else:
         # perform replacing
         image_ae_features = image_ae_features.clone()
