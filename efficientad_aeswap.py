@@ -9,6 +9,7 @@ from torchvision import transforms
 import torch.nn.functional as F
 import torchvision
 import argparse
+import copy
 import itertools
 import os
 import random
@@ -27,6 +28,11 @@ from functools import partial
 from torchvision.models import Wide_ResNet101_2_Weights
 import cv2
 from PIL import Image
+from recontrast import ReContrast
+from models.resnet import wide_resnet50_2
+from models.de_resnet import (
+    de_wide_resnet50_2,
+)
 
 
 """
@@ -35,7 +41,6 @@ Constants
 on_gpu = torch.cuda.is_available()
 device = "cuda" if on_gpu else "cpu"
 image_size = 256
-image_size_ae = 512
 heatmap_alpha = 0.5
 timestamp = (
     datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -127,6 +132,14 @@ def get_argparse():
     parser.add_argument("-t", "--train_steps", type=int, default=70000)
     parser.add_argument("--note", type=str, default="")
     parser.add_argument("--seeds", type=int, default=[42], nargs="+")
+    parser.add_argument(
+        "--image_size_ae",
+        type=int,
+        default=512,
+    )
+    parser.add_argument(
+        "--recontrast", action="store_true", help="use encoder from recontrast"
+    )
 
     return parser.parse_args()
 
@@ -142,7 +155,7 @@ def train_transform(image, config):
 
     transform_ae = transforms.Compose(
         [
-            transforms.Resize((image_size_ae, image_size_ae)),
+            transforms.Resize((config.image_size_ae, config.image_size_ae)),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ]
@@ -291,12 +304,12 @@ def generate_ae_output(
         width = input_image.width
         transform_ae = transforms.Compose(
             [
-                transforms.Resize((image_size_ae, image_size_ae)),
+                transforms.Resize((config.image_size_ae, config.image_size_ae)),
                 transforms.ToTensor(),
             ]
         )
         divider = 16
-        patch_resolution = int(image_size_ae / divider)
+        patch_resolution = int(config.image_size_ae / divider)
 
         input_image = transform_ae(input_image)  # [3, 512, 512]
         ref_image = transform_ae(ref_image)
@@ -316,7 +329,7 @@ def generate_ae_output(
             input_image[:, :, index_ae] = ref_image[:, :, index_ref]
 
         fold_op = torch.nn.Fold(
-            output_size=image_size_ae,
+            output_size=config.image_size_ae,
             kernel_size=patch_resolution,
             stride=patch_resolution,
         )
@@ -331,7 +344,6 @@ def generate_ae_output(
             os.path.join(config.debug_dir, f"input_{condition}_{image_id}_swap.png"),
             "PNG",
         )
-
     else:
         # perform replacing
         image_ae_features = image_ae_features.clone()
@@ -458,19 +470,36 @@ def main(config, seed):
     ref_ids = ref_images[config.subdataset]
     for ref_id in ref_ids:
         assert len(ref_id) == 3, "ref_id should contain 3 digits"
-    backbone = torchvision.models.wide_resnet101_2(
-        weights=Wide_ResNet101_2_Weights.IMAGENET1K_V1
-    )
-    feature_extractor = torch.nn.Sequential(
-        backbone.conv1,
-        backbone.bn1,
-        backbone.relu,
-        backbone.maxpool,
-        backbone.layer1,
-        backbone.layer2,
-        backbone.layer3,
-        backbone.layer4,
-    )
+
+    if config.recontrast:
+        encoder, bn = wide_resnet50_2(pretrained=False)
+        decoder = de_wide_resnet50_2(pretrained=False, output_conv=2)
+        encoder_freeze = copy.deepcopy(encoder)
+        feature_extractor = ReContrast(
+            encoder=encoder,
+            encoder_freeze=encoder_freeze,
+            bottleneck=bn,
+            decoder=decoder,
+        )
+        ckpt = torch.load(
+            f"recontrast_ckpt/{config.subdataset}.pth", map_location=device
+        )
+        feature_extractor.load_state_dict(ckpt)
+    else:
+        backbone = torchvision.models.wide_resnet101_2(
+            weights=Wide_ResNet101_2_Weights.IMAGENET1K_V1
+        )
+        feature_extractor = torch.nn.Sequential(
+            backbone.conv1,
+            backbone.bn1,
+            backbone.relu,
+            backbone.maxpool,
+            backbone.layer1,
+            backbone.layer2,
+            backbone.layer3,
+            backbone.layer4,
+        )
+
     feature_extractor.to(device)
     feature_extractor.eval()
 
@@ -491,7 +520,9 @@ def main(config, seed):
         if image_id in ref_ids:
             _, image = images
             image = image.to(device)
-            feature = feature_extractor(image).detach()  # shape: [1, 2048, 16, 16]
+            feature = feature_extractor(
+                image
+            ).detach()  # shape: [1, 2048, 16, 16] or 1024 if reContrast
 
             if config.reduce_channel_dim:
                 B, C, H, W = feature.shape

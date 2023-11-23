@@ -168,7 +168,11 @@ class AESwap(nn.Module):
             )
         else:
             self.enc_conv1 = nn.Conv2d(
-                in_channels=2048, out_channels=512, kernel_size=4, stride=2, padding=1
+                in_channels=1024 if config.recontrast else 2048,
+                out_channels=512,
+                kernel_size=4,
+                stride=2,
+                padding=1,
             )
             self.enc_conv2 = nn.Conv2d(
                 in_channels=512, out_channels=128, kernel_size=4, stride=2, padding=1
@@ -220,7 +224,7 @@ class AESwap(nn.Module):
 
     def forward(self, x):
         """
-        x: [1, 2048, 16, 16]
+        x: [1, 2048, 16, 16] or 1024
         """
         # encoder
         if self.reduce_channel_dim:

@@ -1,9 +1,11 @@
 python -u efficientad_aeswap.py \
   --dataset mvtec_loco \
-  --subdataset breakfast_box \
+  --subdataset splicing_connectors \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
-  --analysis_heatmap \
   --debug_mode \
+  --recontrast \
+  --image_size_ae 256 \
+  # --analysis_heatmap \
   # --norm_c \
   # --reduce_channel_dim \
   # --seeds 10 20 30 \

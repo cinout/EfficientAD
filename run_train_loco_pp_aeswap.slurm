@@ -11,7 +11,7 @@
 
 #SBATCH --job-name="train_pp"
 #SBATCH --account=punim1623
-#SBATCH --time=1-08:00:00
+#SBATCH --time=1-04:00:00
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -36,7 +36,9 @@ python -u efficientad_aeswap.py \
   --note "aeswap" \
   --seeds 10 \
   --analysis_heatmap \
-  --norm_c \
+  --recontrast \
+  --image_size_ae 256 \
+  # --norm_c \
   # --reduce_channel_dim \
 
 # FIXME: update job-name, subdataset, note
