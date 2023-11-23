@@ -153,6 +153,7 @@ class AESwap(nn.Module):
     def __init__(self, out_channels, config) -> None:
         super().__init__()
         self.reduce_channel_dim = config.reduce_channel_dim
+        self.loose_ae = config.loose_ae
         self.out_channels = out_channels
 
         # common
@@ -165,6 +166,14 @@ class AESwap(nn.Module):
             )
             self.enc_conv2 = nn.Conv2d(
                 in_channels=64, out_channels=64, kernel_size=4, stride=4, padding=0
+            )
+        elif self.loose_ae:
+            self.enc_conv1 = nn.Conv2d(
+                in_channels=1024 if config.recontrast else 2048,
+                out_channels=64,
+                kernel_size=4,
+                stride=2,
+                padding=1,
             )
         else:
             self.enc_conv1 = nn.Conv2d(
@@ -183,37 +192,46 @@ class AESwap(nn.Module):
 
         # decoder
         self.dropout = nn.Dropout(0.2)
-        self.dec_up1 = nn.Upsample(size=3, mode="bilinear")
-        self.dec_up2 = nn.Upsample(size=8, mode="bilinear")
-        self.dec_up3 = nn.Upsample(size=15, mode="bilinear")
-        self.dec_up4 = nn.Upsample(size=32, mode="bilinear")
-        self.dec_up5 = nn.Upsample(size=63, mode="bilinear")
-        self.dec_up6 = nn.Upsample(size=127, mode="bilinear")
-        self.dec_up7 = nn.Upsample(
-            size=64, mode="bilinear"
-        )  # size=64 if padding==True else size=64-8
+        if self.loose_ae:
+            pass
+        else:
+            self.dec_up1 = nn.Upsample(size=3, mode="bilinear")
+            self.dec_conv1 = nn.Conv2d(
+                in_channels=64, out_channels=64, kernel_size=4, stride=1, padding=2
+            )
 
-        self.dec_conv1 = nn.Conv2d(
-            in_channels=64, out_channels=64, kernel_size=4, stride=1, padding=2
-        )
-        self.dec_conv2 = nn.Conv2d(
-            in_channels=64, out_channels=64, kernel_size=4, stride=1, padding=2
-        )
+            self.dec_up2 = nn.Upsample(size=8, mode="bilinear")
+            self.dec_conv2 = nn.Conv2d(
+                in_channels=64, out_channels=64, kernel_size=4, stride=1, padding=2
+            )
+
+        self.dec_up3 = nn.Upsample(size=15, mode="bilinear")
         self.dec_conv3 = nn.Conv2d(
             in_channels=64, out_channels=64, kernel_size=4, stride=1, padding=2
         )
+
+        self.dec_up4 = nn.Upsample(size=32, mode="bilinear")
         self.dec_conv4 = nn.Conv2d(
             in_channels=64, out_channels=64, kernel_size=4, stride=1, padding=2
         )
+
+        self.dec_up5 = nn.Upsample(size=63, mode="bilinear")
         self.dec_conv5 = nn.Conv2d(
             in_channels=64, out_channels=64, kernel_size=4, stride=1, padding=2
         )
+
+        self.dec_up6 = nn.Upsample(size=127, mode="bilinear")
         self.dec_conv6 = nn.Conv2d(
             in_channels=64, out_channels=64, kernel_size=4, stride=1, padding=2
         )
+
+        self.dec_up7 = nn.Upsample(
+            size=64, mode="bilinear"
+        )  # size=64 if padding==True else size=64-8
         self.dec_conv7 = nn.Conv2d(
             in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1
         )
+
         self.dec_conv8 = nn.Conv2d(
             in_channels=64,
             out_channels=out_channels,
@@ -232,6 +250,8 @@ class AESwap(nn.Module):
             x = self.relu(x)
 
             x = self.enc_conv2(x)  # target shape: [1, 64, 1, 1]
+        elif self.loose_ae:
+            x = self.enc_conv1(x)  # shape: [1, 64, 8, 8]
         else:
             x = self.enc_conv1(x)
             x = self.relu(x)  # shape: [1, 512, 8, 8]
@@ -242,20 +262,23 @@ class AESwap(nn.Module):
             x = self.enc_conv3(x)  # target shape: [1, 64, 1, 1]
 
         # decoder
-        x = self.dec_up1(x)
-        x = self.dec_conv1(x)
-        x = self.relu(x)
-        x = self.dropout(x)  # shape: [1, 64, 4, 4]
+        if self.loose_ae:
+            pass
+        else:
+            x = self.dec_up1(x)
+            x = self.dec_conv1(x)
+            x = self.relu(x)
+            x = self.dropout(x)  # shape: [1, 64, 4, 4]
 
-        x = self.dec_up2(x)
-        x = self.dec_conv2(x)
-        x = self.relu(x)
-        x = self.dropout(x)  # shape: [1, 64, 9, 9]
+            x = self.dec_up2(x)
+            x = self.dec_conv2(x)
+            x = self.relu(x)
+            x = self.dropout(x)  # shape: [1, 64, 9, 9]
 
-        x = self.dec_up3(x)
-        x = self.dec_conv3(x)
-        x = self.relu(x)
-        x = self.dropout(x)  # shape: [1, 64, 16, 16]
+            x = self.dec_up3(x)
+            x = self.dec_conv3(x)
+            x = self.relu(x)
+            x = self.dropout(x)  # shape: [1, 64, 16, 16]
 
         x = self.dec_up4(x)
         x = self.dec_conv4(x)

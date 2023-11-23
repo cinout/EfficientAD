@@ -140,6 +140,9 @@ def get_argparse():
     parser.add_argument(
         "--recontrast", action="store_true", help="use encoder from recontrast"
     )
+    parser.add_argument(
+        "--loose_ae", action="store_true", help="do not compress AE to 1*1 resolution"
+    )
 
     return parser.parse_args()
 
