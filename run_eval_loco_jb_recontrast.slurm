@@ -2,7 +2,7 @@
 
 #SBATCH --partition=cascade
 
-#SBATCH --job-name="eval_sc"
+#SBATCH --job-name="eval_jb"
 #SBATCH --account=punim1623
 #SBATCH --time=0-01:10:00
 
@@ -20,11 +20,11 @@ module purge
 eval "$(conda shell.bash hook)"
 conda activate eff
 
-timestamp="20231120_141704_80_3_sd10_[sc]"
-folder_name="folder_aeswap_norm_c_run1"
+timestamp="20231124_100718_87_17_sd10_[jb]"
+folder_name="folder_aeswap_recontrast"
 
 python -u mvtec_loco_ad_evaluation/evaluate_experiment.py \
-  --object_name "splicing_connectors" \
+  --object_name "juice_bottle" \
   --dataset_base_dir "./datasets/loco/" \
   --anomaly_maps_dir "./outputs/${folder_name}/output_${timestamp}/anomaly_maps/mvtec_loco/" \
   --output_dir "./outputs/${folder_name}/output_${timestamp}/metrics/mvtec_loco/" \
