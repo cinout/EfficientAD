@@ -403,7 +403,7 @@ def test(
     y_true = []
     y_score = []
 
-    if config.analysis_heatmap:
+    if config.analysis_heatmap and False:
         map_comb_min = None
         map_comb_max = None
 
@@ -441,7 +441,7 @@ def test(
             q_ae_end=q_ae_end,
         )
 
-        if config.analysis_heatmap:
+        if config.analysis_heatmap and False:
             if map_comb_min is None:
                 map_comb_min = torch.min(map_combined)
                 map_comb_max = torch.max(map_combined)
@@ -468,7 +468,7 @@ def test(
             file = os.path.join(test_output_dir, defect_class, img_nm + ".tiff")
             tifffile.imwrite(file, map_combined)
 
-    if config.analysis_heatmap:
+    if config.analysis_heatmap and False:
         map_comb_min = map_comb_min.cpu().numpy()
         map_comb_max = map_comb_max.cpu().numpy()
 
