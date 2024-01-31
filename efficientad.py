@@ -273,7 +273,6 @@ def main(config, seed):
         student.cuda()
         autoencoder.cuda()
 
-    # FIXME: should we update the teacher_mean, teacher_std on the fly? Different for each batch
     teacher_mean, teacher_std = teacher_normalization(teacher, train_loader, config)
 
     optimizer = torch.optim.Adam(

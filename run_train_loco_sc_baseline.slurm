@@ -37,7 +37,7 @@ python -u efficientad.py \
   --seeds 10 20 30 \
   --analysis_heatmap \
 
-# FIXME: update job-name, weights, pretrained_network, subdataset, note
+
 ##Log this job's resource usage stats###
 my-job-stats -a -n -s
 ##

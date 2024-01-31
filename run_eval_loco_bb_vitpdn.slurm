@@ -32,7 +32,7 @@ python -u mvtec_loco_ad_evaluation/evaluate_experiment.py \
   --folder_name "${folder_name}" \
   --generate_visual \
 
-## FIXME: update timestamp
+
 ##Log this job's resource usage stats### 
 my-job-stats -a -n -s
 ##
