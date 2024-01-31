@@ -268,10 +268,9 @@ def main(config, seed):
     student.train()
     autoencoder.train()
 
-    if on_gpu:
-        teacher.cuda()
-        student.cuda()
-        autoencoder.cuda()
+    teacher = teacher.to(device)
+    student = student.to(device)
+    autoencoder = autoencoder.to(device)
 
     teacher_mean, teacher_std = teacher_normalization(teacher, train_loader, config)
 
@@ -293,12 +292,12 @@ def main(config, seed):
         image_penalty,
     ) in zip(tqdm_obj, train_loader_infinite, penalty_loader_infinite):
         (image_st, image_ae) = train_images
-        if on_gpu:
-            image_st = image_st.cuda()
-            image_ae = image_ae.cuda()
+
+        image_st = image_st.to(device)
+        image_ae = image_ae.to(device)
 
         if image_penalty is not None:
-            image_penalty = image_penalty.cuda()
+            image_penalty = image_penalty.to(device)
 
         with torch.no_grad():
             teacher_output_st = teacher(image_st)
@@ -420,10 +419,9 @@ def test(
         if image_teacher is not None:
             image_teacher = image_teacher[None]
 
-        if on_gpu:
-            image = image.cuda()
-            if image_teacher is not None:
-                image_teacher = image_teacher.cuda()
+        image = image.to(device)
+        if image_teacher is not None:
+            image_teacher = image_teacher.to(device)
 
         map_combined, map_st, map_ae = predict(
             config=config,
@@ -486,10 +484,9 @@ def test(
             if image_teacher is not None:
                 image_teacher = image_teacher[None]
 
-            if on_gpu:
-                image = image.cuda()
-                if image_teacher is not None:
-                    image_teacher = image_teacher.cuda()
+            image = image.to(device)
+            if image_teacher is not None:
+                image_teacher = image_teacher.to(device)
 
             _, map_structural, map_logical = predict(
                 config=config,
@@ -620,10 +617,9 @@ def map_normalization(
         (image, _) = images
         image_teacher = None
 
-        if on_gpu:
-            image = image.cuda()
-            if image_teacher is not None:
-                image_teacher = image_teacher.cuda()
+        image = image.to(device)
+        if image_teacher is not None:
+            image_teacher = image_teacher.to(device)
 
         map_combined, map_st, map_ae = predict(
             config=config,
@@ -655,8 +651,7 @@ def teacher_normalization(teacher, train_loader, config):
     for train_images in tqdm(train_loader, desc="Computing mean of features"):
         (train_image, _) = train_images
 
-        if on_gpu:
-            train_image = train_image.cuda()
+        train_image = train_image.to(device)
 
         teacher_output = teacher(train_image)
 
@@ -669,8 +664,7 @@ def teacher_normalization(teacher, train_loader, config):
     for train_images in tqdm(train_loader, desc="Computing std of features"):
         (train_image, _) = train_images
 
-        if on_gpu:
-            train_image = train_image.cuda()
+        train_image = train_image.to(device)
 
         teacher_output = teacher(train_image)
 

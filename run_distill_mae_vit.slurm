@@ -33,7 +33,7 @@ echo ">>> MASTER_ADDR="$MASTER_ADDR
 module purge
 
 eval "$(conda shell.bash hook)"
-conda activate ds2
+conda activate eff
 
 set -e
 set -x

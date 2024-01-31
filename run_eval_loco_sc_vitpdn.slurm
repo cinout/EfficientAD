@@ -18,7 +18,7 @@
 module purge
 
 eval "$(conda shell.bash hook)"
-conda activate ds2
+conda activate eff
 
 timestamp="20231027_215523_70_51_sd10_[sc]"
 folder_name="folder_maepdn_run1"
