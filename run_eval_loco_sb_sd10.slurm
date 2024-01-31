@@ -20,8 +20,8 @@ module purge
 eval "$(conda shell.bash hook)"
 conda activate eff
 
-timestamp="20231027_210549_5_0_sd10_[sb]"
-folder_name="folder_maepdn_run1"
+timestamp="20240131_215545_7_68_sd10_[sb]"
+folder_name="folder_baseline"
 
 python -u mvtec_loco_ad_evaluation/evaluate_experiment.py \
   --object_name "screw_bag" \

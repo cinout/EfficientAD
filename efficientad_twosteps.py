@@ -91,9 +91,18 @@ def get_argparse():
         action="store_true",
         help="if set to True, then generate branch-wise analysis heatmap",
     )
+
     parser.add_argument("-t", "--train_steps", type=int, default=70000)
     parser.add_argument("--note", type=str, default="")
     parser.add_argument("--seeds", type=int, default=[42], nargs="+")
+
+    # TODO: new options
+    parser.add_argument(
+        "--stg1_ckpt",
+        type=str,
+        help="should be the path of the parent folder of xxx.pth",
+    )
+    parser.add_argument("--fixed_ref_percent", type=float, default=0.1)
     return parser.parse_args()
 
 
@@ -101,6 +110,7 @@ def get_argparse():
 on_gpu = torch.cuda.is_available()
 device = "cuda" if on_gpu else "cpu"
 image_size = 256
+out_channels = 384
 
 
 def train_transform(image, config):
@@ -125,6 +135,10 @@ def train_transform(image, config):
 
 
 def main(config, seed):
+    """
+    ---[SETUP]---
+    """
+
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
@@ -154,10 +168,6 @@ def main(config, seed):
     else:
         raise Exception("Unknown config.dataset")
 
-    pretrain_penalty = True
-    if config.imagenet_train_path == "none":
-        pretrain_penalty = False
-
     # create output dir
     train_output_dir = os.path.join(
         output_dir, "trainings", config.dataset, config.subdataset
@@ -168,14 +178,17 @@ def main(config, seed):
     os.makedirs(train_output_dir)
     os.makedirs(test_output_dir)
 
+    """
+    ---[STAGE 1]---
+    prepare dataset
+    """
+
     # load data
     full_train_set = ImageFolderWithoutTarget(
         os.path.join(dataset_path, config.subdataset, "train"),
         transform=transforms.Lambda(partial(train_transform, config=config)),
     )
-    test_set = ImageFolderWithPath(
-        os.path.join(dataset_path, config.subdataset, "test")
-    )
+
     if config.dataset == "mvtec_ad":
         # mvtec dataset paper recommend 10% validation set
         train_size = int(0.9 * len(full_train_set))
@@ -199,7 +212,9 @@ def main(config, seed):
     train_loader_infinite = InfiniteDataloader(train_loader)
     validation_loader = DataLoader(validation_set, batch_size=1)
 
-    if pretrain_penalty:
+    if config.imagenet_train_path == "none":
+        penalty_loader_infinite = itertools.repeat(None)
+    else:
         # load pretraining data for penalty
         penalty_transform = transforms.Compose(
             [
@@ -219,12 +234,12 @@ def main(config, seed):
             penalty_set, batch_size=1, shuffle=True, num_workers=4, pin_memory=True
         )
         penalty_loader_infinite = InfiniteDataloader(penalty_loader)
-    else:
-        penalty_loader_infinite = itertools.repeat(None)
 
-    out_channels = 384
+    """
+    ---[STAGE 1]---
+    prepare model
+    """
 
-    # create models
     if config.model_size == "small":
         teacher = PDN_Small(out_channels=out_channels, padding=True)
         student = PDN_Small(out_channels=2 * out_channels, padding=True)
@@ -235,7 +250,10 @@ def main(config, seed):
         student = get_pdn_medium(2 * out_channels, padding=True)
     else:
         raise Exception()
+    # autoencoder = get_autoencoder(out_channels)
+    autoencoder = Autoencoder(out_channels=out_channels)
 
+    # for teacher, load pretrained weights
     state_dict = torch.load(config.weights, map_location=device)
     pretrained_teacher_model = {}
     for k, v in state_dict.items():
@@ -259,96 +277,132 @@ def main(config, seed):
             raise ValueError(f"unknown state_dict key {k}")
     teacher.load_state_dict(pretrained_teacher_model, strict=False)
 
-    # autoencoder = get_autoencoder(out_channels)
-    autoencoder = Autoencoder(out_channels=out_channels)
-
-    # teacher frozen
     teacher.eval()
     student.train()
     autoencoder.train()
-
     teacher = teacher.to(device)
     student = student.to(device)
     autoencoder = autoencoder.to(device)
 
+    # obtain teacher's normalized mean and std
     teacher_mean, teacher_std = teacher_normalization(teacher, train_loader, config)
 
-    optimizer = torch.optim.Adam(
-        itertools.chain(student.parameters(), autoencoder.parameters()),
-        lr=1e-4,
-        weight_decay=1e-5,
-    )
+    if config.stg1_ckpt is None:
+        """
+        ---[STAGE 1]---
+        training
+        """
 
-    # step_size is 66500
-    scheduler = torch.optim.lr_scheduler.StepLR(
-        optimizer, step_size=int(0.95 * config.train_steps), gamma=0.1
-    )
+        optimizer = torch.optim.Adam(
+            itertools.chain(student.parameters(), autoencoder.parameters()),
+            lr=1e-4,
+            weight_decay=1e-5,
+        )
 
-    tqdm_obj = tqdm(range(config.train_steps))
-    for (
-        iteration,
-        train_images,
-        image_penalty,
-    ) in zip(tqdm_obj, train_loader_infinite, penalty_loader_infinite):
-        (image_st, image_ae) = train_images
+        # step_size is 66500
+        scheduler = torch.optim.lr_scheduler.StepLR(
+            optimizer, step_size=int(0.95 * config.train_steps), gamma=0.1
+        )
 
-        image_st = image_st.to(device)
-        image_ae = image_ae.to(device)
+        tqdm_obj = tqdm(range(config.train_steps))
+        for (
+            iteration,
+            train_images,
+            image_penalty,
+        ) in zip(tqdm_obj, train_loader_infinite, penalty_loader_infinite):
+            (image_st, image_ae) = train_images
 
-        if image_penalty is not None:
-            image_penalty = image_penalty.to(device)
+            image_st = image_st.to(device)
+            image_ae = image_ae.to(device)
 
-        with torch.no_grad():
-            teacher_output_st = teacher(image_st)
-            teacher_output_st = (teacher_output_st - teacher_mean) / teacher_std
-        student_output_st = student(image_st)[
-            :, :out_channels
-        ]  # the first half of student outputs
-        distance_st = (teacher_output_st - student_output_st) ** 2
-        d_hard = torch.quantile(distance_st, q=0.999)
-        loss_hard = torch.mean(distance_st[distance_st >= d_hard])
+            if image_penalty is not None:
+                image_penalty = image_penalty.to(device)
 
-        if image_penalty is not None:
-            student_output_penalty = student(image_penalty)[:, :out_channels]
-            loss_penalty = torch.mean(student_output_penalty**2)
-            loss_st = loss_hard + loss_penalty
-        else:
-            loss_st = loss_hard
+            with torch.no_grad():
+                teacher_output_st = teacher(image_st)
+                teacher_output_st = (teacher_output_st - teacher_mean) / teacher_std
+            student_output_st = student(image_st)[
+                :, :out_channels
+            ]  # the first half of student outputs
+            distance_st = (teacher_output_st - student_output_st) ** 2
+            d_hard = torch.quantile(distance_st, q=0.999)
+            loss_hard = torch.mean(distance_st[distance_st >= d_hard])
 
-        ae_output = autoencoder(image_ae)
+            if image_penalty is not None:
+                student_output_penalty = student(image_penalty)[:, :out_channels]
+                loss_penalty = torch.mean(student_output_penalty**2)
+                loss_st = loss_hard + loss_penalty
+            else:
+                loss_st = loss_hard
 
-        with torch.no_grad():
-            teacher_output_ae = teacher(image_ae)
-            teacher_output_ae = (teacher_output_ae - teacher_mean) / teacher_std
-        student_output_ae = student(image_ae)[
-            :, out_channels:
-        ]  # the second half of student outputs
-        distance_ae = (teacher_output_ae - ae_output) ** 2
-        distance_stae = (ae_output - student_output_ae) ** 2
-        loss_ae = torch.mean(distance_ae)
-        loss_stae = torch.mean(distance_stae)
-        loss_total = loss_st + loss_ae + loss_stae
+            ae_output = autoencoder(image_ae)
 
-        optimizer.zero_grad()
-        loss_total.backward()
-        optimizer.step()
-        scheduler.step()
+            with torch.no_grad():
+                teacher_output_ae = teacher(image_ae)
+                teacher_output_ae = (teacher_output_ae - teacher_mean) / teacher_std
+            student_output_ae = student(image_ae)[
+                :, out_channels:
+            ]  # the second half of student outputs
+            distance_ae = (teacher_output_ae - ae_output) ** 2
+            distance_stae = (ae_output - student_output_ae) ** 2
+            loss_ae = torch.mean(distance_ae)
+            loss_stae = torch.mean(distance_stae)
+            loss_total = loss_st + loss_ae + loss_stae
 
-        if iteration % 200 == 0:
-            print(
-                "Iteration: ",
-                iteration,
-                "Current loss: {:.4f}".format(loss_total.item()),
-            )
+            optimizer.zero_grad()
+            loss_total.backward()
+            optimizer.step()
+            scheduler.step()
+
+            if iteration % 200 == 0:
+                print(
+                    "Iteration: ",
+                    iteration,
+                    "Current loss: {:.4f}".format(loss_total.item()),
+                )
+
+        # torch.save(teacher, os.path.join(train_output_dir, "teacher_final.pth"))
+        torch.save(student, os.path.join(train_output_dir, "student_final.pth"))
+        torch.save(autoencoder, os.path.join(train_output_dir, "autoencoder_final.pth"))
+    else:
+        autoencoder_dict = torch.load(
+            os.path.join(config.stg1_ckpt, "autoencoder_final.pth"), map_location=device
+        )
+        student_dict = torch.load(
+            os.path.join(config.stg1_ckpt, "student_final.pth"), map_location=device
+        )
+        autoencoder.load_state_dict(autoencoder_dict)
+        student.load_state_dict(student_dict)
+        autoencoder = autoencoder.to(device)
+        student = student.to(device)
 
     teacher.eval()
     student.eval()
     autoencoder.eval()
 
-    torch.save(teacher, os.path.join(train_output_dir, "teacher_final.pth"))
-    torch.save(student, os.path.join(train_output_dir, "student_final.pth"))
-    torch.save(autoencoder, os.path.join(train_output_dir, "autoencoder_final.pth"))
+    """
+    --[STAGE 2]--:
+    preparing datasets
+    """
+    # TODO:
+    # used_ref_count = math.floor(len(train_data) * config.fixed_ref_percent)
+    # train_data_list = list(train_data)
+    # random.shuffle(train_data_list)
+    # train_ref_dataloader = torch.utils.data.DataLoader(
+    #     train_data_list[:used_ref_count],
+    #     batch_size=32,
+    #     shuffle=False,
+    #     # num_workers=1,
+    #     pin_memory=True,
+    # )
 
+    """
+    ---[TEST]---
+    """
+
+    test_set = ImageFolderWithPath(
+        os.path.join(dataset_path, config.subdataset, "test")
+    )
     q_st_start, q_st_end, q_ae_start, q_ae_end = map_normalization(
         out_channels=out_channels,
         validation_loader=validation_loader,

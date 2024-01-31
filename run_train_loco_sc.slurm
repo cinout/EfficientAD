@@ -29,7 +29,7 @@ conda activate eff
 set -e
 set -x
 
-python -u efficientad.py \
+python -u efficientad_twosteps.py \
   --dataset mvtec_loco \
   --subdataset splicing_connectors \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
