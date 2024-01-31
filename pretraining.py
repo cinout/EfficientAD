@@ -15,7 +15,6 @@ from torchvision import transforms
 from tqdm import tqdm
 from common import (
     PDN_Small,
-    get_pdn_small,
     get_pdn_medium,
     ImageFolderWithoutTarget,
     InfiniteDataloader,
@@ -25,9 +24,6 @@ from torch.utils.data.distributed import DistributedSampler
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from datetime import datetime
-from pvt_v2 import pvt_v2_b2_li
-from mae.pos_embed import interpolate_pos_embed
-import mae.models_vit as models_vit
 
 
 def get_argparse():
@@ -41,7 +37,7 @@ def get_argparse():
     )
     parser.add_argument(
         "--network",
-        choices=["wide_resnet101_2", "vit", "mae_vit", "pvt2_b2li"],
+        choices=["wide_resnet101_2"],
         type=str,
         default="wide_resnet101_2",
     )
@@ -60,36 +56,6 @@ def get_argparse():
         "--batch_size",
         type=int,
         default=16,
-    )
-    parser.add_argument(
-        "--extractor_input_size",
-        type=int,
-        default=1024,
-    )
-    parser.add_argument(
-        "--avg_cdim",
-        action="store_true",
-        help="if set to True, then perform avg pooling on channel dim to 384 (for PVT)",
-    )
-    parser.add_argument(
-        "--pvt2_stage3",
-        action="store_true",
-        help="if set to True, then use 3rd stage output",
-    )
-    parser.add_argument(
-        "--pvt2_stage4",
-        action="store_true",
-        help="if set to True, then use final stage output",
-    )
-    parser.add_argument(
-        "--patchify",
-        action="store_true",
-        help="if set to True, then augment features using PatchCore",
-    )
-    parser.add_argument(
-        "--vit_mid",
-        action="store_true",
-        help="if set to True, then use intermediate layer of ViT for knowledge distillation",
     )
     parser.add_argument("--note", default="", type=str)
 
@@ -134,194 +100,6 @@ def get_argparse():
 seed = 42
 on_gpu = torch.cuda.is_available()
 device = "cuda" if on_gpu else "cpu"
-
-
-def process_pvt_features(features, args):
-    target_size = 64
-    out_channels = 448
-
-    if args.pvt2_stage4:
-        # in this case, features have 4 elements
-        features = features[3:]
-    elif args.pvt2_stage3:
-        # in this case, features have 3 elements
-        features = features[2:]
-    else:
-        # in this case, features have 3 elements
-        features = features[1:]  # remove 1st element
-
-    if args.patchify:
-        # patchify the feature maps
-        patch_maker = PatchMaker(3, stride=1)
-        features = [patch_maker.patchify(x, return_spatial_info=True) for x in features]
-        patch_shapes = [x[1] for x in features]  # [64, 64] and [32, 32]
-        features = [
-            x[0] for x in features
-        ]  # [bs, 4096, 128, 3, 3] and [bs, 1024, 320, 3, 3]
-
-        # upsample the feature maps
-        for i in range(len(features)):
-            patch_dims = patch_shapes[i]
-            if patch_dims[0] == target_size:
-                # no need for upsampling
-                continue
-
-            _features = features[i]
-            _features = _features.reshape(
-                _features.shape[0], patch_dims[0], patch_dims[1], *_features.shape[2:]
-            )  # [4, 32, 32, 320, 3, 3]
-
-            _features = _features.permute(0, -3, -2, -1, 1, 2)  # [4, 320, 3, 3, 32, 32]
-
-            perm_base_shape = _features.shape
-            _features = _features.reshape(-1, *_features.shape[-2:])  # [36864, 32, 32]
-
-            # upsample feature map to the largest size
-            _features = F.interpolate(
-                _features.unsqueeze(1),
-                size=(target_size, target_size),
-                mode="bilinear",
-                align_corners=False,
-            )  # [36864, 1, 64, 64]
-
-            _features = _features.squeeze(1)  # [36864, 64, 64]
-
-            _features = _features.reshape(
-                *perm_base_shape[:-2], target_size, target_size
-            )  # [4, 320, 3, 3, 64, 64]
-
-            _features = _features.permute(0, -2, -1, 1, 2, 3)  # [4, 64, 64, 320, 3, 3]
-
-            _features = _features.reshape(
-                len(_features), -1, *_features.shape[-3:]
-            )  # [bs, 4096, 320, 3, 3]
-
-            features[i] = _features
-
-        features = [
-            x.reshape(-1, *x.shape[-3:]) for x in features
-        ]  # each with shape: (bs*h*w, c, 3, 3), where h and w are the largest size
-
-        # adapt channel dimension to 1024
-        preprocessing = Preprocessing(len(features), 1024)
-        features = preprocessing(features)  # shape: (bs*h*w, 2, output_dim==1024)
-
-        # aggregate features of two maps
-        preadapt_aggregator = Aggregator(target_dim=out_channels)
-        preadapt_aggregator.to(device)
-        features = preadapt_aggregator(features)  # (bs*h*w, out_channels)
-        features = torch.reshape(
-            features, (-1, 64, 64, out_channels)
-        )  # (bs, h, w, out_channels)
-        # features = torch.permute(features, (0, 3, 1, 2))  # (bs, out_channels, h, w)
-        features = features.permute((0, 3, 1, 2))
-        return features
-    else:
-        for i in range(0, len(features)):
-            # upsampling feature map
-            _features = features[i]
-            _features = F.interpolate(
-                _features,
-                size=(target_size, target_size),
-                mode="bilinear",
-            )
-            features[i] = _features
-
-        features = torch.cat(features, dim=1)  # shape: [bs, c_sum=128+320=448, 64, 64]
-
-        if args.avg_cdim:
-            bs, c_size, h, w = features.shape
-            features = features.reshape(bs, c_size, -1)
-            features = features.transpose(1, 2)  # shape: [bs, h*w, c]
-            features = F.adaptive_avg_pool1d(features, 384)
-            features = features.transpose(1, 2)
-            features = features.reshape(bs, 384, h, w)
-        return features
-
-
-def process_vit_features(features, args, cls_token=False):
-    target_size = 64
-    out_channels = 768
-
-    if cls_token:
-        features = features[:, 1:, :]
-
-    B, N, C = features.shape
-    H = int(math.sqrt(N))
-    W = int(math.sqrt(N))
-    features = features.transpose(1, 2).view(
-        B, C, H, W
-    )  # shape: (bs, 768, 32, 32) if input_size is 512
-
-    if args.patchify:
-        # patchify the feature maps
-        patch_maker = PatchMaker(3, stride=1)
-        features = [patch_maker.patchify(features, return_spatial_info=True)]
-        patch_shapes = [x[1] for x in features]
-        features = [x[0] for x in features]
-
-        # upsample the feature maps
-        for i in range(0, len(features)):
-            _features = features[i]
-            patch_dims = patch_shapes[i]
-
-            _features = _features.reshape(
-                _features.shape[0], patch_dims[0], patch_dims[1], *_features.shape[2:]
-            )  # [bs, 32, 32, 768, 3, 3]
-
-            _features = _features.permute(
-                0, -3, -2, -1, 1, 2
-            )  # [bs, 768, 3, 3, 32, 32]
-
-            perm_base_shape = _features.shape
-            _features = _features.reshape(-1, *_features.shape[-2:])  # [36864, 32, 32]
-
-            # upsample feature map to the largest size
-            _features = F.interpolate(
-                _features.unsqueeze(1),
-                size=(target_size, target_size),
-                mode="bilinear",
-                align_corners=False,
-            )  # [36864, 1, 64, 64]
-
-            _features = _features.squeeze(1)  # [36864, 64, 64]
-
-            _features = _features.reshape(
-                *perm_base_shape[:-2], target_size, target_size
-            )  # [bs, 768, 3, 3, 64, 64]
-
-            _features = _features.permute(0, -2, -1, 1, 2, 3)  # [bs, 64, 64, 768, 3, 3]
-
-            _features = _features.reshape(
-                len(_features), -1, *_features.shape[-3:]
-            )  # [bs, 4096, 768, 3, 3]
-
-            features[i] = _features
-
-        features = [
-            x.reshape(-1, *x.shape[-3:]) for x in features
-        ]  # each with shape: (bs*h*w, c, 3, 3), where h and w are the largest size
-
-        # adapt channel dimension to 1024
-        preprocessing = Preprocessing(len(features), 1024)
-        features = preprocessing(features)  # shape: (bs*h*w, 2, output_dim==1024)
-
-        # aggregate features of two maps
-        preadapt_aggregator = Aggregator(target_dim=out_channels)
-        preadapt_aggregator.to(device)
-        features = preadapt_aggregator(features)  # (bs*h*w, out_channels)
-        features = torch.reshape(
-            features, (-1, 64, 64, out_channels)
-        )  # (bs, h, w, out_channels)
-        # features = torch.permute(features, (0, 3, 1, 2))  # (bs, out_channels, h, w)
-        features = features.permute((0, 3, 1, 2))
-        return features
-    else:
-        if H != target_size:
-            features = torch.nn.functional.interpolate(
-                features, (target_size, target_size), mode="bilinear"
-            )
-        return features
 
 
 def train_transform(image, size):
@@ -372,103 +150,6 @@ def main(args):
         )
         input_transform_func = partial(train_transform, size=512)
         suffix = "wres101_2"
-    elif args.network == "pvt2_b2li":
-        pretrained_model = torch.load(
-            "pvt_model_checkpoints/mask_rcnn_pvt_v2_b2_li_fpn_1x_coco.pth",
-            map_location=device,
-        )
-        pretrained_weights = {}
-        for k, v in pretrained_model["state_dict"].items():
-            if k.startswith("backbone"):
-                pretrained_weights[k.replace("backbone.", "")] = v
-            else:
-                continue
-
-        extractor = pvt_v2_b2_li(pretrained=False, stage4=args.pvt2_stage4)
-        extractor.load_state_dict(pretrained_weights, strict=False)
-        extractor.eval()
-
-        # TODO: alway pay attention to out_channels
-        if args.avg_cdim:
-            out_channels = 384
-        else:
-            if args.patchify:
-                out_channels = 448
-            else:
-                if args.pvt2_stage3:
-                    out_channels = 320
-                elif args.pvt2_stage4:
-                    out_channels = 512
-                else:
-                    out_channels = 448
-
-        input_transform_func = partial(train_transform, size=args.extractor_input_size)
-        suffix = "pvt2_b2li"
-
-    elif args.network in ["vit", "mae_vit"]:
-        from vit_models.modeling import VisionTransformer, CONFIGS
-
-        if not on_gpu or dist.get_rank() == 0:
-            os.makedirs("vit_model_checkpoints", exist_ok=True)
-
-        config = CONFIGS["ViT-B_16"]
-        model = VisionTransformer(
-            config,
-            num_classes=1000,
-            zero_head=False,
-            img_size=args.extractor_input_size,
-            vis=True,
-            vit_mid=args.vit_mid,
-        )
-
-        if args.network == "vit":
-            from urllib.request import urlretrieve
-
-            if not os.path.isfile("vit_model_checkpoints/ViT-B_16-224.npz"):
-                urlretrieve(
-                    "https://storage.googleapis.com/vit_models/imagenet21k+imagenet2012/ViT-B_16-224.npz",
-                    "vit_model_checkpoints/ViT-B_16-224.npz",
-                )
-            model.load_from(np.load("vit_model_checkpoints/ViT-B_16-224.npz"))
-            extractor = torch.nn.Sequential(
-                *[model.transformer.embeddings, model.transformer.encoder]
-            )
-            suffix = "vit_b16"
-        elif args.network == "mae_vit":
-            model = models_vit.__dict__["vit_base_patch16"](
-                num_classes=1000,
-                drop_path_rate=0.1,
-                global_pool=False,
-                img_size=args.extractor_input_size,
-            )
-            checkpoint = torch.load(
-                "vit_model_checkpoints/mae_pretrain_vit_base.pth", map_location=device
-            )
-            checkpoint_model = checkpoint["model"]
-            state_dict = model.state_dict()
-            for k in ["head.weight", "head.bias"]:
-                if (
-                    k in checkpoint_model
-                    and checkpoint_model[k].shape != state_dict[k].shape
-                ):
-                    print(f"Removing key {k} from pretrained checkpoint")
-                    del checkpoint_model[k]
-
-            interpolate_pos_embed(model, checkpoint_model)
-            extractor = torch.nn.Sequential(
-                model.patch_embed,
-                # model.pos_drop,
-                # model.patch_drop,
-                # model.norm_pre,
-                model.blocks,
-                model.norm,
-            )
-            suffix = "mae_vit_b16"
-
-        extractor.eval()
-        input_transform_func = partial(train_transform, size=args.extractor_input_size)
-        # TODO: double check
-        out_channels = 768
 
     if args.pdn_size == "small":
         # pdn = get_pdn_small(out_channels, padding=True)
@@ -534,17 +215,7 @@ def main(args):
             image_fe = image_fe.cuda()  # for extractor
             image_pdn = image_pdn.cuda()  # for pdn teacher
 
-        if args.network == "vit":
-            target = extractor(image_fe)[0]
-            target = process_vit_features(target, args, cls_token=True)
-        elif args.network == "mae_vit":
-            target = extractor(image_fe)
-            target = process_vit_features(target, args)
-        elif args.network == "wide_resnet101_2":
-            target = extractor.embed(image_fe)
-        elif args.network == "pvt2_b2li":
-            target = extractor(image_fe)
-            target = process_pvt_features(target, args)
+        target = extractor.embed(image_fe)
 
         target = (target - channel_mean) / channel_std
         prediction = pdn(image_pdn)
@@ -593,17 +264,8 @@ def feature_normalization(args, extractor, train_loader, steps=10000):
             if on_gpu:
                 image_fe = image_fe.cuda()  # shape: (16, 3, 512, 512)
 
-            if args.network == "vit":
-                output = extractor(image_fe)[0]
-                output = process_vit_features(output, args, cls_token=True)
-            elif args.network == "mae_vit":
-                output = extractor(image_fe)
-                output = process_vit_features(output, args)
-            elif args.network == "wide_resnet101_2":
-                output = extractor.embed(image_fe)
-            elif args.network == "pvt2_b2li":
-                output = extractor(image_fe)
-                output = process_pvt_features(output, args)
+            output = extractor.embed(image_fe)
+
             mean_output = torch.mean(output, dim=[0, 2, 3])
             mean_outputs.append(mean_output)
             normalization_count += len(image_fe)
@@ -622,17 +284,7 @@ def feature_normalization(args, extractor, train_loader, steps=10000):
             if on_gpu:
                 image_fe = image_fe.cuda()
 
-            if args.network == "vit":
-                output = extractor(image_fe)[0]
-                output = process_vit_features(output, args, cls_token=True)
-            elif args.network == "mae_vit":
-                output = extractor(image_fe)
-                output = process_vit_features(output, args)
-            elif args.network == "wide_resnet101_2":
-                output = extractor.embed(image_fe)
-            elif args.network == "pvt2_b2li":
-                output = extractor(image_fe)
-                output = process_pvt_features(output, args)
+            output = extractor.embed(image_fe)
 
             distance = (output - channel_mean) ** 2
             mean_distance = torch.mean(distance, dim=[0, 2, 3])

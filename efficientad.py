@@ -13,7 +13,6 @@ import random
 from tqdm import tqdm
 from common import (
     Autoencoder,
-    get_pdn_small,
     PDN_Small,
     get_pdn_medium,
     ImageFolderWithoutTarget,
@@ -23,11 +22,7 @@ from common import (
 from sklearn.metrics import roc_auc_score
 from datetime import datetime
 from functools import partial
-from pvt_v2 import pvt_v2_b2_li
-import torch.nn.functional as F
 import cv2
-from mae.pos_embed import interpolate_pos_embed
-import mae.models_vit as models_vit
 
 timestamp = (
     datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -60,7 +55,6 @@ def get_argparse():
     parser.add_argument(
         "-m", "--model_size", default="small", choices=["small", "medium"]
     )
-    # TODO: import choice (used when teacher pdn distilled knowledge in pretraining stage)
     parser.add_argument(
         "-w",
         "--weights",
@@ -86,63 +80,19 @@ def get_argparse():
         default="./datasets/loco",
         help="Downloaded Mvtec LOCO dataset",
     )
-    # TODO: important choice (used in both xxxasteacher and xxxpretrainedPDN cases)
     parser.add_argument(
         "--pretrained_network",
-        choices=["wide_resnet101_2", "vit", "mae_vit", "pvt2_b2li"],
+        choices=["wide_resnet101_2"],
         type=str,
         default="wide_resnet101_2",
     )
-    parser.add_argument(
-        "--avg_cdim",
-        action="store_true",
-        help="if set to True, then perform avg pooling on channel dim to 384",
-    )
-    parser.add_argument(
-        "--pvt2_stage3",
-        action="store_true",
-        help="if set to True, then use 3rd stage output",
-    )
-    parser.add_argument(
-        "--pvt2_stage4",
-        action="store_true",
-        help="if set to True, then use final stage output",
-    )
-    parser.add_argument(
-        "--patchify",
-        action="store_true",
-        help="if set to True, then augment features using PatchCore",
-    )
-    # TODO: add it to code and slurm file
     parser.add_argument(
         "--analysis_heatmap",
         action="store_true",
         help="if set to True, then generate branch-wise analysis heatmap",
     )
-
-    # TODO: the following are necessary if teacher is directly a vit/pvt
-    parser.add_argument(
-        "--vit_teacher",
-        action="store_true",
-        help="if set to True, then use vit for teacher",
-    )
-    parser.add_argument("--image_size_vit_teacher", type=int, default=512)
-    parser.add_argument(
-        "--mae_vit_teacher",
-        action="store_true",
-        help="if set to True, then use mae_vit for teacher",
-    )
-    parser.add_argument("--image_size_mae_vit_teacher", type=int, default=512)
-    parser.add_argument(
-        "--pvt2_teacher",
-        action="store_true",
-        help="if set to True, then use pvt for teacher",
-    )
-    parser.add_argument("--image_size_pvt2_teacher", type=int, default=512)
-
     parser.add_argument("-t", "--train_steps", type=int, default=70000)
     parser.add_argument("--note", type=str, default="")
-    # TODO: add to slurm
     parser.add_argument("--seeds", type=int, default=[42], nargs="+")
     return parser.parse_args()
 
@@ -153,84 +103,10 @@ device = "cuda" if on_gpu else "cpu"
 image_size = 256
 
 
-def process_vit_features(features, cls_token=False):
-    target_size = 64
-
-    if cls_token:
-        features = features[:, 1:, :]
-    B, N, C = features.shape
-    H = int(math.sqrt(N))
-    W = int(math.sqrt(N))
-    features = features.transpose(1, 2).view(
-        B, C, H, W
-    )  # shape: (bs, 768, 32, 32) if input_size is 512
-
-    if H != target_size:
-        features = torch.nn.functional.interpolate(
-            features, (target_size, target_size), mode="bilinear"
-        )
-    return features
-
-
-def process_pvt_features(features, config):
-    target_size = 64
-
-    if config.pvt2_stage4:
-        # in this case, features have 4 elements
-        features = features[3:]
-    elif config.pvt2_stage3:
-        # in this case, features have 3 elements
-        features = features[2:]
-    else:
-        # in this case, features have 3 elements
-        features = features[1:]  # remove 1st element
-
-    for i in range(len(features)):
-        # upsampling feature map
-        _features = features[i]
-        _features = F.interpolate(
-            _features,
-            size=(target_size, target_size),
-            mode="bilinear",
-        )
-        features[i] = _features
-
-    features = torch.cat(features, dim=1)  # shape: [bs, c_sum=128+320=448, 64, 64]
-
-    return features
-
-
 def train_transform(image, config):
     default_transform = transforms.Compose(
         [
             transforms.Resize((image_size, image_size)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ]
-    )
-    vit_teacher_transform = transforms.Compose(
-        [
-            transforms.Resize(
-                (config.image_size_vit_teacher, config.image_size_vit_teacher)
-            ),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ]
-    )
-    mae_vit_teacher_transform = transforms.Compose(
-        [
-            transforms.Resize(
-                (config.image_size_mae_vit_teacher, config.image_size_mae_vit_teacher)
-            ),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ]
-    )
-    pvt2_teacher_transform = transforms.Compose(
-        [
-            transforms.Resize(
-                (config.image_size_pvt2_teacher, config.image_size_pvt2_teacher)
-            ),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ]
@@ -242,35 +118,10 @@ def train_transform(image, config):
             transforms.ColorJitter(saturation=0.2),
         ]
     )
-    if config.vit_teacher:
-        ae_image = transform_ae(image)
-        return (
-            default_transform(image),
-            vit_teacher_transform(image),
-            default_transform(ae_image),
-            vit_teacher_transform(ae_image),
-        )
-    elif config.mae_vit_teacher:
-        ae_image = transform_ae(image)
-        return (
-            default_transform(image),
-            mae_vit_teacher_transform(image),
-            default_transform(ae_image),
-            mae_vit_teacher_transform(ae_image),
-        )
-    elif config.pvt2_teacher:
-        ae_image = transform_ae(image)
-        return (
-            default_transform(image),
-            pvt2_teacher_transform(image),
-            default_transform(ae_image),
-            pvt2_teacher_transform(ae_image),
-        )
-    else:
-        return (
-            default_transform(image),
-            default_transform(transform_ae(image)),
-        )
+    return (
+        default_transform(image),
+        default_transform(transform_ae(image)),
+    )
 
 
 def main(config, seed):
@@ -371,99 +222,11 @@ def main(config, seed):
     else:
         penalty_loader_infinite = itertools.repeat(None)
 
-    if config.pretrained_network in ["vit", "mae_vit"]:
-        out_channels = 768
-    elif config.pretrained_network == "pvt2_b2li":
-        # TODO: always pay attention to out_channels
-        if config.avg_cdim:
-            out_channels = 384
-        else:
-            if config.patchify:
-                out_channels = 448
-            else:
-                if config.pvt2_stage3:
-                    out_channels = 320
-                elif config.pvt2_stage4:
-                    out_channels = 512
-                else:
-                    out_channels = 448
-    else:
-        #  wide_resnet101_2
-        out_channels = 384
+    out_channels = 384
 
     # create models
     if config.model_size == "small":
-        if config.vit_teacher:
-            from urllib.request import urlretrieve
-            from vit_models.modeling import VisionTransformer, CONFIGS
-
-            # if not on_gpu or dist.get_rank() == 0:
-            os.makedirs("vit_model_checkpoints", exist_ok=True)
-
-            if not os.path.isfile("vit_model_checkpoints/ViT-B_16-224.npz"):
-                urlretrieve(
-                    "https://storage.googleapis.com/vit_models/imagenet21k+imagenet2012/ViT-B_16-224.npz",
-                    "vit_model_checkpoints/ViT-B_16-224.npz",
-                )
-            model = VisionTransformer(
-                config=CONFIGS["ViT-B_16"],
-                num_classes=1000,
-                zero_head=False,
-                img_size=config.image_size_vit_teacher,
-                vis=True,
-                vit_mid=False,
-            )
-            model.load_from(np.load("vit_model_checkpoints/ViT-B_16-224.npz"))
-            teacher = torch.nn.Sequential(
-                *[model.transformer.embeddings, model.transformer.encoder]
-            )
-        elif config.mae_vit_teacher:
-            model = models_vit.__dict__["vit_base_patch16"](
-                num_classes=1000,
-                drop_path_rate=0.1,
-                global_pool=False,
-                img_size=config.image_size_mae_vit_teacher,
-            )
-            checkpoint = torch.load(
-                "vit_model_checkpoints/mae_pretrain_vit_base.pth", map_location=device
-            )
-            checkpoint_model = checkpoint["model"]
-            state_dict = model.state_dict()
-            for k in ["head.weight", "head.bias"]:
-                if (
-                    k in checkpoint_model
-                    and checkpoint_model[k].shape != state_dict[k].shape
-                ):
-                    print(f"Removing key {k} from pretrained checkpoint")
-                    del checkpoint_model[k]
-
-            interpolate_pos_embed(model, checkpoint_model)
-            teacher = torch.nn.Sequential(
-                model.patch_embed,
-                # model.pos_drop,
-                # model.patch_drop,
-                # model.norm_pre,
-                model.blocks,
-                model.norm,
-            )
-
-        elif config.pvt2_teacher:
-            pretrained_model = torch.load(
-                "pvt_model_checkpoints/mask_rcnn_pvt_v2_b2_li_fpn_1x_coco.pth",
-                map_location=device,
-            )
-            pretrained_weights = {}
-            for k, v in pretrained_model["state_dict"].items():
-                if k.startswith("backbone"):
-                    pretrained_weights[k.replace("backbone.", "")] = v
-                else:
-                    continue
-
-            teacher = pvt_v2_b2_li(pretrained=False, stage4=config.pvt2_stage4)
-            teacher.load_state_dict(pretrained_weights, strict=False)
-        else:
-            teacher = PDN_Small(out_channels=out_channels, padding=True)
-
+        teacher = PDN_Small(out_channels=out_channels, padding=True)
         student = PDN_Small(out_channels=2 * out_channels, padding=True)
         # teacher = get_pdn_small(out_channels, padding=True)
         # student = get_pdn_small(2 * out_channels, padding=True)
@@ -496,33 +259,6 @@ def main(config, seed):
             else:
                 raise ValueError(f"unknown state_dict key {k}")
         teacher.load_state_dict(pretrained_teacher_model, strict=False)
-    elif config.pretrained_network in ["vit", "mae_vit", "pvt2_b2li"]:
-        if config.vit_teacher or config.mae_vit_teacher or config.pvt2_teacher:
-            # ckpt already loaded
-            pass
-        else:
-            state_dict = torch.load(config.weights, map_location=device)
-            pretrained_teacher_model = {}
-            for k, v in state_dict.items():
-                if k == "module.conv1.weight":
-                    pretrained_teacher_model["conv1.weight"] = v
-                elif k == "module.conv1.bias":
-                    pretrained_teacher_model["conv1.bias"] = v
-                elif k == "module.conv2.weight":
-                    pretrained_teacher_model["conv2.weight"] = v
-                elif k == "module.conv2.bias":
-                    pretrained_teacher_model["conv2.bias"] = v
-                elif k == "module.conv3.weight":
-                    pretrained_teacher_model["conv3.weight"] = v
-                elif k == "module.conv3.bias":
-                    pretrained_teacher_model["conv3.bias"] = v
-                elif k == "module.conv4.weight":
-                    pretrained_teacher_model["conv4.weight"] = v
-                elif k == "module.conv4.bias":
-                    pretrained_teacher_model["conv4.bias"] = v
-                else:
-                    raise ValueError(f"unknown state_dict key {k}")
-            teacher.load_state_dict(pretrained_teacher_model, strict=False)
 
     # autoencoder = get_autoencoder(out_channels)
     autoencoder = Autoencoder(out_channels=out_channels)
@@ -557,43 +293,16 @@ def main(config, seed):
         train_images,
         image_penalty,
     ) in zip(tqdm_obj, train_loader_infinite, penalty_loader_infinite):
-        if config.vit_teacher or config.mae_vit_teacher or config.pvt2_teacher:
-            (
-                image_st,
-                image_st_teacher,
-                image_ae,
-                image_ae_teacher,
-            ) = train_images
-            if on_gpu:
-                image_st = image_st.cuda()
-                image_st_teacher = image_st_teacher.cuda()
-                image_ae_teacher = image_ae_teacher.cuda()
-                image_ae = image_ae.cuda()
-
-        else:
-            (image_st, image_ae) = train_images
-            if on_gpu:
-                image_st = image_st.cuda()
-                image_ae = image_ae.cuda()
+        (image_st, image_ae) = train_images
+        if on_gpu:
+            image_st = image_st.cuda()
+            image_ae = image_ae.cuda()
 
         if image_penalty is not None:
             image_penalty = image_penalty.cuda()
 
         with torch.no_grad():
-            if config.vit_teacher:
-                teacher_output_st = teacher(image_st_teacher)[0]
-                teacher_output_st = process_vit_features(
-                    teacher_output_st, cls_token=True
-                )
-            elif config.mae_vit_teacher:
-                teacher_output_st = teacher(image_st_teacher)
-                teacher_output_st = process_vit_features(teacher_output_st)
-            elif config.pvt2_teacher:
-                teacher_output_st = teacher(image_st_teacher)
-                teacher_output_st = process_pvt_features(teacher_output_st, config)
-            else:
-                teacher_output_st = teacher(image_st)
-
+            teacher_output_st = teacher(image_st)
             teacher_output_st = (teacher_output_st - teacher_mean) / teacher_std
         student_output_st = student(image_st)[
             :, :out_channels
@@ -612,20 +321,7 @@ def main(config, seed):
         ae_output = autoencoder(image_ae)
 
         with torch.no_grad():
-            if config.vit_teacher:
-                teacher_output_ae = teacher(image_ae_teacher)[0]
-                teacher_output_ae = process_vit_features(
-                    teacher_output_ae, cls_token=True
-                )
-            elif config.mae_vit_teacher:
-                teacher_output_ae = teacher(image_ae_teacher)
-                teacher_output_ae = process_vit_features(teacher_output_ae)
-            elif config.pvt2_teacher:
-                teacher_output_ae = teacher(image_ae_teacher)
-                teacher_output_ae = process_pvt_features(teacher_output_ae, config)
-            else:
-                teacher_output_ae = teacher(image_ae)
-
+            teacher_output_ae = teacher(image_ae)
             teacher_output_ae = (teacher_output_ae - teacher_mean) / teacher_std
         student_output_ae = student(image_ae)[
             :, out_channels:
@@ -718,16 +414,8 @@ def test(
 
         images = train_transform(image, config=config)
 
-        if config.vit_teacher or config.mae_vit_teacher or config.pvt2_teacher:
-            (
-                image,
-                image_teacher,
-                _,
-                _,
-            ) = images
-        else:
-            (image, _) = images
-            image_teacher = None
+        (image, _) = images
+        image_teacher = None
 
         image = image[None]
         if image_teacher is not None:
@@ -792,16 +480,8 @@ def test(
         for image, target, path in tqdm(test_set, desc=desc):
             images = train_transform(image, config=config)
 
-            if config.vit_teacher or config.mae_vit_teacher or config.pvt2_teacher:
-                (
-                    image,
-                    image_teacher,
-                    _,
-                    _,
-                ) = images
-            else:
-                (image, _) = images
-                image_teacher = None
+            (image, _) = images
+            image_teacher = None
 
             image = image[None]
             if image_teacher is not None:
@@ -891,18 +571,7 @@ def predict(
     q_ae_start=None,
     q_ae_end=None,
 ):
-    # no need as I commented out the code related to predict()
-    if config.vit_teacher:
-        teacher_output = teacher(image_teacher)[0]
-        teacher_output = process_vit_features(teacher_output, cls_token=True)
-    elif config.mae_vit_teacher:
-        teacher_output = teacher(image_teacher)
-        teacher_output = process_vit_features(teacher_output)
-    elif config.pvt2_teacher:
-        teacher_output = teacher(image_teacher)
-        teacher_output = process_pvt_features(teacher_output, config)
-    else:
-        teacher_output = teacher(image)
+    teacher_output = teacher(image)
 
     teacher_output = (teacher_output - teacher_mean) / teacher_std
     student_output = student(image)
@@ -949,16 +618,8 @@ def map_normalization(
     maps_ae = []
     # ignore augmented ae image
     for images in tqdm(validation_loader, desc=desc):
-        if config.vit_teacher or config.mae_vit_teacher or config.pvt2_teacher:
-            (
-                image,
-                image_teacher,
-                _,
-                _,
-            ) = images
-        else:
-            (image, _) = images
-            image_teacher = None
+        (image, _) = images
+        image_teacher = None
 
         if on_gpu:
             image = image.cuda()
@@ -993,30 +654,12 @@ def map_normalization(
 def teacher_normalization(teacher, train_loader, config):
     mean_outputs = []
     for train_images in tqdm(train_loader, desc="Computing mean of features"):
-        if config.vit_teacher or config.mae_vit_teacher or config.pvt2_teacher:
-            (
-                _,
-                train_image,
-                _,
-                _,
-            ) = train_images
-        else:
-            (train_image, _) = train_images
+        (train_image, _) = train_images
 
         if on_gpu:
             train_image = train_image.cuda()
 
-        if config.vit_teacher:
-            teacher_output = teacher(train_image)[0]
-            teacher_output = process_vit_features(teacher_output, cls_token=True)
-        elif config.mae_vit_teacher:
-            teacher_output = teacher(train_image)
-            teacher_output = process_vit_features(teacher_output)
-        elif config.pvt2_teacher:
-            teacher_output = teacher(train_image)
-            teacher_output = process_pvt_features(teacher_output, config)
-        else:
-            teacher_output = teacher(train_image)
+        teacher_output = teacher(train_image)
 
         mean_output = torch.mean(teacher_output, dim=[0, 2, 3])
         mean_outputs.append(mean_output)
@@ -1025,30 +668,12 @@ def teacher_normalization(teacher, train_loader, config):
 
     mean_distances = []
     for train_images in tqdm(train_loader, desc="Computing std of features"):
-        if config.vit_teacher or config.mae_vit_teacher or config.pvt2_teacher:
-            (
-                _,
-                train_image,
-                _,
-                _,
-            ) = train_images
-        else:
-            (train_image, _) = train_images
+        (train_image, _) = train_images
 
         if on_gpu:
             train_image = train_image.cuda()
 
-        if config.vit_teacher:
-            teacher_output = teacher(train_image)[0]
-            teacher_output = process_vit_features(teacher_output, cls_token=True)
-        elif config.mae_vit_teacher:
-            teacher_output = teacher(train_image)
-            teacher_output = process_vit_features(teacher_output)
-        elif config.pvt2_teacher:
-            teacher_output = teacher(train_image)
-            teacher_output = process_pvt_features(teacher_output, config)
-        else:
-            teacher_output = teacher(train_image)
+        teacher_output = teacher(train_image)
 
         distance = (teacher_output - channel_mean) ** 2
         mean_distance = torch.mean(distance, dim=[0, 2, 3])

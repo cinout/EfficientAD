@@ -157,7 +157,6 @@ class Decoder_VIT(nn.Module):
         return x  # target_x.shape: [bs, 3, 512, 512]
 
 
-# TODO:
 class Decoder_PVT(nn.Module):
     def __init__(self):
         super().__init__()
@@ -335,7 +334,6 @@ def train(args):
                 output = decoder(features)  # shape: [bs, 3, 512, 512]
             elif args.model == "pvt2_b2li":
                 features = encoder(img)
-                # TODO:
 
             loss = F.mse_loss(output, img, reduction="mean")
             optimizer.zero_grad()

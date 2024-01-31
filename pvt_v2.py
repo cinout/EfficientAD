@@ -515,9 +515,7 @@ class pvt_v2_b2_li(PyramidVisionTransformerV2):
             drop_path_rate=0.1,
             linear=True,
             pretrained=kwargs["pretrained"],
-            num_stages=4
-            if kwargs["stage4"]
-            else 3,  # TODO: default is 3
+            num_stages=4 if kwargs["stage4"] else 3,
         )
 
 
