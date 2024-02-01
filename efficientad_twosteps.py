@@ -328,12 +328,11 @@ def main(config, seed):
 
     # obtain teacher's normalized mean and std
     # TODO: uncomment below
-    # teacher_mean, teacher_std = teacher_normalization(teacher, train_loader, config)
-
-    with open("teacher_mean.t", "rb") as f:
-        teacher_mean = torch.load(f)
-    with open("teacher_std.t", "rb") as f:
-        teacher_std = torch.load(f)
+    teacher_mean, teacher_std = teacher_normalization(teacher, train_loader, config)
+    # with open("teacher_mean.t", "rb") as f:
+    #     teacher_mean = torch.load(f)
+    # with open("teacher_std.t", "rb") as f:
+    #     teacher_std = torch.load(f)
 
     if config.stg1_ckpt is None:
         """
