@@ -35,7 +35,7 @@ python -u efficientad_twosteps.py \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
   --note "twostage" \
   --seeds 10 20 30 \
-  --stg1_ckpt outputs/folder_baseline/output_20240131_215545_79_5_sd10_[sc]/trainings/mvtec_loco/breakfast_box \
+  --stg1_ckpt outputs/folder_baseline/output_20240131_215545_79_5_sd10_[sc]/trainings/mvtec_loco/splicing_connectors \
   --logicano_select absolute \
   --num_logicano 10 \
 
