@@ -6,6 +6,7 @@ import tifffile
 import torch
 from torch.utils.data import DataLoader
 from torchvision import transforms
+from torch.nn import functional as F
 import argparse
 import itertools
 import os
@@ -13,16 +14,23 @@ import random
 from tqdm import tqdm
 from common import (
     Autoencoder,
+    FocalLoss,
+    ImageFolderWithPath,
+    IndividualGTLoss,
+    LogicalMaskProducer,
     PDN_Small,
     get_pdn_medium,
     ImageFolderWithoutTarget,
-    ImageFolderWithPath,
+    ImageFolderWithTargetAndPath,
     InfiniteDataloader,
 )
 from sklearn.metrics import roc_auc_score
 from datetime import datetime
 from functools import partial
 import cv2
+from torch.utils.tensorboard import SummaryWriter
+
+from dataset import LogicalAnomalyDataset, MyDummyDataset
 
 timestamp = (
     datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -96,13 +104,34 @@ def get_argparse():
     parser.add_argument("--note", type=str, default="")
     parser.add_argument("--seeds", type=int, default=[42], nargs="+")
 
-    # TODO: new options
+    # NEW OPTIONS
     parser.add_argument(
         "--stg1_ckpt",
         type=str,
         help="should be the path of the parent folder of xxx.pth",
     )
+    parser.add_argument("--stg2_ckpt", type=str)
     parser.add_argument("--fixed_ref_percent", type=float, default=0.1)
+    parser.add_argument("--lr_stg2", type=float, default=0.00001)
+    parser.add_argument("--iters_stg2", type=int, default=8000)
+    parser.add_argument(
+        "--logicano_select",
+        type=str,
+        choices=["percent", "absolute"],
+        default="absolute",
+    )
+    parser.add_argument(
+        "--percent_logicano",
+        type=float,
+        default=0.1,
+        help="[logicano_select=percent] proportion of real logical anomalies used in training",
+    )
+    parser.add_argument(
+        "--num_logicano",
+        type=int,
+        default=10,
+        help="[logicano_select=absolute] number of real logical anomalies used in training",
+    )
     return parser.parse_args()
 
 
@@ -111,6 +140,19 @@ on_gpu = torch.cuda.is_available()
 device = "cuda" if on_gpu else "cpu"
 image_size = 256
 out_channels = 384
+
+
+def stg2_transform(size):
+    mean_train = [0.485, 0.456, 0.406]
+    std_train = [0.229, 0.224, 0.225]
+    data_transforms = transforms.Compose(
+        [
+            transforms.Resize((size, size)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=mean_train, std=std_train),
+        ]
+    )
+    return data_transforms
 
 
 def train_transform(image, config):
@@ -285,7 +327,13 @@ def main(config, seed):
     autoencoder = autoencoder.to(device)
 
     # obtain teacher's normalized mean and std
-    teacher_mean, teacher_std = teacher_normalization(teacher, train_loader, config)
+    # TODO: uncomment below
+    # teacher_mean, teacher_std = teacher_normalization(teacher, train_loader, config)
+
+    with open("teacher_mean.t", "rb") as f:
+        teacher_mean = torch.load(f)
+    with open("teacher_std.t", "rb") as f:
+        teacher_std = torch.load(f)
 
     if config.stg1_ckpt is None:
         """
@@ -371,8 +419,8 @@ def main(config, seed):
         student_dict = torch.load(
             os.path.join(config.stg1_ckpt, "student_final.pth"), map_location=device
         )
-        autoencoder.load_state_dict(autoencoder_dict)
-        student.load_state_dict(student_dict)
+        autoencoder.load_state_dict(autoencoder_dict.state_dict())
+        student.load_state_dict(student_dict.state_dict())
         autoencoder = autoencoder.to(device)
         student = student.to(device)
 
@@ -384,48 +432,292 @@ def main(config, seed):
     --[STAGE 2]--:
     preparing datasets
     """
-    # TODO:
-    # used_ref_count = math.floor(len(train_data) * config.fixed_ref_percent)
-    # train_data_list = list(train_data)
-    # random.shuffle(train_data_list)
-    # train_ref_dataloader = torch.utils.data.DataLoader(
-    #     train_data_list[:used_ref_count],
-    #     batch_size=32,
-    #     shuffle=False,
-    #     # num_workers=1,
-    #     pin_memory=True,
-    # )
+
+    train_path = "datasets/loco/" + config.subdataset + "/train"
+    train_data = ImageFolderWithPath(
+        root=train_path, transform=stg2_transform(image_size)
+    )
+    used_ref_count = math.floor(len(train_data) * config.fixed_ref_percent)
+    train_data_list = list(train_data)
+    random.shuffle(train_data_list)
+    train_ref_dataloader = torch.utils.data.DataLoader(
+        train_data_list[:used_ref_count],
+        batch_size=32,
+        shuffle=False,
+        # num_workers=1,
+        pin_memory=True,
+    )
+
+    normal_dataloader = torch.utils.data.DataLoader(
+        train_data,
+        batch_size=1,
+        shuffle=True,
+        # num_workers=1,
+        pin_memory=True,
+    )
+
+    logicano_data = LogicalAnomalyDataset(
+        logicano_select=config.logicano_select,
+        num_logicano=config.num_logicano,
+        percent_logicano=config.percent_logicano,
+        subdataset=config.subdataset,
+        image_size=image_size,
+    )
+    logicano_dataloader = torch.utils.data.DataLoader(
+        logicano_data,
+        batch_size=1,
+        shuffle=True,
+        # num_workers=1,
+        pin_memory=True,
+    )
+
+    logicano_dataloader_infinite = InfiniteDataloader(logicano_dataloader)
+    normal_dataloader_infinite = InfiniteDataloader(normal_dataloader)
+
+    """
+    --[STAGE 2]--:
+    preparing model
+    """
+
+    model_stg2 = LogicalMaskProducer()
+    model_stg2 = model_stg2.to(device)
+
+    """
+    --[STAGE 2]--:
+    obtain ref's features early in the process
+    """
+    ref_features = []
+    ref_path_names = []
+    for imgs, path in train_ref_dataloader:
+        imgs = imgs.to(device)
+
+        with torch.no_grad():
+            batch_ref_features = autoencoder(
+                imgs, return_bn=True
+            )  # shape: [bs, 64, 1, 1]
+
+        ref_features.append(batch_ref_features)
+        ref_path_names = ref_path_names + list(path)
+
+    ref_features = torch.cat(ref_features, dim=0)
+    num_ref = ref_features.shape[0]
+
+    # find closest ref here
+    logicanos_for_train = []
+    for logicano in logicano_dataloader:
+        max_sim = -1000
+        max_index = None
+
+        logicano_image = logicano["image"]
+        logicano_image = logicano_image.to(device)
+        with torch.no_grad():
+            logicano_image = autoencoder(
+                logicano_image, return_bn=True
+            )  # [1, 64, 1, 1]
+
+        for i in range(num_ref):
+            ref_feature = ref_features[i]
+            sim = F.cosine_similarity(ref_feature, logicano_image[0], dim=0).mean()
+            if sim > max_sim:
+                max_sim = sim
+                max_index = i
+        logicano["image"] = logicano_image
+        logicano["max_ref_index"] = max_index
+
+        logicanos_for_train.append(logicano)
+    normals_for_train = []
+    for normal in normal_dataloader:
+        max_sim = -1000
+        max_index = None
+
+        normal_image, img_path = normal
+        normal_image = normal_image.to(device)
+        with torch.no_grad():
+            normal_image = autoencoder(normal_image, return_bn=True)
+
+        for i in range(num_ref):
+            ref_path = ref_path_names[i]
+            ref_path = ref_path.split("/")[-1]
+            img_path = img_path[0].split("/")[-1]
+            if ref_path == img_path:
+                # should not be the same image
+                continue
+
+            ref_feature = ref_features[i]
+
+            sim = F.cosine_similarity(ref_feature, normal_image[0], dim=0).mean()
+
+            if sim > max_sim:
+                max_sim = sim
+                max_index = i
+
+        normals_for_train.append({"image": normal_image, "max_ref_index": max_index})
+
+    if config.stg2_ckpt is None:
+        """
+        --[STAGE 2]--:
+        training
+        """
+        # optimizer
+        # TODO: check when you alter modules
+        model_parameters = list(model_stg2.deconv.parameters())
+        optimizer = torch.optim.AdamW(
+            model_parameters,
+            lr=config.lr_stg2,
+            betas=(0.9, 0.999),
+            weight_decay=1e-5,
+        )
+
+        # tensorboard
+        writer = SummaryWriter(
+            log_dir=f"./runs/{timestamp}_{config.subdataset}_iter{config.iters_stg2}"
+        )  # Writer will output to ./runs/ directory by default. You can change log_dir in here
+        tqdm_obj = tqdm(range(config.iters_stg2))
+
+        model_stg2.train()
+        loss_focal = FocalLoss()
+        loss_individual_gt = IndividualGTLoss(config)
+
+        logicanos_for_train = MyDummyDataset(logicanos_for_train)
+        normals_for_train = MyDummyDataset(normals_for_train)
+
+        logicanos_for_train_dataloader = torch.utils.data.DataLoader(
+            logicanos_for_train,
+            batch_size=1,
+            shuffle=True,
+            num_workers=0,
+            drop_last=False,
+        )
+
+        normals_for_train_dataloader = torch.utils.data.DataLoader(
+            normals_for_train,
+            batch_size=1,
+            shuffle=True,
+            num_workers=0,
+            drop_last=False,
+        )
+
+        logicano_dataloader_infinite = InfiniteDataloader(
+            logicanos_for_train_dataloader
+        )
+        normal_dataloader_infinite = InfiniteDataloader(normals_for_train_dataloader)
+
+        for iter, logicano, normal in zip(
+            tqdm_obj, logicano_dataloader_infinite, normal_dataloader_infinite
+        ):
+            logicano_image = logicano["image"][0]  # already feature map, [1, 64, 1, 1]
+            overall_gt = logicano["overall_gt"][0]  # [1, 1, orig.h, orig.w]
+            individual_gts = logicano["individual_gts"][0]
+            logicano_max_ref_index = logicano["max_ref_index"][0]
+            logicano_ref = ref_features[logicano_max_ref_index]  # [64, 1, 1]
+            _, _, orig_height, orig_width = overall_gt.shape
+
+            overall_gt = overall_gt.to(device)
+            individual_gts = [item.to(device) for item in individual_gts]
+
+            normal_image = normal["image"][0]  # already feature map
+            normal_max_ref_index = normal["max_ref_index"][0]
+            normal_ref = ref_features[normal_max_ref_index]  # [64, 1, 1]
+
+            logicano_input = torch.cat([logicano_ref, logicano_image[0]])
+            normal_input = torch.cat([normal_ref, normal_image[0]])
+
+            input = torch.stack(
+                [logicano_input, normal_input], dim=0
+            )  # shape: [2, 64*2, 1, 1]
+
+            predicted_masks = model_stg2(input)
+            # TODO: should we interpolate?
+            predicted_masks = F.interpolate(
+                predicted_masks, (orig_height, orig_width), mode="bilinear"
+            )
+
+            # create gt mask for normal image
+            normal_gt = torch.zeros(
+                size=(1, 1, orig_height, orig_width), dtype=overall_gt.dtype
+            )
+            normal_gt = normal_gt.to(device)
+            overall_gt = torch.cat(
+                [overall_gt, normal_gt], dim=0
+            )  # [2, 1, orig.h, orig.w]
+
+            # loss_focal for overall negative target pixels only
+            loss_overall_negative = loss_focal(predicted_masks, overall_gt)
+            # loss for positive pixels in individual gts
+            loss_individual_positive = loss_individual_gt(
+                predicted_masks[0], individual_gts
+            )
+            loss = loss_overall_negative + loss_individual_positive
+            writer.add_scalar("Loss/train", loss, iter)
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            if iter % 20 == 0:
+                print(
+                    "iter [{}/{}], loss:{:.4f}".format(
+                        iter, config.iters_stg2, loss.item()
+                    )
+                )
+
+        writer.flush()  # Call flush() method to make sure that all pending events have been written to disk
+        writer.close()  # if you do not need the summary writer anymore, call close() method.
+        model_stg2_dict = model_stg2.state_dict()
+        torch.save(model_stg2_dict, os.path.join(train_output_dir, f"model_stg2.pth"))
+    else:
+        model_stg2_dict = torch.load(config.stg2_ckpt, map_location=device)
+        model_stg2.load_state_dict(model_stg2_dict)
+
+    model_stg2.eval()
 
     """
     ---[TEST]---
     """
-
-    test_set = ImageFolderWithPath(
+    test_set = ImageFolderWithTargetAndPath(
         os.path.join(dataset_path, config.subdataset, "test")
     )
-    q_st_start, q_st_end, q_ae_start, q_ae_end = map_normalization(
+
+    (
+        q_st_start,
+        q_st_end,
+        q_ae_start,
+        q_ae_end,
+        q_stg2_start,
+        q_stg2_end,
+    ) = map_normalization(
         out_channels=out_channels,
         validation_loader=validation_loader,
         teacher=teacher,
         student=student,
         autoencoder=autoencoder,
+        model_stg2=model_stg2,
         teacher_mean=teacher_mean,
         teacher_std=teacher_std,
+        ref_features=ref_features,
         config=config,
         desc="Final map normalization",
     )
+
+    print(f"q_stg2_start: {q_stg2_start}")
+    print(f"q_stg2_end: {q_stg2_end}")
+
     auc = test(
         out_channels=out_channels,
         test_set=test_set,
         teacher=teacher,
         student=student,
         autoencoder=autoencoder,
+        model_stg2=model_stg2,
         teacher_mean=teacher_mean,
         teacher_std=teacher_std,
+        ref_features=ref_features,
         q_st_start=q_st_start,
         q_st_end=q_st_end,
         q_ae_start=q_ae_start,
         q_ae_end=q_ae_end,
+        q_stg2_start=q_stg2_start,
+        q_stg2_end=q_stg2_end,
         config=config,
         output_dir=output_dir,
         test_output_dir=test_output_dir,
@@ -441,12 +733,16 @@ def test(
     teacher,
     student,
     autoencoder,
+    model_stg2,
     teacher_mean,
     teacher_std,
+    ref_features,
     q_st_start,
     q_st_end,
     q_ae_start,
     q_ae_end,
+    q_stg2_start,
+    q_stg2_end,
     config,
     output_dir,
     test_output_dir=None,
@@ -466,30 +762,28 @@ def test(
         images = train_transform(image, config=config)
 
         (image, _) = images
-        image_teacher = None
 
         image = image[None]
-        if image_teacher is not None:
-            image_teacher = image_teacher[None]
 
         image = image.to(device)
-        if image_teacher is not None:
-            image_teacher = image_teacher.to(device)
 
-        map_combined, map_st, map_ae = predict(
+        map_combined, map_st, map_ae, map_stg2 = predict(
             config=config,
             out_channels=out_channels,
             image=image,
-            image_teacher=image_teacher,
             teacher=teacher,
             student=student,
             autoencoder=autoencoder,
+            model_stg2=model_stg2,
             teacher_mean=teacher_mean,
             teacher_std=teacher_std,
+            ref_features=ref_features,
             q_st_start=q_st_start,
             q_st_end=q_st_end,
             q_ae_start=q_ae_start,
             q_ae_end=q_ae_end,
+            q_stg2_start=q_stg2_start,
+            q_stg2_end=q_stg2_end,
         )
 
         if config.analysis_heatmap and False:
@@ -531,30 +825,28 @@ def test(
             images = train_transform(image, config=config)
 
             (image, _) = images
-            image_teacher = None
 
             image = image[None]
-            if image_teacher is not None:
-                image_teacher = image_teacher[None]
 
             image = image.to(device)
-            if image_teacher is not None:
-                image_teacher = image_teacher.to(device)
 
-            _, map_structural, map_logical = predict(
+            _, map_structural, map_logical, map_stg2 = predict(
                 config=config,
                 out_channels=out_channels,
                 image=image,
-                image_teacher=image_teacher,
                 teacher=teacher,
                 student=student,
                 autoencoder=autoencoder,
+                model_stg2=model_stg2,
                 teacher_mean=teacher_mean,
                 teacher_std=teacher_std,
+                ref_features=ref_features,
                 q_st_start=q_st_start,
                 q_st_end=q_st_end,
                 q_ae_start=q_ae_start,
                 q_ae_end=q_ae_end,
+                q_stg2_start=q_stg2_start,
+                q_stg2_end=q_stg2_end,
             )
 
             map_structural = map_structural.squeeze().cpu().numpy()  # shape: (256, 256)
@@ -604,27 +896,32 @@ def test(
     return auc * 100
 
 
+# used by map_normalization() and test()
 @torch.no_grad()
 def predict(
     config,
     out_channels,
     image,
-    image_teacher,
     teacher,
     student,
     autoencoder,
+    model_stg2,
     teacher_mean,
     teacher_std,
+    ref_features,
     q_st_start=None,
     q_st_end=None,
     q_ae_start=None,
     q_ae_end=None,
+    q_stg2_start=None,
+    q_stg2_end=None,
 ):
     teacher_output = teacher(image)
 
     teacher_output = (teacher_output - teacher_mean) / teacher_std
     student_output = student(image)
-    autoencoder_output = autoencoder(image)
+    (bn_features, autoencoder_output) = autoencoder(image, return_both=True)
+
     map_st = torch.mean(
         (teacher_output - student_output[:, :out_channels]) ** 2, dim=1, keepdim=True
     )  # shape: (bs, 1, h, w)
@@ -633,7 +930,6 @@ def predict(
         dim=1,
         keepdim=True,
     )  # shape: (bs, 1, h, w)
-
     # upsample map_st and map_ae to 256*256
     map_st = torch.nn.functional.interpolate(
         map_st, (image_size, image_size), mode="bilinear"
@@ -642,13 +938,19 @@ def predict(
         map_ae, (image_size, image_size), mode="bilinear"
     )
 
+    pred_mask = model_stg2(bn_features, ref_features=ref_features)
+    map_stg2 = pred_mask[:, 1, :, :].unsqueeze(1)
+
     if q_st_start is not None:
         map_st = 0.1 * (map_st - q_st_start) / (q_st_end - q_st_start)
     if q_ae_start is not None:
         map_ae = 0.1 * (map_ae - q_ae_start) / (q_ae_end - q_ae_start)
-    map_combined = 0.5 * map_st + 0.5 * map_ae
+    if q_stg2_start is not None:
+        map_stg2 = 0.1 * (map_stg2 - q_stg2_start) / (q_stg2_end - q_stg2_start)
 
-    return map_combined, map_st, map_ae
+    map_combined = 1.0 / 3 * map_st + 1.0 / 3 * map_ae + 1.0 / 3 * map_stg2
+
+    return map_combined, map_st, map_ae, map_stg2
 
 
 @torch.no_grad()
@@ -658,44 +960,52 @@ def map_normalization(
     teacher,
     student,
     autoencoder,
+    model_stg2,
     teacher_mean,
     teacher_std,
+    ref_features,
     config,
     desc="Map normalization",
 ):
     maps_st = []
     maps_ae = []
+    maps_stg2 = []
     # ignore augmented ae image
     for images in tqdm(validation_loader, desc=desc):
         (image, _) = images
-        image_teacher = None
 
         image = image.to(device)
-        if image_teacher is not None:
-            image_teacher = image_teacher.to(device)
 
-        map_combined, map_st, map_ae = predict(
+        map_combined, map_st, map_ae, map_stg2 = predict(
             config=config,
             out_channels=out_channels,
             image=image,
-            image_teacher=image_teacher,
             teacher=teacher,
             student=student,
             autoencoder=autoencoder,
+            model_stg2=model_stg2,
             teacher_mean=teacher_mean,
             teacher_std=teacher_std,
+            ref_features=ref_features,
         )
         maps_st.append(map_st)
         maps_ae.append(map_ae)
+        maps_stg2.append(map_stg2)
+
     maps_st = torch.cat(maps_st)
-    maps_ae = torch.cat(maps_ae)
     q_st_start = torch.quantile(
         maps_st, q=0.9
     )  # means 90% of values lie below q_st_start
     q_st_end = torch.quantile(maps_st, q=0.995)
+
+    maps_ae = torch.cat(maps_ae)
     q_ae_start = torch.quantile(maps_ae, q=0.9)
     q_ae_end = torch.quantile(maps_ae, q=0.995)
-    return q_st_start, q_st_end, q_ae_start, q_ae_end
+
+    maps_stg2 = torch.cat(maps_stg2)
+    q_stg2_start = torch.quantile(maps_stg2, q=0.9)
+    q_stg2_end = torch.quantile(maps_stg2, q=0.995)
+    return q_st_start, q_st_end, q_ae_start, q_ae_end, q_stg2_start, q_stg2_end
 
 
 @torch.no_grad()

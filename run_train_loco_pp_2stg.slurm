@@ -9,9 +9,9 @@
 #SBATCH --qos=gpgpudeeplearn
 #SBATCH --constraint=dlg4|dlg5
 
-#SBATCH --job-name="train_jb"
+#SBATCH --job-name="train_pp"
 #SBATCH --account=punim1623
-#SBATCH --time=0-15:00:00
+#SBATCH --time=0-05:00:00
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -29,12 +29,15 @@ conda activate eff
 set -e
 set -x
 
-python -u efficientad.py \
+python -u efficientad_twosteps.py \
   --dataset mvtec_loco \
-  --subdataset juice_bottle \
+  --subdataset pushpins \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
-  --note "baseline" \
+  --note "twostage" \
   --seeds 10 20 30 \
+  --stg1_ckpt outputs/folder_baseline/output_20240131_215528_43_52_sd10_[pp]/trainings/mvtec_loco/breakfast_box \
+  --logicano_select absolute \
+  --num_logicano 10 \
   
 
 

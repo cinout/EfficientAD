@@ -16,7 +16,7 @@ from common import (
     PDN_Small,
     get_pdn_medium,
     ImageFolderWithoutTarget,
-    ImageFolderWithPath,
+    ImageFolderWithTargetAndPath,
     InfiniteDataloader,
 )
 from sklearn.metrics import roc_auc_score
@@ -173,7 +173,7 @@ def main(config, seed):
         os.path.join(dataset_path, config.subdataset, "train"),
         transform=transforms.Lambda(partial(train_transform, config=config)),
     )
-    test_set = ImageFolderWithPath(
+    test_set = ImageFolderWithTargetAndPath(
         os.path.join(dataset_path, config.subdataset, "test")
     )
     if config.dataset == "mvtec_ad":
