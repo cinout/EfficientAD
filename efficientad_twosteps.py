@@ -569,7 +569,7 @@ def main(config, seed):
 
         # tensorboard
         writer = SummaryWriter(
-            log_dir=f"./runs/{timestamp}_{config.subdataset}_iter{config.iters_stg2}"
+            log_dir=f"./runs/{timestamp}_{config.subdataset}_sd{seed}"
         )  # Writer will output to ./runs/ directory by default. You can change log_dir in here
         tqdm_obj = tqdm(range(config.iters_stg2))
 

@@ -11,7 +11,7 @@
 
 #SBATCH --job-name="train_sb"
 #SBATCH --account=punim1623
-#SBATCH --time=0-05:00:00
+#SBATCH --time=0-07:00:00
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -38,6 +38,8 @@ python -u efficientad_twosteps.py \
   --stg1_ckpt outputs/folder_baseline/output_20240131_215545_7_68_sd10_[sb]/trainings/mvtec_loco/screw_bag \
   --logicano_select absolute \
   --num_logicano 10 \
+  --iters_stg2 20000 \
+  --lr_stg2 0.000004 \
   
 
 
