@@ -39,6 +39,7 @@ python -u efficientad.py \
   --logicano_select absolute \
   --num_logicano 10 \
   --logicano_loss focal \
+  --stg1_ckpt outputs/folder_baseline/output_20240131_215528_43_52_sd10_[pp]/trainings/mvtec_loco/pushpins \
 
 
 ##Log this job's resource usage stats###

@@ -39,7 +39,7 @@ python -u efficientad.py \
   --logicano_select absolute \
   --num_logicano 10 \
   --logicano_loss focal \
-  
+  --stg1_ckpt outputs/folder_baseline/output_20240131_215545_79_5_sd10_[sc]/trainings/mvtec_loco/splicing_connectors \
 
 
 ##Log this job's resource usage stats###

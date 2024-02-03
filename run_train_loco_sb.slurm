@@ -39,6 +39,7 @@ python -u efficientad.py \
   --logicano_select absolute \
   --num_logicano 10 \
   --logicano_loss focal \
+  --stg1_ckpt outputs/folder_baseline/output_20240131_215545_7_68_sd10_[sb]/trainings/mvtec_loco/screw_bag \
 
 
 ##Log this job's resource usage stats###

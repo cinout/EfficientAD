@@ -421,8 +421,7 @@ def main(config, seed):
 
             logicano_image = logicano_image.to(device)
             overall_gt = overall_gt.to(device)
-            for gt in individual_gts:
-                gt = gt.to(device)
+            individual_gts = [item.to(device) for item in individual_gts]
 
             teacher_output = teacher(logicano_image)
             teacher_output = (teacher_output - teacher_mean) / teacher_std
