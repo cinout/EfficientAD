@@ -648,7 +648,6 @@ def main(config, seed):
             )
             loss = loss_overall_negative + loss_individual_positive
             writer.add_scalar("Loss/train", loss, iter)
-
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()

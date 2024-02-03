@@ -13,6 +13,8 @@ import random
 from tqdm import tqdm
 from common import (
     Autoencoder,
+    FocalLoss,
+    IndividualGTLoss,
     PDN_Small,
     get_pdn_medium,
     ImageFolderWithoutTarget,
@@ -23,6 +25,9 @@ from sklearn.metrics import roc_auc_score
 from datetime import datetime
 from functools import partial
 import cv2
+import torch.nn.functional as F
+from dataset import LogicalAnomalyDataset, MyDummyDataset
+from torch.utils.tensorboard import SummaryWriter
 
 timestamp = (
     datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -94,6 +99,37 @@ def get_argparse():
     parser.add_argument("-t", "--train_steps", type=int, default=70000)
     parser.add_argument("--note", type=str, default="")
     parser.add_argument("--seeds", type=int, default=[42], nargs="+")
+
+    # NEW OPTIONS
+    parser.add_argument(
+        "--include_logicano",
+        action="store_true",
+        help="if set to True, then include a few logical anomalies into training",
+    )
+    parser.add_argument(
+        "--logicano_select",
+        type=str,
+        choices=["percent", "absolute"],
+        default="absolute",
+    )
+    parser.add_argument(
+        "--percent_logicano",
+        type=float,
+        default=0.1,
+        help="[logicano_select=percent] proportion of real logical anomalies used in training",
+    )
+    parser.add_argument(
+        "--num_logicano",
+        type=int,
+        default=10,
+        help="[logicano_select=absolute] number of real logical anomalies used in training",
+    )
+    parser.add_argument(
+        "--logicano_loss",
+        type=str,
+        choices=["focal", "sphere"],
+        default="focal",
+    )
     return parser.parse_args()
 
 
@@ -101,6 +137,7 @@ def get_argparse():
 on_gpu = torch.cuda.is_available()
 device = "cuda" if on_gpu else "cpu"
 image_size = 256
+out_channels = 384
 
 
 def train_transform(image, config):
@@ -196,6 +233,30 @@ def main(config, seed):
     train_loader = DataLoader(
         train_set, batch_size=1, shuffle=True, num_workers=4, pin_memory=True
     )
+
+    if config.include_logicano:
+        # reconfigure train_set
+        logicano_data = LogicalAnomalyDataset(
+            logicano_select=config.logicano_select,
+            num_logicano=config.num_logicano,
+            percent_logicano=config.percent_logicano,
+            subdataset=config.subdataset,
+            image_size=image_size,
+        )
+
+        logicanos_for_train = []
+        normals_for_train = []
+        for logicano in logicano_data:
+            logicanos_for_train.append(logicano)
+        for x in train_set:
+            normals_for_train.append(x)
+        train_set = logicanos_for_train + normals_for_train
+        train_set = MyDummyDataset(train_set)
+        old_train_loader = train_loader  # for teacher normalization purpose
+        train_loader = DataLoader(
+            train_set, batch_size=1, shuffle=True, num_workers=4, pin_memory=True
+        )
+
     train_loader_infinite = InfiniteDataloader(train_loader)
     validation_loader = DataLoader(validation_set, batch_size=1)
 
@@ -221,8 +282,6 @@ def main(config, seed):
         penalty_loader_infinite = InfiniteDataloader(penalty_loader)
     else:
         penalty_loader_infinite = itertools.repeat(None)
-
-    out_channels = 384
 
     # create models
     if config.model_size == "small":
@@ -271,7 +330,14 @@ def main(config, seed):
     student = student.to(device)
     autoencoder = autoencoder.to(device)
 
-    teacher_mean, teacher_std = teacher_normalization(teacher, train_loader, config)
+    # TODO: uncomment below
+    teacher_mean, teacher_std = teacher_normalization(
+        teacher, old_train_loader if config.include_logicano else train_loader, config
+    )
+    # with open("teacher_mean.t", "rb") as f:
+    #     teacher_mean = torch.load(f)
+    # with open("teacher_std.t", "rb") as f:
+    #     teacher_std = torch.load(f)
 
     optimizer = torch.optim.Adam(
         itertools.chain(student.parameters(), autoencoder.parameters()),
@@ -284,51 +350,121 @@ def main(config, seed):
         optimizer, step_size=int(0.95 * config.train_steps), gamma=0.1
     )
 
+    if config.include_logicano:
+        if config.logicano_loss == "focal":
+            loss_focal = FocalLoss()
+            loss_individual_gt = IndividualGTLoss(config)
+        elif config.logicano_loss == "sphere":
+            # TODO:
+            pass
+        else:
+            raise Exception("Unimplemented logicano loss")
+    writer = SummaryWriter(
+        log_dir=f"./runs/{timestamp}_{config.subdataset}_sd{seed}"
+    )  # Writer will output to ./runs/ directory by default. You can change log_dir in here
+
     tqdm_obj = tqdm(range(config.train_steps))
     for (
         iteration,
         train_images,
         image_penalty,
     ) in zip(tqdm_obj, train_loader_infinite, penalty_loader_infinite):
-        (image_st, image_ae) = train_images
+        # TODO: extend iter?
 
-        image_st = image_st.to(device)
-        image_ae = image_ae.to(device)
+        if isinstance(train_images, list):
+            (image_st, image_ae) = train_images
 
-        if image_penalty is not None:
-            image_penalty = image_penalty.to(device)
+            image_st = image_st.to(device)
+            image_ae = image_ae.to(device)
 
-        with torch.no_grad():
-            teacher_output_st = teacher(image_st)
-            teacher_output_st = (teacher_output_st - teacher_mean) / teacher_std
-        student_output_st = student(image_st)[
-            :, :out_channels
-        ]  # the first half of student outputs
-        distance_st = (teacher_output_st - student_output_st) ** 2
-        d_hard = torch.quantile(distance_st, q=0.999)
-        loss_hard = torch.mean(distance_st[distance_st >= d_hard])
+            if image_penalty is not None:
+                image_penalty = image_penalty.to(device)
 
-        if image_penalty is not None:
-            student_output_penalty = student(image_penalty)[:, :out_channels]
-            loss_penalty = torch.mean(student_output_penalty**2)
-            loss_st = loss_hard + loss_penalty
+            with torch.no_grad():
+                teacher_output_st = teacher(image_st)
+                teacher_output_st = (teacher_output_st - teacher_mean) / teacher_std
+            student_output_st = student(image_st)[
+                :, :out_channels
+            ]  # the first half of student outputs
+            distance_st = (teacher_output_st - student_output_st) ** 2
+            d_hard = torch.quantile(distance_st, q=0.999)
+            loss_hard = torch.mean(distance_st[distance_st >= d_hard])
+
+            if image_penalty is not None:
+                student_output_penalty = student(image_penalty)[:, :out_channels]
+                loss_penalty = torch.mean(student_output_penalty**2)
+                loss_st = loss_hard + loss_penalty
+            else:
+                loss_st = loss_hard
+
+            ae_output = autoencoder(image_ae)
+
+            with torch.no_grad():
+                teacher_output_ae = teacher(image_ae)
+                teacher_output_ae = (teacher_output_ae - teacher_mean) / teacher_std
+            student_output_ae = student(image_ae)[
+                :, out_channels:
+            ]  # the second half of student outputs
+            distance_ae = (teacher_output_ae - ae_output) ** 2
+            distance_stae = (ae_output - student_output_ae) ** 2
+            loss_ae = torch.mean(distance_ae)
+            loss_stae = torch.mean(distance_stae)
+            loss_total = loss_st + loss_ae + loss_stae
+        elif isinstance(train_images, dict):
+            logicano_image = train_images["image"]  # [1, 3, 256, 256]
+            overall_gt = train_images["overall_gt"]  # [1, 1, orig.h, orig.w]
+            individual_gts = train_images[
+                "individual_gts"
+            ]  # each item: [1, 1, orig.h, orig.w]
+            _, _, orig_height, orig_width = overall_gt.shape
+
+            teacher_output = teacher(logicano_image)
+            teacher_output = (teacher_output - teacher_mean) / teacher_std
+            student_output = student(logicano_image)
+            autoencoder_output = autoencoder(logicano_image)
+            map_st = torch.mean(
+                (teacher_output - student_output[:, :out_channels]) ** 2,
+                dim=1,
+                keepdim=True,
+            )  # shape: (bs, 1, h, w)
+            map_ae = torch.mean(
+                (autoencoder_output - student_output[:, out_channels:]) ** 2,
+                dim=1,
+                keepdim=True,
+            )
+            map_st = torch.nn.functional.interpolate(
+                map_st, (orig_height, orig_width), mode="bilinear"
+            )
+            map_ae = torch.nn.functional.interpolate(
+                map_ae, (orig_height, orig_width), mode="bilinear"
+            )
+            map_combined = 0.5 * map_st + 0.5 * map_ae  # [1, 1, orig.h, orig.w]
+
+            if config.logicano_loss == "focal":
+                map_combined = map_combined.reshape(1, 1, -1)
+                map_combined = F.normalize(map_combined, dim=2)
+                map_combined = map_combined.reshape(1, 1, orig_height, orig_width)
+
+                map_combined_inverse = 1 - map_combined
+                map_combined = torch.cat([map_combined, map_combined_inverse], dim=1)
+
+                # loss_focal for overall negative target pixels only
+                loss_overall_negative = loss_focal(map_combined, overall_gt)
+                # loss for positive pixels in individual gts
+                loss_individual_positive = loss_individual_gt(
+                    map_combined[0], individual_gts
+                )
+                loss_total = loss_overall_negative + loss_individual_positive
+            elif config.logicano_loss == "sphere":
+                # TODO:
+
+                pass
+            else:
+                raise Exception("Unimplemented logicano_loss")
         else:
-            loss_st = loss_hard
+            raise Exception("Unexpected train_images data type")
 
-        ae_output = autoencoder(image_ae)
-
-        with torch.no_grad():
-            teacher_output_ae = teacher(image_ae)
-            teacher_output_ae = (teacher_output_ae - teacher_mean) / teacher_std
-        student_output_ae = student(image_ae)[
-            :, out_channels:
-        ]  # the second half of student outputs
-        distance_ae = (teacher_output_ae - ae_output) ** 2
-        distance_stae = (ae_output - student_output_ae) ** 2
-        loss_ae = torch.mean(distance_ae)
-        loss_stae = torch.mean(distance_stae)
-        loss_total = loss_st + loss_ae + loss_stae
-
+        writer.add_scalar("Loss/train", loss_total, iteration)
         optimizer.zero_grad()
         loss_total.backward()
         optimizer.step()
@@ -341,11 +477,14 @@ def main(config, seed):
                 "Current loss: {:.4f}".format(loss_total.item()),
             )
 
+    writer.flush()  # Call flush() method to make sure that all pending events have been written to disk
+    writer.close()  # if you do not need the summary writer anymore, call close() method.
+
     teacher.eval()
     student.eval()
     autoencoder.eval()
 
-    torch.save(teacher, os.path.join(train_output_dir, "teacher_final.pth"))
+    # torch.save(teacher, os.path.join(train_output_dir, "teacher_final.pth"))
     torch.save(student, os.path.join(train_output_dir, "student_final.pth"))
     torch.save(autoencoder, os.path.join(train_output_dir, "autoencoder_final.pth"))
 
@@ -412,21 +551,15 @@ def test(
         images = train_transform(image, config=config)
 
         (image, _) = images
-        image_teacher = None
 
         image = image[None]
-        if image_teacher is not None:
-            image_teacher = image_teacher[None]
 
         image = image.to(device)
-        if image_teacher is not None:
-            image_teacher = image_teacher.to(device)
 
         map_combined, map_st, map_ae = predict(
             config=config,
             out_channels=out_channels,
             image=image,
-            image_teacher=image_teacher,
             teacher=teacher,
             student=student,
             autoencoder=autoencoder,
@@ -477,21 +610,15 @@ def test(
             images = train_transform(image, config=config)
 
             (image, _) = images
-            image_teacher = None
 
             image = image[None]
-            if image_teacher is not None:
-                image_teacher = image_teacher[None]
 
             image = image.to(device)
-            if image_teacher is not None:
-                image_teacher = image_teacher.to(device)
 
             _, map_structural, map_logical = predict(
                 config=config,
                 out_channels=out_channels,
                 image=image,
-                image_teacher=image_teacher,
                 teacher=teacher,
                 student=student,
                 autoencoder=autoencoder,
@@ -555,7 +682,6 @@ def predict(
     config,
     out_channels,
     image,
-    image_teacher,
     teacher,
     student,
     autoencoder,
@@ -614,17 +740,13 @@ def map_normalization(
     # ignore augmented ae image
     for images in tqdm(validation_loader, desc=desc):
         (image, _) = images
-        image_teacher = None
 
         image = image.to(device)
-        if image_teacher is not None:
-            image_teacher = image_teacher.to(device)
 
         map_combined, map_st, map_ae = predict(
             config=config,
             out_channels=out_channels,
             image=image,
-            image_teacher=image_teacher,
             teacher=teacher,
             student=student,
             autoencoder=autoencoder,
