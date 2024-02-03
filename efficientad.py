@@ -15,6 +15,7 @@ from common import (
     Autoencoder,
     FocalLoss,
     IndividualGTLoss,
+    IndividualGTLossForSphere,
     PDN_Small,
     get_pdn_medium,
     ImageFolderWithoutTarget,
@@ -96,7 +97,9 @@ def get_argparse():
         action="store_true",
         help="if set to True, then generate branch-wise analysis heatmap",
     )
-    parser.add_argument("-t", "--train_steps", type=int, default=70000)
+    parser.add_argument(
+        "-t", "--train_steps", type=int, default=70000
+    )  # TODO: extend iter?
     parser.add_argument("--note", type=str, default="")
     parser.add_argument("--seeds", type=int, default=[42], nargs="+")
 
@@ -248,6 +251,7 @@ def main(config, seed):
             subdataset=config.subdataset,
             image_size=image_size,
         )
+        _, orig_height, orig_width = logicano_data[0]["overall_gt"].shape
 
         logicanos_for_train = []
         normals_for_train = []
@@ -360,7 +364,9 @@ def main(config, seed):
             loss_focal = FocalLoss()
             loss_individual_gt = IndividualGTLoss(config)
         elif config.logicano_loss == "sphere":
-            # TODO: run a forward pass for all normal images to determine center c
+            loss_individual_gt = IndividualGTLossForSphere(config)
+            # TODO: uncomment the following
+
             autoencoder_dict = torch.load(
                 os.path.join(config.stg1_ckpt, "autoencoder_final.pth"),
                 map_location=device,
@@ -370,8 +376,50 @@ def main(config, seed):
             )
             tmp_autoencoder = Autoencoder(out_channels=out_channels)
             tmp_student = PDN_Small(out_channels=2 * out_channels, padding=True)
+            tmp_autoencoder.load_state_dict(autoencoder_dict.state_dict())
+            tmp_student.load_state_dict(student_dict.state_dict())
+            tmp_autoencoder = tmp_autoencoder.to(device)
+            tmp_student = tmp_student.to(device)
 
-            pass
+            tmp_autoencoder.eval()
+            tmp_student.eval()
+
+            center_c = []
+            with torch.no_grad():
+                for data in old_train_loader:
+                    (image, _) = data
+                    image = image.to(device)
+                    teacher_output = teacher(image)
+                    teacher_output = (teacher_output - teacher_mean) / teacher_std
+                    student_output = student(image)
+                    autoencoder_output = autoencoder(image)
+
+                    map_st = torch.mean(
+                        (teacher_output - student_output[:, :out_channels]) ** 2,
+                        dim=1,
+                        keepdim=True,
+                    )  # (1, 1, 64, 64)
+                    map_ae = torch.mean(
+                        (autoencoder_output - student_output[:, out_channels:]) ** 2,
+                        dim=1,
+                        keepdim=True,
+                    )  # (1, 1, 64, 64)
+                    map_combined = 0.5 * map_st + 0.5 * map_ae  # (1, 1, 64, 64)
+
+                    center_c.append(map_combined)
+            center_c = torch.cat(center_c, dim=0)  # [#train, 1, 64, 64]
+            center_c = torch.mean(center_c, dim=0)
+            center_c = center_c.unsqueeze(0)  # [1, 1, 64, 64]
+            center_c = F.interpolate(
+                center_c, (orig_height, orig_width), mode="bilinear"
+            )  # [1, 1, orig_height, orig_width]
+
+            eps = 0.1
+            center_c[center_c < eps] = eps
+
+            # TODO: comment out this
+            # with open("center_c.t", "rb") as f:
+            #     center_c = torch.load(f)
         else:
             raise Exception("Unimplemented logicano loss")
     writer = SummaryWriter(
@@ -384,9 +432,9 @@ def main(config, seed):
         train_images,
         image_penalty,
     ) in zip(tqdm_obj, train_loader_infinite, penalty_loader_infinite):
-        # TODO: extend iter?
-
         if isinstance(train_images, list):
+            # normal images
+
             (image_st, image_ae) = train_images
 
             image_st = image_st.to(device)
@@ -425,7 +473,11 @@ def main(config, seed):
             loss_ae = torch.mean(distance_ae)
             loss_stae = torch.mean(distance_stae)
             loss_total = loss_st + loss_ae + loss_stae
+            # TODO: remove
+            # print("[NORMAL]", loss_total.item())
         elif isinstance(train_images, dict):
+            # logic anomaly images
+
             logicano_image = train_images["image"]  # [1, 3, 256, 256]
             overall_gt = train_images["overall_gt"]  # [1, 1, orig.h, orig.w]
             individual_gts = train_images[
@@ -475,9 +527,25 @@ def main(config, seed):
                 )
                 loss_total = loss_overall_negative + loss_individual_positive
             elif config.logicano_loss == "sphere":
-                # TODO:
+                dist = (map_combined - center_c) ** 2  # [1, 1, orig.h, orig.w]
 
-                pass
+                # overall negative pixels
+                negative_mask = overall_gt == 0
+                loss_overall_negative = torch.masked_select(
+                    dist, negative_mask
+                )  # shape: [#pixels_of_negative]
+                loss_overall_negative = torch.mean(loss_overall_negative)
+
+                loss_individual_positive = loss_individual_gt(dist, individual_gts)
+                loss_individual_positive = torch.mean(loss_individual_positive)
+
+                loss_total = loss_overall_negative + loss_individual_positive
+                # TODO: remove
+                # print(
+                #     loss_overall_negative.item(),
+                #     loss_individual_positive.item(),
+                #     loss_total.item(),
+                # )
             else:
                 raise Exception("Unimplemented logicano_loss")
         else:

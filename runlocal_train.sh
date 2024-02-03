@@ -7,7 +7,7 @@ python -u efficientad.py \
   --include_logicano \
   --logicano_select absolute \
   --num_logicano 10 \
-  --loss sphere \
+  --logicano_loss sphere \
   --stg1_ckpt outputs/folder_baseline/output_20240131_213923_16_56_sd10_[bb]/trainings/mvtec_loco/breakfast_box \
   # --iters_stg2 20 \
  

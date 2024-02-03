@@ -9,6 +9,53 @@ import json, os
 import numpy as np
 
 
+class IndividualGTLossForSphere(torch.nn.Module):
+    def __init__(self, config) -> None:
+        super().__init__()
+        defects_config_path = os.path.join(
+            "datasets/loco/", config.subdataset, "defects_config.json"
+        )
+        defects = json.load(open(defects_config_path))
+        self.config = {e["pixel_value"]: e for e in defects}
+        self.eps = 1e-6
+
+    def forward(self, dist, gts):
+        # predicted.shape: (2, orig.h, orig.w)
+        loss_per_gt = []
+        for gt in gts:
+            # gt.shape: [1, 1, orig.h, orig.w]
+            # find unique config for the gt
+            unique_values = sorted(torch.unique(gt).detach().cpu().numpy())
+            pixel_type = unique_values[-1]
+            pixel_detail = self.config[pixel_type]
+            saturation_threshold = pixel_detail["saturation_threshold"]
+            relative_saturation = pixel_detail["relative_saturation"]
+
+            # calculate saturation_area (max pixels needed)
+            bool_array = gt.cpu().numpy().astype(np.bool_)
+            defect_area = np.sum(bool_array)
+            saturation_area = (
+                int(saturation_threshold * defect_area)
+                if relative_saturation
+                else np.minimum(saturation_threshold, defect_area)
+            )
+
+            # calculate loss
+            gt = gt.bool().to(torch.float32)
+            mask = gt == 1
+
+            loss = torch.masked_select((dist + self.eps) ** -0.2, mask)
+
+            saturated_loss_values, _ = torch.topk(
+                loss, k=saturation_area, largest=False
+            )
+
+            loss_per_gt.append(saturated_loss_values)
+
+        loss_per_gt = torch.cat(loss_per_gt, dim=0)
+        return loss_per_gt
+
+
 class IndividualGTLoss(torch.nn.Module):
     def __init__(self, config) -> None:
         super().__init__()

@@ -92,7 +92,9 @@ class LogicalAnomalyDataset(Dataset):
 
             individual_gts.append(gt)
 
-        overall_gt = overall_gt.bool().to(torch.float32)
+        overall_gt = overall_gt.bool().to(
+            torch.float32
+        )  # overall_gt is either 0. or 1.
         return overall_gt, individual_gts
 
     def __getitem__(self, index):

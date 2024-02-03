@@ -33,12 +33,12 @@ python -u efficientad.py \
   --dataset mvtec_loco \
   --subdataset pushpins \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
-  --note "include_logicano, loss=focal" \
+  --note "include_logicano, loss=sphere" \
   --seeds 10 20 30 \
   --include_logicano \
   --logicano_select absolute \
   --num_logicano 10 \
-  --logicano_loss focal \
+  --logicano_loss sphere \
   --stg1_ckpt outputs/folder_baseline/output_20240131_215528_43_52_sd10_[pp]/trainings/mvtec_loco/pushpins \
 
 
