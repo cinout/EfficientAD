@@ -33,9 +33,12 @@ python -u efficientad.py \
   --dataset mvtec_loco \
   --subdataset pushpins \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
-  --note "baseline" \
+  --note "include_logicano, loss=focal" \
   --seeds 10 20 30 \
-  
+  --include_logicano \
+  --logicano_select absolute \
+  --num_logicano 10 \
+  --logicano_loss focal \
 
 
 ##Log this job's resource usage stats###
