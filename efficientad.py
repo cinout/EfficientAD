@@ -355,7 +355,8 @@ def main(config, seed):
             loss_focal = FocalLoss()
             loss_individual_gt = IndividualGTLoss(config)
         elif config.logicano_loss == "sphere":
-            # TODO:
+            # TODO: run a forward pass for all normal images to determine center c
+
             pass
         else:
             raise Exception("Unimplemented logicano loss")
