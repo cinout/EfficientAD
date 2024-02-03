@@ -130,6 +130,11 @@ def get_argparse():
         choices=["focal", "sphere"],
         default="focal",
     )
+    parser.add_argument(
+        "--stg1_ckpt",
+        type=str,
+        help="should be the path of the parent folder of xxx.pth",
+    )
     return parser.parse_args()
 
 
