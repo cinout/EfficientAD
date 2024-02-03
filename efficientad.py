@@ -361,6 +361,15 @@ def main(config, seed):
             loss_individual_gt = IndividualGTLoss(config)
         elif config.logicano_loss == "sphere":
             # TODO: run a forward pass for all normal images to determine center c
+            autoencoder_dict = torch.load(
+                os.path.join(config.stg1_ckpt, "autoencoder_final.pth"),
+                map_location=device,
+            )
+            student_dict = torch.load(
+                os.path.join(config.stg1_ckpt, "student_final.pth"), map_location=device
+            )
+            tmp_autoencoder = Autoencoder(out_channels=out_channels)
+            tmp_student = PDN_Small(out_channels=2 * out_channels, padding=True)
 
             pass
         else:

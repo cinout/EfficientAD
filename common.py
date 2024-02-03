@@ -55,8 +55,6 @@ class IndividualGTLoss(torch.nn.Module):
             gt = gt.transpose(0, 1)
 
             mask = (gt == 1).squeeze(1)
-            print(f"predicted.device: {predicted.device}")
-            print(f"mask.device: {mask.device}")
 
             predicted = torch.masked_select(predicted, mask)
             predicted = (
