@@ -418,6 +418,11 @@ def main(config, seed):
             ]  # each item: [1, 1, orig.h, orig.w]
             _, _, orig_height, orig_width = overall_gt.shape
 
+            logicano_image = logicano_image.to(device)
+            overall_gt = overall_gt.to(device)
+            for gt in individual_gts:
+                gt = gt.to(device)
+
             teacher_output = teacher(logicano_image)
             teacher_output = (teacher_output - teacher_mean) / teacher_std
             student_output = student(logicano_image)
