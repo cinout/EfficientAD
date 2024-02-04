@@ -20,8 +20,8 @@ module purge
 eval "$(conda shell.bash hook)"
 conda activate eff
 
-timestamp="20240203_181611_93_97_sd10_[jb]"
-folder_name="folder_inclogic_focal"
+timestamp="20240203_223704_38_15_sd10_[jb]"
+folder_name="folder_inclogic_sphere"
 
 python -u mvtec_loco_ad_evaluation/evaluate_experiment.py \
   --object_name "juice_bottle" \
