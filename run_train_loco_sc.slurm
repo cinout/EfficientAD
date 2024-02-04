@@ -33,13 +33,14 @@ python -u efficientad.py \
   --dataset mvtec_loco \
   --subdataset splicing_connectors \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
-  --note "include_logicano, loss=sphere" \
+  --note "include_logicano, loss=sphere, iter=120000" \
   --seeds 10 20 30 \
   --include_logicano \
   --logicano_select absolute \
   --num_logicano 10 \
   --logicano_loss sphere \
   --stg1_ckpt outputs/folder_baseline/output_20240131_215545_79_5_sd10_[sc]/trainings/mvtec_loco/splicing_connectors \
+  --train_steps 120000 \
 
 
 ##Log this job's resource usage stats###
