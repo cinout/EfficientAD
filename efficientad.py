@@ -514,10 +514,12 @@ def main(config, seed):
             if config.logicano_loss == "focal":
                 map_combined = map_combined.reshape(1, 1, -1)
                 map_combined = F.normalize(map_combined, dim=2)
-                map_combined = map_combined.reshape(1, 1, orig_height, orig_width)
+                map_combined = map_combined.reshape(
+                    1, 1, orig_height, orig_width
+                )  # prob of anormalcy
 
-                map_combined_inverse = 1 - map_combined
-                map_combined = torch.cat([map_combined, map_combined_inverse], dim=1)
+                map_combined_inverse = 1 - map_combined  # prob of normal
+                map_combined = torch.cat([map_combined_inverse, map_combined], dim=1)
 
                 # loss_focal for overall negative target pixels only
                 loss_overall_negative = loss_focal(map_combined, overall_gt)

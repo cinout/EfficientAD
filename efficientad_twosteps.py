@@ -937,7 +937,9 @@ def predict(
     )
 
     pred_mask = model_stg2(bn_features, ref_features=ref_features)
-    map_stg2 = pred_mask[:, 1, :, :].unsqueeze(1)
+    map_stg2 = pred_mask[:, 1, :, :].unsqueeze(
+        1
+    )  # first channel is prob of normal, second channel is prob of anormalcy
 
     if q_st_start is not None:
         map_st = 0.1 * (map_st - q_st_start) / (q_st_end - q_st_start)
