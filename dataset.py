@@ -38,10 +38,22 @@ class MyDummyDataset(Dataset):
 
 class LogicalAnomalyDataset(Dataset):
     def __init__(
-        self, logicano_select, num_logicano, percent_logicano, subdataset, image_size
+        self,
+        logicano_select,
+        num_logicano,
+        percent_logicano,
+        subdataset,
+        image_size,
+        loss_on_resize,
+        device,
     ) -> None:
         super().__init__()
         self.image_size = image_size
+        self.loss_on_resize = loss_on_resize
+        self.device = device
+        self.resize_operation = transforms.Resize(
+            size=(self.image_size, self.image_size), antialias=True
+        )
         logical_anomaly_path = "datasets/loco/" + subdataset + "/test/logical_anomalies"
         logical_anomaly_gt_path = (
             "datasets/loco/" + subdataset + "/ground_truth/logical_anomalies"
@@ -63,6 +75,7 @@ class LogicalAnomalyDataset(Dataset):
                     k=num_logicano,
                 )
             ]
+
         self.images = [logical_anomaly_path + f"/{idx}.png" for idx in selected_indices]
         self.gt = [
             glob.glob(logical_anomaly_gt_path + f"/{idx}/*.png")
@@ -84,18 +97,41 @@ class LogicalAnomalyDataset(Dataset):
             gt = Image.open(each_path)
             gt = np.array(gt)
             gt = torch.tensor(gt)
-            gt = gt.unsqueeze(0)
+            gt = gt.unsqueeze(0)  # [1, orig_h, orig_w]
+
             if overall_gt is not None:
                 overall_gt = torch.logical_or(overall_gt, gt)
             else:
                 overall_gt = gt
+            if self.loss_on_resize:
+                pixel_type = sorted(torch.unique(gt).detach().cpu().numpy())[-1]
+                _, orig_height, orig_width = gt.shape
 
-            individual_gts.append(gt)
+                gt = gt.bool().to(torch.float32)  # either 0. or 1.
+                gt = self.resize_operation(gt)
+                gt = gt.long()  # any value<1.0 is converted to 0
+                gt = gt.to(self.device)
+
+                individual_gts.append(
+                    {
+                        "gt": gt,
+                        "pixel_type": pixel_type,
+                        "orig_height": orig_height,
+                        "orig_width": orig_width,
+                    }
+                )
+            else:
+                individual_gts.append(gt)
 
         overall_gt = overall_gt.bool().to(
             torch.float32
         )  # overall_gt is either 0. or 1.
-        return overall_gt, individual_gts
+
+        if self.loss_on_resize:
+            overall_gt = self.resize_operation(overall_gt)
+            overall_gt = overall_gt.long()  # any value<1.0 is converted to 0
+
+        return overall_gt.to(self.device), individual_gts
 
     def __getitem__(self, index):
         img_path = self.images[index]
@@ -107,7 +143,7 @@ class LogicalAnomalyDataset(Dataset):
         # overall_gt.shape: [1, orig.height, orig.width]
 
         sample = {
-            "image": image,
+            "image": image.to(self.device),
             "overall_gt": overall_gt,
             "individual_gts": individual_gts,
             "img_path": img_path,

@@ -97,9 +97,7 @@ def get_argparse():
         action="store_true",
         help="if set to True, then generate branch-wise analysis heatmap",
     )
-    parser.add_argument(
-        "-t", "--train_steps", type=int, default=70000
-    )  # TODO: extend iter?
+    parser.add_argument("-t", "--train_steps", type=int, default=70000)
     parser.add_argument("--note", type=str, default="")
     parser.add_argument("--seeds", type=int, default=[42], nargs="+")
 
@@ -137,6 +135,16 @@ def get_argparse():
         "--stg1_ckpt",
         type=str,
         help="should be the path of the parent folder of xxx.pth",
+    )
+    parser.add_argument(
+        "--geo_augment",
+        action="store_true",
+        help="if set to True, then apply geometric augmentations to the training images",
+    )
+    parser.add_argument(
+        "--loss_on_resize",
+        action="store_true",
+        help="if set to True, then calculate loss of logicano based on resized images, instead of orig_height/width",
     )
     return parser.parse_args()
 
@@ -250,6 +258,8 @@ def main(config, seed):
             percent_logicano=config.percent_logicano,
             subdataset=config.subdataset,
             image_size=image_size,
+            loss_on_resize=config.loss_on_resize,
+            device=device,
         )
         _, orig_height, orig_width = logicano_data[0]["overall_gt"].shape
 
@@ -433,6 +443,8 @@ def main(config, seed):
         image_penalty,
     ) in zip(tqdm_obj, train_loader_infinite, penalty_loader_infinite):
         if isinstance(train_images, list):
+            # TODO: remove continue
+            # continue
             # normal images
 
             (image_st, image_ae) = train_images
@@ -485,9 +497,12 @@ def main(config, seed):
             ]  # each item: [1, 1, orig.h, orig.w]
             _, _, orig_height, orig_width = overall_gt.shape
 
-            logicano_image = logicano_image.to(device)
-            overall_gt = overall_gt.to(device)
-            individual_gts = [item.to(device) for item in individual_gts]
+            # logicano_image = logicano_image.to(device)
+            # overall_gt = overall_gt.to(device)
+            # if config.loss_on_resize:
+            #     individual_gts = [  for item in individual_gts]
+            # else:
+            #     individual_gts = [item.to(device) for item in individual_gts]
 
             teacher_output = teacher(logicano_image)
             teacher_output = (teacher_output - teacher_mean) / teacher_std
@@ -503,20 +518,27 @@ def main(config, seed):
                 dim=1,
                 keepdim=True,
             )
-            map_st = torch.nn.functional.interpolate(
-                map_st, (orig_height, orig_width), mode="bilinear"
-            )
-            map_ae = torch.nn.functional.interpolate(
-                map_ae, (orig_height, orig_width), mode="bilinear"
-            )
-            map_combined = 0.5 * map_st + 0.5 * map_ae  # [1, 1, orig.h, orig.w]
+            if not config.loss_on_resize:
+                map_st = torch.nn.functional.interpolate(
+                    map_st, (image_size, image_size), mode="bilinear"
+                )
+                map_ae = torch.nn.functional.interpolate(
+                    map_ae, (image_size, image_size), mode="bilinear"
+                )
+            else:
+                map_st = torch.nn.functional.interpolate(
+                    map_st, (orig_height, orig_width), mode="bilinear"
+                )
+                map_ae = torch.nn.functional.interpolate(
+                    map_ae, (orig_height, orig_width), mode="bilinear"
+                )
+            map_combined = 0.5 * map_st + 0.5 * map_ae  # [1, 1, h, w]
 
             if config.logicano_loss == "focal":
+                _, _, h, w = map_combined.shape
                 map_combined = map_combined.reshape(1, 1, -1)
                 map_combined = F.normalize(map_combined, dim=2)
-                map_combined = map_combined.reshape(
-                    1, 1, orig_height, orig_width
-                )  # prob of anormalcy
+                map_combined = map_combined.reshape(1, 1, h, w)  # prob of anormalcy
 
                 map_combined_inverse = 1 - map_combined  # prob of normal
                 map_combined = torch.cat([map_combined_inverse, map_combined], dim=1)
@@ -528,6 +550,12 @@ def main(config, seed):
                     map_combined[0], individual_gts
                 )
                 loss_total = loss_overall_negative + loss_individual_positive
+                # TODO: remove
+                # print(
+                #     loss_overall_negative.item(),
+                #     loss_individual_positive.item(),
+                #     loss_total.item(),
+                # )
             elif config.logicano_loss == "sphere":
                 dist = (map_combined - center_c) ** 2  # [1, 1, orig.h, orig.w]
 

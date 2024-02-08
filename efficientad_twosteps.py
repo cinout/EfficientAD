@@ -132,6 +132,11 @@ def get_argparse():
         default=10,
         help="[logicano_select=absolute] number of real logical anomalies used in training",
     )
+    parser.add_argument(
+        "--loss_on_resize",
+        action="store_true",
+        help="if set to True, then calculate loss of logicano based on resized images, instead of orig_height/width",
+    )
     return parser.parse_args()
 
 
@@ -627,14 +632,18 @@ def main(config, seed):
 
             predicted_masks = model_stg2(input)
             # TODO: should we interpolate?
-            predicted_masks = F.interpolate(
-                predicted_masks, (orig_height, orig_width), mode="bilinear"
-            )
+            if config.loss_on_resize:
+                _, _, h, w = predicted_masks.shape
+                normal_gt = torch.zeros(size=(1, 1, h, w), dtype=overall_gt.dtype)
+            else:
+                predicted_masks = F.interpolate(
+                    predicted_masks, (orig_height, orig_width), mode="bilinear"
+                )
+                # create gt mask for normal image
+                normal_gt = torch.zeros(
+                    size=(1, 1, orig_height, orig_width), dtype=overall_gt.dtype
+                )
 
-            # create gt mask for normal image
-            normal_gt = torch.zeros(
-                size=(1, 1, orig_height, orig_width), dtype=overall_gt.dtype
-            )
             normal_gt = normal_gt.to(device)
             overall_gt = torch.cat(
                 [overall_gt, normal_gt], dim=0

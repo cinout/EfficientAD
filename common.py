@@ -63,6 +63,7 @@ class IndividualGTLoss(torch.nn.Module):
             "datasets/loco/", config.subdataset, "defects_config.json"
         )
         defects = json.load(open(defects_config_path))
+        self.loss_on_resize = config.loss_on_resize
         self.config = {e["pixel_value"]: e for e in defects}
 
         self.gamma = 2
@@ -75,34 +76,50 @@ class IndividualGTLoss(torch.nn.Module):
         for gt in gts:
             # gt.shape: [1, 1, orig.h, orig.w]
             # find unique config for the gt
-            unique_values = sorted(torch.unique(gt).detach().cpu().numpy())
-            pixel_type = unique_values[-1]
+            if self.loss_on_resize:
+                pixel_type = gt["pixel_type"].item()
+                orig_width = gt["orig_width"].item()
+                orig_height = gt["orig_height"].item()
+                gt = gt["gt"]
+            else:
+                unique_values = sorted(torch.unique(gt).detach().cpu().numpy())
+                pixel_type = unique_values[-1]
+
             pixel_detail = self.config[pixel_type]
             saturation_threshold = pixel_detail["saturation_threshold"]
             relative_saturation = pixel_detail["relative_saturation"]
-
-            # calculate saturation_area (max pixels needed)
             bool_array = gt.cpu().numpy().astype(np.bool_)
             defect_area = np.sum(bool_array)
-            saturation_area = (
-                int(saturation_threshold * defect_area)
-                if relative_saturation
-                else np.minimum(saturation_threshold, defect_area)
-            )
 
-            # apply modified focal_loss
+            if self.loss_on_resize:
+                _, _, h, w = gt.shape
+                saturation_area = (
+                    int(saturation_threshold * defect_area)
+                    if relative_saturation
+                    else np.minimum(
+                        int(saturation_threshold * h * w / orig_width / orig_height),
+                        defect_area,
+                    )
+                )
 
-            num_class = predicted.shape[0]
-            predicted = predicted.view(predicted.shape[0], -1)  # shape: (2, H*W)
-            predicted = predicted[1]  # shape: (H*W, )
+            else:
+                # calculate saturation_area (max pixels needed)
+                saturation_area = (
+                    int(saturation_threshold * defect_area)
+                    if relative_saturation
+                    else np.minimum(saturation_threshold, defect_area)
+                )
+                gt = gt.bool().to(torch.float32)
 
-            gt = gt.bool().to(torch.float32)
             gt = gt.squeeze(0)
             gt = gt.view(gt.shape[0], -1)
             gt = gt.transpose(0, 1)
 
             mask = (gt == 1).squeeze(1)
 
+            # num_class = predicted.shape[0]
+            predicted = predicted.view(predicted.shape[0], -1)  # shape: (2, H*W)
+            predicted = predicted[1]  # shape: (H*W, )
             predicted = torch.masked_select(predicted, mask)
             predicted = (
                 (1.0 - self.smooth) * predicted

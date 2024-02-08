@@ -9,5 +9,11 @@ python -u efficientad.py \
   --num_logicano 10 \
   --logicano_loss focal \
   --stg1_ckpt outputs/folder_baseline/output_20240131_213923_16_56_sd10_[bb]/trainings/mvtec_loco/breakfast_box \
+  --loss_on_resize \
   # --iters_stg2 20 \
  
+#  breakfast_box
+#  juice_bottle
+#  pushpins
+#  screw_bag
+#  splicing_connectors
