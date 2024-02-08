@@ -247,7 +247,7 @@ def main(config, seed):
         raise Exception("Unknown config.dataset")
 
     train_loader = DataLoader(
-        train_set, batch_size=1, shuffle=True, num_workers=1, pin_memory=True
+        train_set, batch_size=1, shuffle=True, num_workers=4, pin_memory=True
     )
 
     if config.include_logicano:
@@ -273,7 +273,7 @@ def main(config, seed):
         train_set = MyDummyDataset(train_set)
         old_train_loader = train_loader  # for teacher normalization purpose
         train_loader = DataLoader(
-            train_set, batch_size=1, shuffle=True, num_workers=1, pin_memory=True
+            train_set, batch_size=1, shuffle=True, num_workers=4, pin_memory=True
         )
 
     train_loader_infinite = InfiniteDataloader(train_loader)
@@ -497,12 +497,20 @@ def main(config, seed):
             ]  # each item: [1, 1, orig.h, orig.w]
             _, _, orig_height, orig_width = overall_gt.shape
 
-            # logicano_image = logicano_image.to(device)
-            # overall_gt = overall_gt.to(device)
-            # if config.loss_on_resize:
-            #     individual_gts = [  for item in individual_gts]
-            # else:
-            #     individual_gts = [item.to(device) for item in individual_gts]
+            logicano_image = logicano_image.to(device)
+            overall_gt = overall_gt.to(device)
+            if config.loss_on_resize:
+                individual_gts = [
+                    {
+                        "gt": item["gt"].to(device),
+                        "pixel_type": item["pixel_type"],
+                        "orig_height": item["orig_height"],
+                        "orig_width": item["orig_width"],
+                    }
+                    for item in individual_gts
+                ]
+            else:
+                individual_gts = [item.to(device) for item in individual_gts]
 
             teacher_output = teacher(logicano_image)
             teacher_output = (teacher_output - teacher_mean) / teacher_std

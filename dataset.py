@@ -50,7 +50,6 @@ class LogicalAnomalyDataset(Dataset):
         super().__init__()
         self.image_size = image_size
         self.loss_on_resize = loss_on_resize
-        self.device = device
         self.resize_operation = transforms.Resize(
             size=(self.image_size, self.image_size), antialias=True
         )
@@ -110,7 +109,7 @@ class LogicalAnomalyDataset(Dataset):
                 gt = gt.bool().to(torch.float32)  # either 0. or 1.
                 gt = self.resize_operation(gt)
                 gt = gt.long()  # any value<1.0 is converted to 0
-                gt = gt.to(self.device)
+                gt = gt
 
                 individual_gts.append(
                     {
@@ -131,7 +130,7 @@ class LogicalAnomalyDataset(Dataset):
             overall_gt = self.resize_operation(overall_gt)
             overall_gt = overall_gt.long()  # any value<1.0 is converted to 0
 
-        return overall_gt.to(self.device), individual_gts
+        return overall_gt, individual_gts
 
     def __getitem__(self, index):
         img_path = self.images[index]
@@ -143,7 +142,7 @@ class LogicalAnomalyDataset(Dataset):
         # overall_gt.shape: [1, orig.height, orig.width]
 
         sample = {
-            "image": image.to(self.device),
+            "image": image,
             "overall_gt": overall_gt,
             "individual_gts": individual_gts,
             "img_path": img_path,
