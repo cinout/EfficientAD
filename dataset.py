@@ -36,6 +36,65 @@ class MyDummyDataset(Dataset):
         return self.data[index]
 
 
+class NormalDatasetForGeoAug(Dataset):
+    def __init__(self, path, image_size_before_geoaug, image_size) -> None:
+        super().__init__()
+
+        all_logical_anomalies = sorted(os.listdir(path))
+        self.images = [path + f"/{item}" for item in all_logical_anomalies]
+        self.image_size_before_geoaug = image_size_before_geoaug
+        self.image_size = image_size
+
+    def __len__(self):
+        return len(self.images)
+
+    def transform_image(self, path):
+        image = Image.open(path)
+        image = image.convert("RGB")
+
+        geoaug_transform = transforms.Compose(
+            [
+                transforms.Resize(
+                    (self.image_size_before_geoaug, self.image_size_before_geoaug)
+                ),
+                transforms.RandomApply(
+                    [
+                        transforms.RandomResizedCrop(
+                            size=(self.image_size, self.image_size), scale=(0.85, 1)
+                        )
+                    ],
+                    p=0.5,
+                ),
+            ]
+        )
+        default_transform = transforms.Compose(
+            [
+                transforms.Resize((self.image_size, self.image_size)),
+                transforms.ToTensor(),
+                transforms.Normalize(
+                    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+                ),
+            ]
+        )
+        transform_ae = transforms.RandomChoice(
+            [
+                transforms.ColorJitter(brightness=0.2),
+                transforms.ColorJitter(contrast=0.2),
+                transforms.ColorJitter(saturation=0.2),
+            ]
+        )
+
+        geo_trans_img = geoaug_transform(image)
+        return (
+            default_transform(geo_trans_img),
+            default_transform(transform_ae(geo_trans_img)),
+        )
+
+    def __getitem__(self, index):
+        img_path = self.images[index]
+        return self.transform_image(img_path)
+
+
 class LogicalAnomalyDataset(Dataset):
     def __init__(
         self,
@@ -90,6 +149,7 @@ class LogicalAnomalyDataset(Dataset):
         return transform_data(self.image_size)(img)
 
     def transform_gt(self, paths):
+        # TODO: add geo_augment
         overall_gt = None  # purpose is to determine all negative (normal) pixels
         individual_gts = []
         for each_path in paths:
@@ -134,9 +194,9 @@ class LogicalAnomalyDataset(Dataset):
 
     def __getitem__(self, index):
         img_path = self.images[index]
+        gt_paths = self.gt[index]
         image = self.transform_image(img_path)
 
-        gt_paths = self.gt[index]
         overall_gt, individual_gts = self.transform_gt(gt_paths)
 
         # overall_gt.shape: [1, orig.height, orig.width]

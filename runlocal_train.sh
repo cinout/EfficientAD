@@ -10,6 +10,7 @@ python -u efficientad.py \
   --logicano_loss focal \
   --stg1_ckpt outputs/folder_baseline/output_20240131_213923_16_56_sd10_[bb]/trainings/mvtec_loco/breakfast_box \
   --loss_on_resize \
+  --geo_augment \
   # --iters_stg2 20 \
  
 #  breakfast_box
