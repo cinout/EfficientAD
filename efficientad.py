@@ -247,7 +247,7 @@ def main(config, seed):
         raise Exception("Unknown config.dataset")
 
     train_loader = DataLoader(
-        train_set, batch_size=1, shuffle=True, num_workers=4, pin_memory=True
+        train_set, batch_size=1, shuffle=True, num_workers=1, pin_memory=True
     )
 
     if config.include_logicano:
@@ -273,7 +273,7 @@ def main(config, seed):
         train_set = MyDummyDataset(train_set)
         old_train_loader = train_loader  # for teacher normalization purpose
         train_loader = DataLoader(
-            train_set, batch_size=1, shuffle=True, num_workers=4, pin_memory=True
+            train_set, batch_size=1, shuffle=True, num_workers=1, pin_memory=True
         )
 
     train_loader_infinite = InfiniteDataloader(train_loader)
