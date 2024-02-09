@@ -6,6 +6,15 @@ from PIL import Image, ImageOps
 import torchvision.transforms.functional as TF
 import random
 
+choices = [0, 1, 2, 3]
+gt = torch.randint(0, 10, size=(1, 4, 4), dtype=torch.float32)
+
+print(gt)
+gt = torch.rot90(gt, k=1, dims=(1, 2))
+print(gt)
+
+exit()
+
 image_size_before_geoaug = 512
 image_size = 256
 img_path = "datasets/loco/breakfast_box/train/good/013.png"

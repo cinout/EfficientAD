@@ -139,7 +139,12 @@ def get_argparse():
     parser.add_argument(
         "--geo_augment",
         action="store_true",
-        help="if set to True, then apply geometric augmentations to the training images",
+        help="if set to True, then apply RandomResizedCrop augmentations to the training images",
+    )
+    parser.add_argument(
+        "--use_rotate_flip",
+        action="store_true",
+        help="if set to True, then apply HFlip/VFlip/Rotate augmentations to the training images",
     )
     parser.add_argument(
         "--loss_on_resize",
@@ -230,6 +235,7 @@ def main(config, seed):
             path=os.path.join(dataset_path, config.subdataset, "train/good"),
             image_size_before_geoaug=image_size_before_geoaug,
             image_size=image_size,
+            use_rotate_flip=config.use_rotate_flip,
         )
         train_loader_for_geoaug = DataLoader(
             train_set_for_geoaug,
@@ -281,7 +287,7 @@ def main(config, seed):
             percent_logicano=config.percent_logicano,
             subdataset=config.subdataset,
             image_size=image_size,
-            loss_on_resize=config.loss_on_resize,
+            use_rotate_flip=config.use_rotate_flip,
             geo_augment=config.geo_augment,
             image_size_before_geoaug=image_size_before_geoaug,
         )

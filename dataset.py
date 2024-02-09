@@ -5,7 +5,7 @@ import numpy as np
 import torch.multiprocessing
 from torch.utils.data import Dataset
 import glob
-from PIL import Image, ImageOps
+from PIL import Image
 import random
 import math
 from torchvision import transforms
@@ -16,6 +16,7 @@ mean_tensor = [0.485, 0.456, 0.406]
 std_tensor = [0.229, 0.224, 0.225]
 scale = (0.8, 1)
 ratio = (3 / 4, 4 / 3)
+rot_multipler_choices = [0, 1, 2, 3]
 
 
 class MyDummyDataset(Dataset):
@@ -31,13 +32,16 @@ class MyDummyDataset(Dataset):
 
 
 class NormalDatasetForGeoAug(Dataset):
-    def __init__(self, path, image_size_before_geoaug, image_size) -> None:
+    def __init__(
+        self, path, image_size_before_geoaug, image_size, use_rotate_flip
+    ) -> None:
         super().__init__()
 
         all_logical_anomalies = sorted(os.listdir(path))
         self.images = [path + f"/{item}" for item in all_logical_anomalies]
         self.image_size_before_geoaug = image_size_before_geoaug
         self.image_size = image_size
+        self.use_rotate_flip = use_rotate_flip
 
     def __len__(self):
         return len(self.images)
@@ -46,23 +50,44 @@ class NormalDatasetForGeoAug(Dataset):
         image = Image.open(path)
         image = image.convert("RGB")
 
-        geoaug_transform = transforms.Compose(
-            [
-                transforms.Resize(
-                    (self.image_size_before_geoaug, self.image_size_before_geoaug)
-                ),
-                transforms.RandomApply(
-                    [
-                        transforms.RandomResizedCrop(
-                            size=(self.image_size, self.image_size),
-                            scale=scale,
-                            ratio=ratio,
-                        )
-                    ],
-                    p=0.5,
-                ),
-            ]
-        )
+        if self.use_rotate_flip:
+            geoaug_transform = transforms.Compose(
+                [
+                    transforms.Resize(
+                        (self.image_size_before_geoaug, self.image_size_before_geoaug)
+                    ),
+                    transforms.RandomApply(
+                        [
+                            transforms.RandomResizedCrop(
+                                size=(self.image_size, self.image_size),
+                                scale=scale,
+                                ratio=ratio,
+                            )
+                        ],
+                        p=0.5,
+                    ),
+                    transforms.RandomHorizontalFlip(p=0.5),
+                ]
+            )
+        else:
+            geoaug_transform = transforms.Compose(
+                [
+                    transforms.Resize(
+                        (self.image_size_before_geoaug, self.image_size_before_geoaug)
+                    ),
+                    transforms.RandomApply(
+                        [
+                            transforms.RandomResizedCrop(
+                                size=(self.image_size, self.image_size),
+                                scale=scale,
+                                ratio=ratio,
+                            )
+                        ],
+                        p=0.5,
+                    ),
+                ]
+            )
+
         default_transform = transforms.Compose(
             [
                 transforms.Resize((self.image_size, self.image_size)),
@@ -79,6 +104,9 @@ class NormalDatasetForGeoAug(Dataset):
         )
 
         geo_trans_img = geoaug_transform(image)
+        if self.use_rotate_flip:
+            rot_multipler = random.choice(rot_multipler_choices)
+            geo_trans_img = geo_trans_img.rotate(90 * rot_multipler)
         return (
             default_transform(geo_trans_img),
             default_transform(transform_ae(geo_trans_img)),
@@ -97,7 +125,7 @@ class LogicalAnomalyDataset(Dataset):
         percent_logicano,
         subdataset,
         image_size,
-        loss_on_resize,
+        use_rotate_flip,
         geo_augment,
         image_size_before_geoaug,
     ) -> None:
@@ -105,6 +133,7 @@ class LogicalAnomalyDataset(Dataset):
         self.image_size = image_size
         self.image_size_before_geoaug = image_size_before_geoaug
         self.geo_augment = geo_augment
+        self.use_rotate_flip = use_rotate_flip
 
         logical_anomaly_path = "datasets/loco/" + subdataset + "/test/logical_anomalies"
         logical_anomaly_gt_path = (
@@ -170,9 +199,10 @@ class LogicalAnomalyDataset(Dataset):
                 scale=scale,
                 ratio=ratio,
             )
-            randomness = (
-                random.random()
-            )  # randomness threshold for applying geo_augment
+            randomness_of_crop = random.random()
+            if self.use_rotate_flip:
+                randomnes_of_flip = random.random()
+                rot_multipler = random.choice(rot_multipler_choices)
 
         """
         transform input image itself
@@ -182,8 +212,12 @@ class LogicalAnomalyDataset(Dataset):
 
         if self.geo_augment:
             img = self.resize_before_geoaug(img)
-            if randomness > 0.2:
+            if randomness_of_crop > 0.2:
                 img = TF.crop(img, i, j, h, w)
+            if self.use_rotate_flip:
+                if randomnes_of_flip > 0.5:
+                    img = TF.hflip(img)
+                img = img.rotate(90 * rot_multipler)
 
         # TODO: remove this debug
         # debug_img = transforms.Resize(
@@ -210,8 +244,12 @@ class LogicalAnomalyDataset(Dataset):
 
             if self.geo_augment:
                 gt = self.resize_before_geoaug(gt)
-                if randomness > 0.2:
+                if randomness_of_crop > 0.2:
                     gt = TF.crop(gt, i, j, h, w)
+                if self.use_rotate_flip:
+                    if randomnes_of_flip > 0.5:
+                        gt = TF.hflip(gt)
+                    gt = torch.rot90(gt, k=rot_multipler, dims=(1, 2))
 
             gt = self.resize_to_image_size(gt)  # (1, image_size, image_size)
 

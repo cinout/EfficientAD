@@ -2,12 +2,12 @@
 
 ###SBATCH --partition=gpu-a100
 
-###SBATCH --partition=feit-gpu-a100
-###SBATCH --qos=feit
+#SBATCH --partition=feit-gpu-a100
+#SBATCH --qos=feit
 
-#SBATCH --partition=deeplearn
-#SBATCH --qos=gpgpudeeplearn
-#SBATCH --constraint=dlg4|dlg5
+###SBATCH --partition=deeplearn
+###SBATCH --qos=gpgpudeeplearn
+###SBATCH --constraint=dlg4|dlg5
 
 #SBATCH --job-name="train_sb"
 #SBATCH --account=punim1623
@@ -43,6 +43,7 @@ python -u efficientad.py \
   --train_steps 120000 \
   --loss_on_resize \
   --geo_augment \
+  --use_rotate_flip \
 
 
 ##Log this job's resource usage stats###
