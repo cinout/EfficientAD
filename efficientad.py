@@ -151,6 +151,11 @@ def get_argparse():
         action="store_true",
         help="if set to True, then calculate loss of logicano based on resized images, instead of orig_height/width",
     )
+    parser.add_argument(
+        "--mask_random_k",
+        action="store_true",
+        help="if set to True, then randomly use k pixels from the saturated area of the mask to calculate loss",
+    )
     return parser.parse_args()
 
 

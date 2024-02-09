@@ -6,13 +6,13 @@ from PIL import Image, ImageOps
 import torchvision.transforms.functional as TF
 import random
 
-choices = [0, 1, 2, 3]
-gt = torch.randint(0, 10, size=(1, 4, 4), dtype=torch.float32)
+hey = torch.randint(0, 10, size=(10,))
+print(hey)
+wow = hey.size()[0]
+hey = hey[torch.randperm(wow)]
 
-print(gt)
-gt = torch.rot90(gt, k=1, dims=(1, 2))
-print(gt)
-
+final = hey[:5]
+print(final)
 exit()
 
 image_size_before_geoaug = 512

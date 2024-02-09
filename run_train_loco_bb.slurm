@@ -33,7 +33,7 @@ python -u efficientad.py \
   --dataset mvtec_loco \
   --subdataset breakfast_box \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
-  --note "include_logicano, loss=focal, iter=120000, geo_aug" \
+  --note "include_logicano, loss=focal, iter=120000, geo_aug, mask_random_k" \
   --seeds 10 20 30 \
   --include_logicano \
   --logicano_select absolute \
@@ -43,7 +43,7 @@ python -u efficientad.py \
   --train_steps 120000 \
   --loss_on_resize \
   --geo_augment \
-  --use_rotate_flip \
+  --mask_random_k \
 
 
 ##Log this job's resource usage stats###
