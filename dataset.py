@@ -14,6 +14,8 @@ from datetime import datetime
 
 mean_tensor = [0.485, 0.456, 0.406]
 std_tensor = [0.229, 0.224, 0.225]
+scale = ((0.8, 1),)
+ratio = ((3 / 4, 4 / 3),)
 
 
 class MyDummyDataset(Dataset):
@@ -52,7 +54,9 @@ class NormalDatasetForGeoAug(Dataset):
                 transforms.RandomApply(
                     [
                         transforms.RandomResizedCrop(
-                            size=(self.image_size, self.image_size), scale=(0.85, 1)
+                            size=(self.image_size, self.image_size),
+                            scale=scale,
+                            ratio=ratio,
                         )
                     ],
                     p=0.5,
@@ -163,8 +167,8 @@ class LogicalAnomalyDataset(Dataset):
                         self.image_size_before_geoaug,
                     )
                 ),
-                scale=(0.8, 1),
-                ratio=(3 / 4, 4 / 3),
+                scale=scale,
+                ratio=ratio,
             )
             randomness = (
                 random.random()

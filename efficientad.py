@@ -159,43 +159,6 @@ out_channels = 384
 image_size_before_geoaug = 512
 
 
-def train_geoaug_transform_for_normal(image, config):
-    geoaug_transform = transforms.Compose(
-        [
-            transforms.Resize((image_size_before_geoaug, image_size_before_geoaug)),
-            transforms.RandomApply(
-                [
-                    transforms.RandomResizedCrop(
-                        size=(image_size, image_size), scale=(0.85, 1)
-                    )
-                ],
-                p=0.5,
-            ),
-        ]
-    )
-
-    default_transform = transforms.Compose(
-        [
-            transforms.Resize((image_size, image_size)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ]
-    )
-    transform_ae = transforms.RandomChoice(
-        [
-            transforms.ColorJitter(brightness=0.2),
-            transforms.ColorJitter(contrast=0.2),
-            transforms.ColorJitter(saturation=0.2),
-        ]
-    )
-
-    geo_trans_img = geoaug_transform(image)
-    return (
-        default_transform(geo_trans_img),
-        default_transform(transform_ae(geo_trans_img)),
-    )
-
-
 def train_transform(image, config):
     default_transform = transforms.Compose(
         [
