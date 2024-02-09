@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH --partition=cascade
+#SBATCH --partition=sapphire
 
 #SBATCH --job-name="eval_sb"
 #SBATCH --account=punim1623
