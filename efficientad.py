@@ -319,9 +319,10 @@ def main(config, seed):
             subdataset=config.subdataset,
             image_size=image_size,
             loss_on_resize=config.loss_on_resize,
-            device=device,
+            geo_augment=config.geo_augment,
+            image_size_before_geoaug=image_size_before_geoaug,
         )
-        _, orig_height, orig_width = logicano_data[0]["overall_gt"].shape
+        # _, orig_height, orig_width = logicano_data[0]["overall_gt"].shape
 
         if config.geo_augment:
             logicano_dataloader = DataLoader(
@@ -423,17 +424,17 @@ def main(config, seed):
     autoencoder = autoencoder.to(device)
 
     # TODO: uncomment below
-    # teacher_mean, teacher_std = teacher_normalization(
-    #     teacher,
-    #     old_train_loader
-    #     if config.include_logicano and not config.geo_augment
-    #     else train_loader,
-    #     config,
-    # )
-    with open("teacher_mean.t", "rb") as f:
-        teacher_mean = torch.load(f)
-    with open("teacher_std.t", "rb") as f:
-        teacher_std = torch.load(f)
+    teacher_mean, teacher_std = teacher_normalization(
+        teacher,
+        old_train_loader
+        if config.include_logicano and not config.geo_augment
+        else train_loader,
+        config,
+    )
+    # with open("teacher_mean.t", "rb") as f:
+    #     teacher_mean = torch.load(f)
+    # with open("teacher_std.t", "rb") as f:
+    #     teacher_std = torch.load(f)
 
     optimizer = torch.optim.Adam(
         itertools.chain(student.parameters(), autoencoder.parameters()),
@@ -570,9 +571,8 @@ def main(config, seed):
                 loss_stae = torch.mean(distance_stae)
                 loss_total = loss_st + loss_ae + loss_stae
                 # TODO: remove
-                print(f"[NORMAL]: {loss_total.item()}")
+                # print(f"[NORMAL]: {loss_total.item()}")
             else:
-                # TODO:
                 # train logicano
                 logicano_image = logicano["image"]  # [1, 3, 256, 256]
                 overall_gt = logicano["overall_gt"]  # [1, 1, orig.h, orig.w]
@@ -648,7 +648,7 @@ def main(config, seed):
                     )
                     loss_total = loss_overall_negative + loss_individual_positive
                     # TODO: remove
-                    print(f"[LOGICANO]: {loss_total.item()}")
+                    # print(f"[LOGICANO]: {loss_total.item()}")
                 else:
                     raise Exception("Unimplemented logicano_loss")
 

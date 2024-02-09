@@ -11,7 +11,7 @@
 
 #SBATCH --job-name="train_sb"
 #SBATCH --account=punim1623
-#SBATCH --time=0-07:00:00
+#SBATCH --time=0-10:00:00
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -33,7 +33,7 @@ python -u efficientad.py \
   --dataset mvtec_loco \
   --subdataset screw_bag \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
-  --note "include_logicano, loss=focal, iter=120000., loss+on_resize" \
+  --note "include_logicano, loss=focal, iter=120000, geo_aug" \
   --seeds 10 20 30 \
   --include_logicano \
   --logicano_select absolute \
@@ -42,6 +42,7 @@ python -u efficientad.py \
   --stg1_ckpt outputs/folder_baseline/output_20240131_215545_7_68_sd10_[sb]/trainings/mvtec_loco/screw_bag \
   --train_steps 120000 \
   --loss_on_resize \
+  --geo_augment \
 
 
 ##Log this job's resource usage stats###
