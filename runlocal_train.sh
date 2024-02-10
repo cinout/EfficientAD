@@ -3,7 +3,7 @@ python -u efficientad.py \
   --subdataset pushpins \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
   --note "haha" \
-  --seeds 10 \
+  --seeds 20 \
   --include_logicano \
   --logicano_select absolute \
   --num_logicano 10 \
