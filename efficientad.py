@@ -602,6 +602,8 @@ def main(config, seed):
                     )
                 map_combined = 0.5 * map_st + 0.5 * map_ae  # [1, 1, h, w]
 
+                print(f"map_combined is {map_combined}")
+
                 if config.logicano_loss == "focal":
                     _, _, h, w = map_combined.shape
                     map_combined = map_combined.reshape(1, 1, -1)
