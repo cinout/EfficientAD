@@ -572,7 +572,8 @@ def main(config, seed):
                     ]
                 else:
                     individual_gts = [item.to(device) for item in individual_gts]
-
+                # TODO: remove
+                print(f"logicano_image.shape: {logicano_image.shape}")
                 teacher_output = teacher(logicano_image)
                 teacher_output = (teacher_output - teacher_mean) / teacher_std
                 student_output = student(logicano_image)
