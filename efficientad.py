@@ -246,7 +246,7 @@ def main(config, seed):
             train_set_for_geoaug,
             batch_size=1,
             shuffle=True,
-            num_workers=4,
+            num_workers=1,
             pin_memory=True,
         )
         train_loader_for_geoaug_infinite = InfiniteDataloader(train_loader_for_geoaug)
@@ -281,7 +281,7 @@ def main(config, seed):
         raise Exception("Unknown config.dataset")
 
     train_loader = DataLoader(
-        train_set, batch_size=1, shuffle=True, num_workers=4, pin_memory=True
+        train_set, batch_size=1, shuffle=True, num_workers=1, pin_memory=True
     )
 
     if config.include_logicano:
@@ -303,7 +303,7 @@ def main(config, seed):
                 logicano_data,
                 batch_size=1,
                 shuffle=True,
-                num_workers=4,
+                num_workers=1,
                 pin_memory=True,
             )
             logicano_dataloader_infite = InfiniteDataloader(logicano_dataloader)
@@ -319,7 +319,7 @@ def main(config, seed):
             train_set = MyDummyDataset(train_set)
             old_train_loader = train_loader  # for teacher normalization purpose
             train_loader = DataLoader(
-                train_set, batch_size=1, shuffle=True, num_workers=4, pin_memory=True
+                train_set, batch_size=1, shuffle=True, num_workers=1, pin_memory=True
             )
 
     train_loader_infinite = InfiniteDataloader(
@@ -344,7 +344,7 @@ def main(config, seed):
             config.imagenet_train_path, transform=penalty_transform
         )
         penalty_loader = DataLoader(
-            penalty_set, batch_size=1, shuffle=True, num_workers=4, pin_memory=True
+            penalty_set, batch_size=1, shuffle=True, num_workers=1, pin_memory=True
         )
         penalty_loader_infinite = InfiniteDataloader(penalty_loader)
     else:
@@ -503,11 +503,6 @@ def main(config, seed):
             penalty_loader_infinite,
         ):
             # take turns to train normal and logicano
-            # TODO: remove this
-            if iteration < 1653:
-                if iteration % 100 == 0:
-                    print(iteration)
-                continue
 
             if iteration % 2 == 0:
                 # train normal
@@ -559,9 +554,7 @@ def main(config, seed):
                 individual_gts = logicano[
                     "individual_gts"
                 ]  # each item: [1, 1, orig.h, orig.w]
-                # TODO: remove
-                # img_path = logicano["img_path"]
-                # print(img_path)
+
                 _, _, orig_height, orig_width = overall_gt.shape
 
                 logicano_image = logicano_image.to(device)
@@ -578,8 +571,7 @@ def main(config, seed):
                     ]
                 else:
                     individual_gts = [item.to(device) for item in individual_gts]
-                # TODO: remove
-                print(f"logicano_image.shape: {logicano_image.shape}")
+
                 teacher_output = teacher(logicano_image)
                 teacher_output = (teacher_output - teacher_mean) / teacher_std
                 student_output = student(logicano_image)
@@ -624,10 +616,7 @@ def main(config, seed):
                     # loss_focal for overall negative target pixels only
                     loss_overall_negative = loss_focal(map_combined, overall_gt)
                     # loss for positive pixels in individual gts
-                    # TODO: remove
-                    print(
-                        f"map_combined.shape: {map_combined.shape}, map_ae.shape: {map_ae.shape}, map_st.shape: {map_st.shape}"
-                    )
+
                     loss_individual_positive = loss_individual_gt(
                         map_combined[0], individual_gts
                     )
