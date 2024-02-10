@@ -11,7 +11,7 @@
 
 #SBATCH --job-name="train_pp"
 #SBATCH --account=punim1623
-#SBATCH --time=0-02:00:00
+#SBATCH --time=1-10:00:00
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -33,8 +33,8 @@ python -u efficientad.py \
   --dataset mvtec_loco \
   --subdataset pushpins \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
-  --note "debug" \
-  --seeds 20 \
+  --note "include_logicano, loss=focal, iter=120000, geo_aug" \
+  --seeds 30 40 \
   --include_logicano \
   --logicano_select absolute \
   --num_logicano 10 \
@@ -43,7 +43,7 @@ python -u efficientad.py \
   --train_steps 120000 \
   --loss_on_resize \
   --geo_augment \
-  --mask_random_k \
+  # --mask_random_k \
 
 
 ##Log this job's resource usage stats###
