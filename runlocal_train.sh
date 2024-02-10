@@ -1,6 +1,6 @@
 python -u efficientad.py \
   --dataset mvtec_loco \
-  --subdataset breakfast_box \
+  --subdataset pushpins \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
   --note "haha" \
   --seeds 10 \
