@@ -246,7 +246,7 @@ def main(config, seed):
             train_set_for_geoaug,
             batch_size=1,
             shuffle=True,
-            num_workers=1,
+            num_workers=4,
             pin_memory=True,
         )
         train_loader_for_geoaug_infinite = InfiniteDataloader(train_loader_for_geoaug)
@@ -281,7 +281,7 @@ def main(config, seed):
         raise Exception("Unknown config.dataset")
 
     train_loader = DataLoader(
-        train_set, batch_size=1, shuffle=True, num_workers=1, pin_memory=True
+        train_set, batch_size=1, shuffle=True, num_workers=4, pin_memory=True
     )
 
     if config.include_logicano:
@@ -303,7 +303,7 @@ def main(config, seed):
                 logicano_data,
                 batch_size=1,
                 shuffle=True,
-                num_workers=1,
+                num_workers=4,
                 pin_memory=True,
             )
             logicano_dataloader_infite = InfiniteDataloader(logicano_dataloader)
@@ -319,7 +319,7 @@ def main(config, seed):
             train_set = MyDummyDataset(train_set)
             old_train_loader = train_loader  # for teacher normalization purpose
             train_loader = DataLoader(
-                train_set, batch_size=1, shuffle=True, num_workers=1, pin_memory=True
+                train_set, batch_size=1, shuffle=True, num_workers=4, pin_memory=True
             )
 
     train_loader_infinite = InfiniteDataloader(
@@ -344,7 +344,7 @@ def main(config, seed):
             config.imagenet_train_path, transform=penalty_transform
         )
         penalty_loader = DataLoader(
-            penalty_set, batch_size=1, shuffle=True, num_workers=1, pin_memory=True
+            penalty_set, batch_size=1, shuffle=True, num_workers=4, pin_memory=True
         )
         penalty_loader_infinite = InfiniteDataloader(penalty_loader)
     else:
@@ -502,6 +502,7 @@ def main(config, seed):
             logicano_dataloader_infite,
             penalty_loader_infinite,
         ):
+            print(f"current iteration is: {iteration}")
             # take turns to train normal and logicano
 
             if iteration % 2 == 0:
@@ -601,8 +602,6 @@ def main(config, seed):
                         map_ae, (orig_height, orig_width), mode="bilinear"
                     )
                 map_combined = 0.5 * map_st + 0.5 * map_ae  # [1, 1, h, w]
-
-                print(f"map_combined is {map_combined}")
 
                 if config.logicano_loss == "focal":
                     _, _, h, w = map_combined.shape
