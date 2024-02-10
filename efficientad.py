@@ -617,6 +617,10 @@ def main(config, seed):
                     # loss_focal for overall negative target pixels only
                     loss_overall_negative = loss_focal(map_combined, overall_gt)
                     # loss for positive pixels in individual gts
+                    # TODO: remove
+                    print(
+                        f"map_combined.shape: {map_combined.shape}, map_ae.shape: {map_ae.shape}, map_st.shape: {map_st.shape}"
+                    )
                     loss_individual_positive = loss_individual_gt(
                         map_combined[0], individual_gts
                     )
