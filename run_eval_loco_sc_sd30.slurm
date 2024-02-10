@@ -20,8 +20,8 @@ module purge
 eval "$(conda shell.bash hook)"
 conda activate eff
 
-timestamp="20240209_123318_65_51_sd30_[sc]"
-folder_name="folder_focal_geoaug"
+timestamp="20240209_141813_81_2_sd30_[sc]"
+folder_name="folder_focal_geoaug_rotflip"
 
 python -u mvtec_loco_ad_evaluation/evaluate_experiment.py \
   --object_name "splicing_connectors" \

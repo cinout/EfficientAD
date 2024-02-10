@@ -502,8 +502,6 @@ def main(config, seed):
             logicano_dataloader_infite,
             penalty_loader_infinite,
         ):
-            # TODO: remove
-            print(f"current iteration is: {iteration}")
             # take turns to train normal and logicano
 
             if iteration % 2 == 0:
