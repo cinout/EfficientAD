@@ -20,7 +20,7 @@ module purge
 eval "$(conda shell.bash hook)"
 conda activate eff
 
-timestamp="20240210_204141_42_41_sd30_[pp]"
+timestamp="20240210_204141_42_41_sd40_[pp]"
 folder_name="folder_focal_geoaug_maskrandk"
 
 python -u mvtec_loco_ad_evaluation/evaluate_experiment.py \
