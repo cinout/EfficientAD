@@ -142,6 +142,11 @@ def get_argparse():
         help="if set to True, then apply RandomResizedCrop augmentations to the training images",
     )
     parser.add_argument(
+        "--equal_train_normal_logicano",
+        action="store_true",
+        help="if set to True, don't use geo augmentation, but still equally train normal and logicano",
+    )
+    parser.add_argument(
         "--use_rotate_flip",
         action="store_true",
         help="if set to True, then apply HFlip/VFlip/Rotate augmentations to the training images",
@@ -236,6 +241,7 @@ def main(config, seed):
 
     # load data
     if config.geo_augment:
+        # create normal images train set that uses geometric augmentation
         train_set_for_geoaug = NormalDatasetForGeoAug(
             path=os.path.join(dataset_path, config.subdataset, "train/good"),
             image_size_before_geoaug=image_size_before_geoaug,
@@ -298,7 +304,7 @@ def main(config, seed):
         )
         # _, orig_height, orig_width = logicano_data[0]["overall_gt"].shape
 
-        if config.geo_augment:
+        if config.geo_augment or config.equal_train_normal_logicano:
             logicano_dataloader = DataLoader(
                 logicano_data,
                 batch_size=1,
@@ -324,7 +330,7 @@ def main(config, seed):
 
     train_loader_infinite = InfiniteDataloader(
         train_loader
-    )  # when config.geo_augment, only contain normal; otherwise, both normal and logicano
+    )  # when config.geo_augment or config.equal_train_normal_logicano, only contain normal; otherwise, both normal and logicano
     validation_loader = DataLoader(validation_set, batch_size=1)
 
     if pretrain_penalty:
@@ -401,7 +407,8 @@ def main(config, seed):
     teacher_mean, teacher_std = teacher_normalization(
         teacher,
         old_train_loader
-        if config.include_logicano and not config.geo_augment
+        if config.include_logicano
+        and not (config.geo_augment or config.equal_train_normal_logicano)
         else train_loader,
         config,
     )
@@ -448,7 +455,11 @@ def main(config, seed):
 
             center_c = []
             with torch.no_grad():
-                for data in train_loader if config.geo_augment else old_train_loader:
+                for data in (
+                    train_loader
+                    if (config.geo_augment or config.equal_train_normal_logicano)
+                    else old_train_loader
+                ):
                     (image, _) = data
                     image = image.to(device)
                     teacher_output = teacher(image)
@@ -490,7 +501,7 @@ def main(config, seed):
 
     tqdm_obj = tqdm(range(config.train_steps))
 
-    if config.geo_augment:
+    if config.geo_augment or config.equal_train_normal_logicano:
         for (
             iteration,
             normal,
@@ -498,7 +509,7 @@ def main(config, seed):
             image_penalty,
         ) in zip(
             tqdm_obj,
-            train_loader_for_geoaug_infinite,
+            train_loader_for_geoaug_infinite if config.geo_augment else train_loader,
             logicano_dataloader_infite,
             penalty_loader_infinite,
         ):

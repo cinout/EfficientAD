@@ -1,6 +1,6 @@
 python -u efficientad.py \
   --dataset mvtec_loco \
-  --subdataset pushpins \
+  --subdataset breakfast_box \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
   --note "haha" \
   --seeds 20 \
@@ -10,8 +10,9 @@ python -u efficientad.py \
   --logicano_loss focal \
   --stg1_ckpt outputs/folder_baseline/output_20240131_213923_16_56_sd10_[bb]/trainings/mvtec_loco/breakfast_box \
   --loss_on_resize \
-  --geo_augment \
+  --equal_train_normal_logicano \
   --mask_random_k \
+  --use_rotate_flip \
   # --iters_stg2 20 \
  
 #  breakfast_box
