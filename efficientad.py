@@ -142,6 +142,11 @@ def get_argparse():
         help="if set to True, then apply RandomResizedCrop augmentations to the training images",
     )
     parser.add_argument(
+        "--geo_augment_only_on_logicano",
+        action="store_true",
+        help="if set to True, then apply RandomResizedCrop augmentations to only logicano images",
+    )
+    parser.add_argument(
         "--equal_train_normal_logicano",
         action="store_true",
         help="if set to True, don't use geo augmentation, but still equally train normal and logicano",
@@ -160,6 +165,11 @@ def get_argparse():
         "--mask_random_k",
         action="store_true",
         help="if set to True, then randomly use k pixels from the saturated area of the mask to calculate loss",
+    )
+    parser.add_argument(
+        "--alternate_with_prob",
+        action="store_true",
+        help="if set to True, then alternate training based on probability prob>0.5",
     )
     return parser.parse_args()
 
@@ -299,12 +309,16 @@ def main(config, seed):
             subdataset=config.subdataset,
             image_size=image_size,
             use_rotate_flip=config.use_rotate_flip,
-            geo_augment=config.geo_augment,
+            geo_augment=config.geo_augment or config.geo_augment_only_on_logicano,
             image_size_before_geoaug=image_size_before_geoaug,
         )
         # _, orig_height, orig_width = logicano_data[0]["overall_gt"].shape
 
-        if config.geo_augment or config.equal_train_normal_logicano:
+        if (
+            config.geo_augment
+            or config.equal_train_normal_logicano
+            or config.geo_augment_only_on_logicano
+        ):
             logicano_dataloader = DataLoader(
                 logicano_data,
                 batch_size=1,
@@ -408,7 +422,11 @@ def main(config, seed):
         teacher,
         old_train_loader
         if config.include_logicano
-        and not (config.geo_augment or config.equal_train_normal_logicano)
+        and not (
+            config.geo_augment
+            or config.equal_train_normal_logicano
+            or config.geo_augment_only_on_logicano
+        )
         else train_loader,
         config,
     )
@@ -457,7 +475,11 @@ def main(config, seed):
             with torch.no_grad():
                 for data in (
                     train_loader
-                    if (config.geo_augment or config.equal_train_normal_logicano)
+                    if (
+                        config.geo_augment
+                        or config.equal_train_normal_logicano
+                        or config.geo_augment_only_on_logicano
+                    )
                     else old_train_loader
                 ):
                     (image, _) = data
@@ -501,7 +523,11 @@ def main(config, seed):
 
     tqdm_obj = tqdm(range(config.train_steps))
 
-    if config.geo_augment or config.equal_train_normal_logicano:
+    if (
+        config.geo_augment
+        or config.equal_train_normal_logicano
+        or config.geo_augment_only_on_logicano
+    ):
         for (
             iteration,
             normal,
@@ -516,10 +542,12 @@ def main(config, seed):
             penalty_loader_infinite,
         ):
             # take turns to train normal and logicano
-
-            prob = random.random()
-
-            if prob > 0.5:
+            if config.alternate_with_prob:
+                prob = random.random()
+                criterion = prob > 0.5
+            else:
+                criterion = iteration % 2 == 0
+            if criterion:
                 # train normal
 
                 (image_st, image_ae) = normal

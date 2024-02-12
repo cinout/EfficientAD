@@ -33,17 +33,17 @@ python -u efficientad.py \
   --dataset mvtec_loco \
   --subdataset screw_bag \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
-  --note "include_logicano, loss=focal, iter=120000, equal_train_normal_logicano, mask_random_k, 100%logicano, alternate_with_prob" \
-  --seeds 10 20 30 \
+  --note "10 logicano, geo_aug only on logicano, alternately" \
+  --seeds 10 30 40 \
   --include_logicano \
-  --logicano_select percent \
-  --percent_logicano 1.0 \
+  --logicano_select absolute \
+  --num_logicano 10 \
   --logicano_loss focal \
   --stg1_ckpt outputs/folder_baseline/output_20240131_215545_7_68_sd10_[sb]/trainings/mvtec_loco/screw_bag \
   --train_steps 120000 \
   --loss_on_resize \
-  --equal_train_normal_logicano \
   --mask_random_k \
+  --geo_augment_only_on_logicano \
 
 
 ##Log this job's resource usage stats###
