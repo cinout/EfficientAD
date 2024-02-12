@@ -404,18 +404,18 @@ def main(config, seed):
     autoencoder = autoencoder.to(device)
 
     # TODO: uncomment below
-    # teacher_mean, teacher_std = teacher_normalization(
-    #     teacher,
-    #     old_train_loader
-    #     if config.include_logicano
-    #     and not (config.geo_augment or config.equal_train_normal_logicano)
-    #     else train_loader,
-    #     config,
-    # )
-    with open("teacher_mean.t", "rb") as f:
-        teacher_mean = torch.load(f)
-    with open("teacher_std.t", "rb") as f:
-        teacher_std = torch.load(f)
+    teacher_mean, teacher_std = teacher_normalization(
+        teacher,
+        old_train_loader
+        if config.include_logicano
+        and not (config.geo_augment or config.equal_train_normal_logicano)
+        else train_loader,
+        config,
+    )
+    # with open("teacher_mean.t", "rb") as f:
+    #     teacher_mean = torch.load(f)
+    # with open("teacher_std.t", "rb") as f:
+    #     teacher_std = torch.load(f)
 
     optimizer = torch.optim.Adam(
         itertools.chain(student.parameters(), autoencoder.parameters()),
