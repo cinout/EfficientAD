@@ -12,7 +12,6 @@ python -u efficientad.py \
   --loss_on_resize \
   --equal_train_normal_logicano \
   --mask_random_k \
-  --use_rotate_flip \
   # --iters_stg2 20 \
  
 #  breakfast_box

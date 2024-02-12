@@ -225,7 +225,7 @@ class LogicalAnomalyDataset(Dataset):
         # )(img)
         # debug_img.save(f"{file_name}_img.png", "PNG")
 
-        # img = self.default_img_transform(img)
+        img = self.default_img_transform(img)
 
         """
         transform GTs
