@@ -306,7 +306,10 @@ class LogicalAnomalyDataset(Dataset):
         # )
         # file_name = file_name + "_" + timestamp
 
-        image, overall_gt, individual_gts = self.transform_image(img_path, gt_paths)
+        image, overall_gt, individual_gts = self.transform_image(
+            img_path,
+            gt_paths,
+        )
 
         # overall_gt.shape: [1, orig.height, orig.width]
 

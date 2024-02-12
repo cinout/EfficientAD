@@ -33,11 +33,11 @@ python -u efficientad.py \
   --dataset mvtec_loco \
   --subdataset splicing_connectors \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
-  --note "include_logicano, loss=focal, iter=120000, equal_train_normal_logicano, mask_random_k" \
+  --note "include_logicano, loss=focal, iter=120000, equal_train_normal_logicano, mask_random_k, 100%logicano" \
   --seeds 10 20 30 \
   --include_logicano \
-  --logicano_select absolute \
-  --num_logicano 10 \
+  --logicano_select percent \
+  --percent_logicano 1.0 \
   --logicano_loss focal \
   --stg1_ckpt outputs/folder_baseline/output_20240131_215545_79_5_sd10_[sc]/trainings/mvtec_loco/splicing_connectors \
   --train_steps 120000 \
