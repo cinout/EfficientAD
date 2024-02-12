@@ -517,7 +517,9 @@ def main(config, seed):
         ):
             # take turns to train normal and logicano
 
-            if iteration % 2 == 0:
+            prob = random.random()
+
+            if prob > 0.5:
                 # train normal
 
                 (image_st, image_ae) = normal
