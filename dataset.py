@@ -169,14 +169,14 @@ class LogicalAnomalyDataset(Dataset):
                 transforms.Normalize(mean=mean_tensor, std=std_tensor),
             ]
         )
+        self.resize_to_image_size = transforms.Resize(
+            size=(self.image_size, self.image_size),
+            antialias=True,
+        )
 
         if self.geo_augment:
             self.resize_before_geoaug = transforms.Resize(
                 size=(self.image_size_before_geoaug, self.image_size_before_geoaug),
-                antialias=True,
-            )
-            self.resize_to_image_size = transforms.Resize(
-                size=(self.image_size, self.image_size),
                 antialias=True,
             )
 
