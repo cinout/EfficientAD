@@ -63,7 +63,6 @@ class IndividualGTLoss(torch.nn.Module):
             "datasets/loco/", config.subdataset, "defects_config.json"
         )
 
-        self.mask_random_k = config.mask_random_k
         defects = json.load(open(defects_config_path))
         self.loss_on_resize = config.loss_on_resize
         self.config = {e["pixel_value"]: e for e in defects}
@@ -149,15 +148,15 @@ class IndividualGTLoss(torch.nn.Module):
             # logpt = pt.log()
             # loss = -1 * torch.pow((1 - pt), self.gamma) * logpt
 
-            if self.mask_random_k:
-                length = loss.size()[0]
-                loss = loss[torch.randperm(length)]
-                saturated_loss_values = loss[:saturation_area]
-            else:
-                # choose k smallest losses
-                saturated_loss_values, _ = torch.topk(
-                    loss, k=saturation_area, largest=False
-                )
+            # RANDOMLY choose k
+            length = loss.size()[0]
+            loss = loss[torch.randperm(length)]
+            saturated_loss_values = loss[:saturation_area]
+
+            # # choose k smallest losses
+            # saturated_loss_values, _ = torch.topk(
+            #     loss, k=saturation_area, largest=False
+            # )
 
             loss_per_gt.append(saturated_loss_values)
 

@@ -39,7 +39,7 @@ python -u efficientad_twosteps.py \
   --logicano_select percent \
   --percent_logicano 1.0 \
   --lr_stg2 0.000004 \
-  
+  --loss_on_resize \
 
 
 ##Log this job's resource usage stats###

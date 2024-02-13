@@ -611,13 +611,25 @@ def main(config, seed):
         ):
             logicano_image = logicano["image"][0]  # already feature map, [1, 64, 1, 1]
             overall_gt = logicano["overall_gt"][0]  # [1, 1, orig.h, orig.w]
-            individual_gts = logicano["individual_gts"][0]
+            individual_gts = logicano["individual_gts"]
             logicano_max_ref_index = logicano["max_ref_index"][0]
             logicano_ref = ref_features[logicano_max_ref_index]  # [64, 1, 1]
             _, _, orig_height, orig_width = overall_gt.shape
 
             overall_gt = overall_gt.to(device)
-            individual_gts = [item.to(device) for item in individual_gts]
+
+            if config.loss_on_resize:
+                individual_gts = [
+                    {
+                        "gt": item["gt"][0].to(device),
+                        "pixel_type": item["pixel_type"][0],
+                        "orig_height": item["orig_height"][0],
+                        "orig_width": item["orig_width"][0],
+                    }
+                    for item in individual_gts
+                ]
+            else:
+                individual_gts = [item.to(device) for item in individual_gts]
 
             normal_image = normal["image"][0]  # already feature map
             normal_max_ref_index = normal["max_ref_index"][0]
