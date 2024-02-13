@@ -125,9 +125,9 @@ class LogicalAnomalyDataset(Dataset):
         percent_logicano,
         subdataset,
         image_size,
-        use_rotate_flip,
-        geo_augment,
-        image_size_before_geoaug,
+        use_rotate_flip=False,
+        geo_augment=False,
+        image_size_before_geoaug=512,
     ) -> None:
         super().__init__()
         self.image_size = image_size
