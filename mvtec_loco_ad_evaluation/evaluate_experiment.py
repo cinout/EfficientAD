@@ -267,6 +267,31 @@ def main():
         with open(results_path, "w") as results_file:
             json.dump(results, results_file, indent=4, sort_keys=True)
 
+        classification_results = results["classification"]["auc_roc"]
+        cls_logic = classification_results["logical_anomalies"]
+        cls_structure = classification_results["structural_anomalies"]
+        cls_mean = classification_results["mean"]
+
+        localization_results = results["localization"]["auc_spro"]
+        loc_logic = localization_results["logical_anomalies"]["0.05"]
+        loc_structure = localization_results["structural_anomalies"]["0.05"]
+        loc_mean = localization_results["mean"]["0.05"]
+
+        output_content = [
+            cls_logic,
+            cls_structure,
+            cls_mean,
+            loc_logic,
+            loc_structure,
+            loc_mean,
+        ]
+
+        output_content = [f"{item * 100:.1f}\n" for item in output_content]
+
+        output_txt_file = os.path.join(args.output_dir, "format_table.txt")
+        with open(output_txt_file, "a") as the_file:
+            the_file.writelines(output_content)
+
 
 def read_maps(gt_dir: str, anomaly_maps_test_dir: str, defects_config: DefectsConfig):
     """Read the ground truth and the anomaly maps."""

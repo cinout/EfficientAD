@@ -1,3 +1,5 @@
+import json
+import os
 import torch
 import cv2
 import numpy as np
@@ -6,63 +8,35 @@ from PIL import Image, ImageOps
 import torchvision.transforms.functional as TF
 import random
 
-hey = torch.randint(0, 10, size=(10,))
-print(hey)
-wow = hey.size()[0]
-hey = hey[torch.randperm(wow)]
+output_dir = "outputs/folder_baseline/output_20240131_213923_16_56_sd10_[bb]"
+jsonfile_path = os.path.join(output_dir, "metrics.json")
 
-final = hey[:5]
-print(final)
-exit()
-
-image_size_before_geoaug = 512
-image_size = 256
-img_path = "datasets/loco/breakfast_box/train/good/013.png"
-img = Image.open(img_path)
-img = img.convert("RGB")
-
-hey = torch.rand(size=(1, 986, 711))
-hey = transforms.Resize(
-    (image_size_before_geoaug, image_size_before_geoaug), antialias=True
-)(hey)
+f = open(jsonfile_path)
+data = json.load(f)
 
 
-geoaug_transform = transforms.Compose(
-    [
-        transforms.RandomApply(
-            [
-                transforms.RandomResizedCrop(
-                    size=(image_size, image_size), scale=(3 / 4, 4 / 3)
-                )
-            ],
-            p=0.5,
-        ),
-    ]
-)
+classification_results = data["classification"]["auc_roc"]
+cls_logic = classification_results["logical_anomalies"]
+cls_structure = classification_results["structural_anomalies"]
+cls_mean = classification_results["mean"]
 
 
-i, j, h, w = transforms.RandomResizedCrop.get_params(
-    torch.rand(size=(1, image_size_before_geoaug, image_size_before_geoaug)),
-    scale=(0.8, 1),
-    ratio=(3 / 4, 4 / 3),
-)
-img1 = transforms.Resize((image_size_before_geoaug, image_size_before_geoaug))(img)
-img2 = transforms.Resize((image_size_before_geoaug, image_size_before_geoaug))(img)
-img3 = transforms.Resize((image_size_before_geoaug, image_size_before_geoaug))(img)
+localization_results = data["localization"]["auc_spro"]
+loc_logic = localization_results["logical_anomalies"]["0.05"]
+loc_structure = localization_results["structural_anomalies"]["0.05"]
+loc_mean = localization_results["mean"]["0.05"]
 
+output_content = [
+    cls_logic,
+    cls_structure,
+    cls_mean,
+    loc_logic,
+    loc_structure,
+    loc_mean,
+]
 
-if random.random() > 0.0:
-    img1 = TF.crop(img1, i, j, h, w)
-    img2 = TF.crop(img2, i, j, h, w)
-    img3 = TF.crop(img3, i, j, h, w)
-    hey = TF.crop(hey, i, j, h, w)
-    print(hey.shape)
+output_content = [f"{item * 100:.1f}\n" for item in output_content]
 
-img1 = transforms.Resize((image_size, image_size))(img1)
-img2 = transforms.Resize((image_size, image_size))(img2)
-img3 = transforms.Resize((image_size, image_size))(img3)
-
-
-img1.save("img1.png", "PNG")
-img2.save("img2.png", "PNG")
-img3.save("img3.png", "PNG")
+output_txt_file = os.path.join(output_dir, "format_table.txt")
+with open(output_txt_file, "a") as the_file:
+    the_file.writelines(output_content)
