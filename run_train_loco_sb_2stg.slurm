@@ -33,14 +33,15 @@ python -u efficientad_twosteps.py \
   --dataset mvtec_loco \
   --subdataset screw_bag \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
-  --note "twostage" \
+  --note "twostage, UPDATE" \
   --seeds 10 20 30 \
   --stg1_ckpt outputs/folder_baseline/output_20240131_215545_7_68_sd10_[sb]/trainings/mvtec_loco/screw_bag \
   --logicano_select percent \
   --percent_logicano 1.0 \
   --lr_stg2 0.000004 \
   --loss_on_resize \
-
+  --mask_random_k \
+  --iters_stg2 16000 \
 
 ##Log this job's resource usage stats###
 my-job-stats -a -n -s

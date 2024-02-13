@@ -33,13 +33,15 @@ python -u efficientad_twosteps.py \
   --dataset mvtec_loco \
   --subdataset juice_bottle \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
-  --note "twostage" \
+  --note "twostage, UPDATE" \
   --seeds 10 20 30 \
   --stg1_ckpt outputs/folder_baseline/output_20240131_215528_9_92_sd10_[jb]/trainings/mvtec_loco/juice_bottle \
   --logicano_select percent \
   --percent_logicano 1.0 \
   --lr_stg2 0.000004 \
   --loss_on_resize \
+  --mask_random_k \
+  --iters_stg2 16000 \
 
 ##Log this job's resource usage stats###
 my-job-stats -a -n -s
