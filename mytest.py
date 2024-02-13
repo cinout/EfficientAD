@@ -8,6 +8,12 @@ from PIL import Image, ImageOps
 import torchvision.transforms.functional as TF
 import random
 
+
+haha = {0.05: "fds", 0.03: "fds"}
+
+print(haha[0.01])
+exit()
+
 output_dir = "outputs/folder_baseline/output_20240131_213923_16_56_sd10_[bb]"
 jsonfile_path = os.path.join(output_dir, "metrics.json")
 
@@ -22,9 +28,9 @@ cls_mean = classification_results["mean"]
 
 
 localization_results = data["localization"]["auc_spro"]
-loc_logic = localization_results["logical_anomalies"]["0.05"]
-loc_structure = localization_results["structural_anomalies"]["0.05"]
-loc_mean = localization_results["mean"]["0.05"]
+loc_logic = localization_results["logical_anomalies"][0.05]
+loc_structure = localization_results["structural_anomalies"][0.05]
+loc_mean = localization_results["mean"][0.05]
 
 output_content = [
     cls_logic,

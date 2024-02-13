@@ -273,9 +273,9 @@ def main():
         cls_mean = classification_results["mean"]
 
         localization_results = results["localization"]["auc_spro"]
-        loc_logic = localization_results["logical_anomalies"]["0.05"]
-        loc_structure = localization_results["structural_anomalies"]["0.05"]
-        loc_mean = localization_results["mean"]["0.05"]
+        loc_logic = localization_results["logical_anomalies"][0.05]
+        loc_structure = localization_results["structural_anomalies"][0.05]
+        loc_mean = localization_results["mean"][0.05]
 
         output_content = [
             cls_logic,
