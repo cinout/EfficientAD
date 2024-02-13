@@ -21,7 +21,7 @@ eval "$(conda shell.bash hook)"
 conda activate eff
 
 timestamp="20240212_113517_87_75_sd10_[jb]"
-folder_name="folder_10logicano_equal"
+folder_name="folder_100plogicano_equal"
 
 python -u mvtec_loco_ad_evaluation/evaluate_experiment.py \
   --object_name "juice_bottle" \
