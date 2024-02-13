@@ -9,7 +9,7 @@
 #SBATCH --qos=gpgpudeeplearn
 #SBATCH --constraint=dlg4|dlg5
 
-#SBATCH --job-name="train_pp"
+#SBATCH --job-name="train_sc"
 #SBATCH --account=punim1623
 #SBATCH --time=1-10:00:00
 
@@ -29,23 +29,27 @@ conda activate eff
 set -e
 set -x
 
+
 python -u efficientad.py \
   --dataset mvtec_loco \
-  --subdataset pushpins \
+  --subdataset splicing_connectors \
+  --stg1_ckpt outputs/folder_baseline/output_20240131_215545_79_5_sd10_[sc]/trainings/mvtec_loco/splicing_connectors \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
-  --note "10 logicano, geo_aug only on logicano, randomness" \
-  --seeds 10 30 40 \
+  \
+  --train_steps 70000 \
+  --seeds 10 20 30 \
+  \
   --include_logicano \
-  --logicano_select absolute \
-  --num_logicano 10 \
+  --logicano_select percent \
+  --percent_logicano 1.0 \
+  \
   --logicano_loss focal \
-  --stg1_ckpt outputs/folder_baseline/output_20240131_215528_43_52_sd10_[pp]/trainings/mvtec_loco/pushpins \
-  --train_steps 120000 \
   --loss_on_resize \
   --mask_random_k \
-  --geo_augment_only_on_logicano \
-  --alternate_with_prob \
-
+  \
+  --equal_train_normal_logicano \
+  \
+  --note "100% logicano, equal, iter=70000" \
 
 ##Log this job's resource usage stats###
 my-job-stats -a -n -s

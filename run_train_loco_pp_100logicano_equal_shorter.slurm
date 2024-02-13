@@ -48,9 +48,8 @@ python -u efficientad.py \
   --mask_random_k \
   \
   --equal_train_normal_logicano \
-  --alternate_with_prob \
   \
-  --note "100% logicano, equal, randomness, iter=70000" \
+  --note "100% logicano, equal, iter=70000" \
 
 ##Log this job's resource usage stats###
 my-job-stats -a -n -s
