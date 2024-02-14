@@ -2,14 +2,14 @@
 
 ###SBATCH --partition=gpu-a100
 
-#SBATCH --partition=feit-gpu-a100
-#SBATCH --qos=feit
+###SBATCH --partition=feit-gpu-a100
+###SBATCH --qos=feit
 
-###SBATCH --partition=deeplearn
-###SBATCH --qos=gpgpudeeplearn
-###SBATCH --constraint=dlg4|dlg5
+#SBATCH --partition=deeplearn
+#SBATCH --qos=gpgpudeeplearn
+#SBATCH --constraint=dlg4|dlg5
 
-#SBATCH --job-name="train_pp"
+#SBATCH --job-name="train_sc"
 #SBATCH --account=punim1623
 #SBATCH --time=1-10:00:00
 
@@ -32,24 +32,24 @@ set -x
 
 python -u efficientad.py \
   --dataset mvtec_loco \
-  --subdataset pushpins \
-  --stg1_ckpt outputs/folder_baseline/output_20240131_215528_43_52_sd10_[pp]/trainings/mvtec_loco/pushpins \
+  --subdataset splicing_connectors \
+  --stg1_ckpt outputs/folder_baseline/output_20240131_215545_79_5_sd10_[sc]/trainings/mvtec_loco/splicing_connectors \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
   \
-  --train_steps 100000 \
-  --seeds 10 20 30 \
+  --train_steps 70000 \
+  --seeds 10 30 40 \
   \
   --include_logicano \
-  --logicano_select percent \
-  --percent_logicano 1.0 \
+  --logicano_select absolute \
+  --num_logicano 10 \
   \
   --logicano_loss focal \
   --loss_on_resize \
   --mask_random_k \
   \
-  --equal_train_normal_logicano \
+  --geo_augment \
   \
-  --note "100% logicano, equal, iter=100000" \
+  --note "geo_augment on both" \
 
 ##Log this job's resource usage stats###
 my-job-stats -a -n -s

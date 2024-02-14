@@ -166,11 +166,11 @@ def get_argparse():
         action="store_true",
         help="if set to True, then randomly use k pixels from the saturated area of the mask to calculate loss",
     )
-    parser.add_argument(
-        "--alternate_with_prob",
-        action="store_true",
-        help="if set to True, then alternate training based on probability prob>0.5",
-    )
+    # parser.add_argument(
+    #     "--alternate_with_prob",
+    #     action="store_true",
+    #     help="if set to True, then alternate training based on probability prob>0.5",
+    # )
     return parser.parse_args()
 
 
@@ -542,11 +542,8 @@ def main(config, seed):
             penalty_loader_infinite,
         ):
             # take turns to train normal and logicano
-            if config.alternate_with_prob:
-                prob = random.random()
-                criterion = prob > 0.5
-            else:
-                criterion = iteration % 2 == 0
+            criterion = iteration % 2 == 0
+
             if criterion:
                 # train normal
 
