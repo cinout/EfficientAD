@@ -156,16 +156,6 @@ def get_argparse():
         action="store_true",
         help="if set to True, then apply HFlip/VFlip/Rotate augmentations to the training images",
     )
-    parser.add_argument(
-        "--loss_on_resize",
-        action="store_true",
-        help="if set to True, then calculate loss of logicano based on resized images, instead of orig_height/width",
-    )
-    parser.add_argument(
-        "--mask_random_k",
-        action="store_true",
-        help="if set to True, then randomly use k pixels from the saturated area of the mask to calculate loss",
-    )
     # parser.add_argument(
     #     "--alternate_with_prob",
     #     action="store_true",
@@ -595,22 +585,19 @@ def main(config, seed):
                     "individual_gts"
                 ]  # each item: [1, 1, orig.h, orig.w]
 
-                _, _, orig_height, orig_width = overall_gt.shape
+                # _, _, orig_height, orig_width = overall_gt.shape
 
                 logicano_image = logicano_image.to(device)
                 overall_gt = overall_gt.to(device)
-                if config.loss_on_resize:
-                    individual_gts = [
-                        {
-                            "gt": item["gt"].to(device),
-                            "pixel_type": item["pixel_type"],
-                            "orig_height": item["orig_height"],
-                            "orig_width": item["orig_width"],
-                        }
-                        for item in individual_gts
-                    ]
-                else:
-                    individual_gts = [item.to(device) for item in individual_gts]
+                individual_gts = [
+                    {
+                        "gt": item["gt"].to(device),
+                        "pixel_type": item["pixel_type"],
+                        "orig_height": item["orig_height"],
+                        "orig_width": item["orig_width"],
+                    }
+                    for item in individual_gts
+                ]
 
                 teacher_output = teacher(logicano_image)
                 teacher_output = (teacher_output - teacher_mean) / teacher_std
@@ -626,20 +613,14 @@ def main(config, seed):
                     dim=1,
                     keepdim=True,
                 )
-                if not config.loss_on_resize:
-                    map_st = torch.nn.functional.interpolate(
-                        map_st, (image_size, image_size), mode="bilinear"
-                    )
-                    map_ae = torch.nn.functional.interpolate(
-                        map_ae, (image_size, image_size), mode="bilinear"
-                    )
-                else:
-                    map_st = torch.nn.functional.interpolate(
-                        map_st, (orig_height, orig_width), mode="bilinear"
-                    )
-                    map_ae = torch.nn.functional.interpolate(
-                        map_ae, (orig_height, orig_width), mode="bilinear"
-                    )
+
+                map_st = torch.nn.functional.interpolate(
+                    map_st, (image_size, image_size), mode="bilinear"
+                )
+                map_ae = torch.nn.functional.interpolate(
+                    map_ae, (image_size, image_size), mode="bilinear"
+                )
+
                 map_combined = 0.5 * map_st + 0.5 * map_ae  # [1, 1, h, w]
 
                 if config.logicano_loss == "focal":
@@ -737,22 +718,20 @@ def main(config, seed):
                 individual_gts = train_images[
                     "individual_gts"
                 ]  # each item: [1, 1, orig.h, orig.w]
-                _, _, orig_height, orig_width = overall_gt.shape
+                # _, _, orig_height, orig_width = overall_gt.shape
 
                 logicano_image = logicano_image.to(device)
                 overall_gt = overall_gt.to(device)
-                if config.loss_on_resize:
-                    individual_gts = [
-                        {
-                            "gt": item["gt"].to(device),
-                            "pixel_type": item["pixel_type"],
-                            "orig_height": item["orig_height"],
-                            "orig_width": item["orig_width"],
-                        }
-                        for item in individual_gts
-                    ]
-                else:
-                    individual_gts = [item.to(device) for item in individual_gts]
+
+                individual_gts = [
+                    {
+                        "gt": item["gt"].to(device),
+                        "pixel_type": item["pixel_type"],
+                        "orig_height": item["orig_height"],
+                        "orig_width": item["orig_width"],
+                    }
+                    for item in individual_gts
+                ]
 
                 teacher_output = teacher(logicano_image)
                 teacher_output = (teacher_output - teacher_mean) / teacher_std
@@ -768,20 +747,14 @@ def main(config, seed):
                     dim=1,
                     keepdim=True,
                 )
-                if not config.loss_on_resize:
-                    map_st = torch.nn.functional.interpolate(
-                        map_st, (image_size, image_size), mode="bilinear"
-                    )
-                    map_ae = torch.nn.functional.interpolate(
-                        map_ae, (image_size, image_size), mode="bilinear"
-                    )
-                else:
-                    map_st = torch.nn.functional.interpolate(
-                        map_st, (orig_height, orig_width), mode="bilinear"
-                    )
-                    map_ae = torch.nn.functional.interpolate(
-                        map_ae, (orig_height, orig_width), mode="bilinear"
-                    )
+
+                map_st = torch.nn.functional.interpolate(
+                    map_st, (image_size, image_size), mode="bilinear"
+                )
+                map_ae = torch.nn.functional.interpolate(
+                    map_ae, (image_size, image_size), mode="bilinear"
+                )
+
                 map_combined = 0.5 * map_st + 0.5 * map_ae  # [1, 1, h, w]
 
                 if config.logicano_loss == "focal":

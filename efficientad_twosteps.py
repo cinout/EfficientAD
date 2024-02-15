@@ -132,16 +132,6 @@ def get_argparse():
         default=10,
         help="[logicano_select=absolute] number of real logical anomalies used in training",
     )
-    parser.add_argument(
-        "--loss_on_resize",
-        action="store_true",
-        help="if set to True, then calculate loss of logicano based on resized images, instead of orig_height/width",
-    )
-    parser.add_argument(
-        "--mask_random_k",
-        action="store_true",
-        help="if set to True, then calculate loss of logicano based on resized images, instead of orig_height/width",
-    )
     return parser.parse_args()
 
 
@@ -623,18 +613,15 @@ def main(config, seed):
 
             overall_gt = overall_gt.to(device)
 
-            if config.loss_on_resize:
-                individual_gts = [
-                    {
-                        "gt": item["gt"][0].to(device),
-                        "pixel_type": item["pixel_type"][0],
-                        "orig_height": item["orig_height"][0],
-                        "orig_width": item["orig_width"][0],
-                    }
-                    for item in individual_gts
-                ]
-            else:
-                individual_gts = [item.to(device) for item in individual_gts]
+            individual_gts = [
+                {
+                    "gt": item["gt"][0].to(device),
+                    "pixel_type": item["pixel_type"][0],
+                    "orig_height": item["orig_height"][0],
+                    "orig_width": item["orig_width"][0],
+                }
+                for item in individual_gts
+            ]
 
             normal_image = normal["image"][0]  # already feature map
             normal_max_ref_index = normal["max_ref_index"][0]
@@ -648,18 +635,9 @@ def main(config, seed):
             )  # shape: [2, 64*2, 1, 1]
 
             predicted_masks = model_stg2(input)
-            # TODO: should we interpolate?
-            if config.loss_on_resize:
-                _, _, h, w = predicted_masks.shape
-                normal_gt = torch.zeros(size=(1, 1, h, w), dtype=overall_gt.dtype)
-            else:
-                predicted_masks = F.interpolate(
-                    predicted_masks, (orig_height, orig_width), mode="bilinear"
-                )
-                # create gt mask for normal image
-                normal_gt = torch.zeros(
-                    size=(1, 1, orig_height, orig_width), dtype=overall_gt.dtype
-                )
+
+            _, _, h, w = predicted_masks.shape
+            normal_gt = torch.zeros(size=(1, 1, h, w), dtype=overall_gt.dtype)
 
             normal_gt = normal_gt.to(device)
             overall_gt = torch.cat(

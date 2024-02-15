@@ -44,8 +44,6 @@ python -u efficientad.py \
   --num_logicano 10 \
   \
   --logicano_loss focal \
-  --loss_on_resize \
-  --mask_random_k \
   \
   --geo_augment \
   \

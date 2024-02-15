@@ -64,7 +64,6 @@ class IndividualGTLoss(torch.nn.Module):
         )
 
         defects = json.load(open(defects_config_path))
-        self.loss_on_resize = config.loss_on_resize
         self.config = {e["pixel_value"]: e for e in defects}
 
         self.gamma = 2
@@ -77,14 +76,11 @@ class IndividualGTLoss(torch.nn.Module):
         for gt in gts:
             # gt.shape: [1, 1, orig.h, orig.w]
             # find unique config for the gt
-            if self.loss_on_resize:
-                pixel_type = gt["pixel_type"].item()
-                orig_width = gt["orig_width"].item()
-                orig_height = gt["orig_height"].item()
-                gt = gt["gt"]
-            else:
-                unique_values = sorted(torch.unique(gt).detach().cpu().numpy())
-                pixel_type = unique_values[-1]
+
+            pixel_type = gt["pixel_type"].item()
+            orig_width = gt["orig_width"].item()
+            orig_height = gt["orig_height"].item()
+            gt = gt["gt"]
 
             pixel_detail = self.config[pixel_type]
             saturation_threshold = pixel_detail["saturation_threshold"]
@@ -92,25 +88,15 @@ class IndividualGTLoss(torch.nn.Module):
             bool_array = gt.cpu().numpy().astype(np.bool_)
             defect_area = np.sum(bool_array)
 
-            if self.loss_on_resize:
-                _, _, h, w = gt.shape
-                saturation_area = (
-                    int(saturation_threshold * defect_area)
-                    if relative_saturation
-                    else np.minimum(
-                        int(saturation_threshold * h * w / orig_width / orig_height),
-                        defect_area,
-                    )
+            _, _, h, w = gt.shape
+            saturation_area = (
+                int(saturation_threshold * defect_area)
+                if relative_saturation
+                else np.minimum(
+                    int(saturation_threshold * h * w / orig_width / orig_height),
+                    defect_area,
                 )
-
-            else:
-                # calculate saturation_area (max pixels needed)
-                saturation_area = (
-                    int(saturation_threshold * defect_area)
-                    if relative_saturation
-                    else np.minimum(saturation_threshold, defect_area)
-                )
-                gt = gt.bool().to(torch.float32)
+            )
 
             gt = gt.squeeze(0)
             gt = gt.view(gt.shape[0], -1)
