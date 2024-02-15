@@ -156,11 +156,12 @@ def get_argparse():
         action="store_true",
         help="if set to True, then apply HFlip/VFlip/Rotate augmentations to the training images",
     )
-    # parser.add_argument(
-    #     "--alternate_with_prob",
-    #     action="store_true",
-    #     help="if set to True, then alternate training based on probability prob>0.5",
-    # )
+    # TODO: add to slurm
+    parser.add_argument(
+        "--use_seg_network",
+        action="store_true",
+        help="if set to True, then use segmentation network for calculating seg loss",
+    )
     return parser.parse_args()
 
 
@@ -425,6 +426,7 @@ def main(config, seed):
     # with open("teacher_std.t", "rb") as f:
     #     teacher_std = torch.load(f)
 
+    # TODO: update
     optimizer = torch.optim.Adam(
         itertools.chain(student.parameters(), autoencoder.parameters()),
         lr=1e-4,
@@ -442,7 +444,6 @@ def main(config, seed):
             loss_individual_gt = IndividualGTLoss(config)
         elif config.logicano_loss == "sphere":
             loss_individual_gt = IndividualGTLossForSphere(config)
-            # TODO: uncomment the following
 
             autoencoder_dict = torch.load(
                 os.path.join(config.stg1_ckpt, "autoencoder_final.pth"),
@@ -496,13 +497,12 @@ def main(config, seed):
             center_c = torch.mean(center_c, dim=0)
             center_c = center_c.unsqueeze(0)  # [1, 1, 64, 64]
             center_c = F.interpolate(
-                center_c, (orig_height, orig_width), mode="bilinear"
+                center_c, (image_size, image_size), mode="bilinear"
             )  # [1, 1, orig_height, orig_width]
 
             eps = 0.1
             center_c[center_c < eps] = eps
 
-            # TODO: comment out this
             # with open("center_c.t", "rb") as f:
             #     center_c = torch.load(f)
         else:
@@ -518,6 +518,7 @@ def main(config, seed):
         or config.equal_train_normal_logicano
         or config.geo_augment_only_on_logicano
     ):
+        # normal and logicano use separate dataloaders
         for (
             iteration,
             normal,
@@ -574,9 +575,10 @@ def main(config, seed):
                 distance_stae = (ae_output - student_output_ae) ** 2
                 loss_ae = torch.mean(distance_ae)
                 loss_stae = torch.mean(distance_stae)
+
+                # TODO: add new loss for mask branch
                 loss_total = loss_st + loss_ae + loss_stae
-                # TODO: remove
-                # print(f"[NORMAL]: {loss_total.item()}")
+
             else:
                 # train logicano
                 logicano_image = logicano["image"]  # [1, 3, 256, 256]
@@ -624,6 +626,7 @@ def main(config, seed):
                 map_combined = 0.5 * map_st + 0.5 * map_ae  # [1, 1, h, w]
 
                 if config.logicano_loss == "focal":
+                    # TODO: add new loss for mask branch
                     _, _, h, w = map_combined.shape
                     map_combined = map_combined.reshape(1, 1, -1)
                     map_combined = F.normalize(map_combined, dim=2)
@@ -642,8 +645,7 @@ def main(config, seed):
                         map_combined[0], individual_gts
                     )
                     loss_total = loss_overall_negative + loss_individual_positive
-                    # TODO: remove
-                    # print(f"[LOGICANO]: {loss_total.item()}")
+
                 else:
                     raise Exception("Unimplemented logicano_loss")
 
@@ -660,14 +662,13 @@ def main(config, seed):
                     "Current loss: {:.4f}".format(loss_total.item()),
                 )
     else:
+        # normal and/or logicano share the same dataloader
         for (
             iteration,
             train_images,
             image_penalty,
         ) in zip(tqdm_obj, train_loader_infinite, penalty_loader_infinite):
             if isinstance(train_images, list):
-                # TODO: remove continue
-                # continue
                 # normal images
 
                 (image_st, image_ae) = train_images
@@ -708,8 +709,7 @@ def main(config, seed):
                 loss_ae = torch.mean(distance_ae)
                 loss_stae = torch.mean(distance_stae)
                 loss_total = loss_st + loss_ae + loss_stae
-                # TODO: remove
-                # print("[NORMAL]", loss_total.item())
+
             elif isinstance(train_images, dict):
                 # logic anomaly images
 
@@ -775,12 +775,7 @@ def main(config, seed):
                         map_combined[0], individual_gts
                     )
                     loss_total = loss_overall_negative + loss_individual_positive
-                    # TODO: remove
-                    # print(
-                    #     loss_overall_negative.item(),
-                    #     loss_individual_positive.item(),
-                    #     loss_total.item(),
-                    # )
+
                 elif config.logicano_loss == "sphere":
                     dist = (map_combined - center_c) ** 2  # [1, 1, orig.h, orig.w]
 
@@ -795,12 +790,7 @@ def main(config, seed):
                     loss_individual_positive = torch.mean(loss_individual_positive)
 
                     loss_total = loss_overall_negative + loss_individual_positive
-                    # TODO: remove
-                    # print(
-                    #     loss_overall_negative.item(),
-                    #     loss_individual_positive.item(),
-                    #     loss_total.item(),
-                    # )
+
                 else:
                     raise Exception("Unimplemented logicano_loss")
             else:
@@ -1019,6 +1009,7 @@ def test(
     return auc * 100
 
 
+# called in both test and map_normalization
 @torch.no_grad()
 def predict(
     config,

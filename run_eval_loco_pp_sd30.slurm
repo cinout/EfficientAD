@@ -20,8 +20,8 @@ module purge
 eval "$(conda shell.bash hook)"
 conda activate eff
 
-timestamp="20240214_184753_3_53_sd30_[pp]"
-folder_name="folder_geo_rotflip_logicanoonly"
+timestamp="20240215_010333_44_92_sd30_[pp]"
+folder_name="folder_geo_logicanoonly"
 
 python -u mvtec_loco_ad_evaluation/evaluate_experiment.py \
   --object_name "pushpins" \
