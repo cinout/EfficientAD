@@ -36,7 +36,7 @@ python -u efficientad.py \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
   \
   --train_steps 70000 \
-  --seeds 10 20 30 \
+  --seeds 50 \
   \
   --include_logicano \
   --logicano_select percent \
