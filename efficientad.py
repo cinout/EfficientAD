@@ -13,6 +13,7 @@ import random
 from tqdm import tqdm
 from common import (
     Autoencoder,
+    SegmentationNet,
     FocalLoss,
     IndividualGTLoss,
     IndividualGTLossForSphere,
@@ -21,6 +22,7 @@ from common import (
     ImageFolderWithoutTarget,
     ImageFolderWithTargetAndPath,
     InfiniteDataloader,
+    l2_normalize,
 )
 from sklearn.metrics import roc_auc_score
 from datetime import datetime
@@ -142,6 +144,11 @@ def get_argparse():
         help="if set to True, then apply RandomResizedCrop augmentations to the training images",
     )
     parser.add_argument(
+        "--use_rotate_flip",
+        action="store_true",
+        help="if set to True, then apply HFlip/VFlip/Rotate augmentations to the training images",
+    )
+    parser.add_argument(
         "--geo_augment_only_on_logicano",
         action="store_true",
         help="if set to True, then apply RandomResizedCrop augmentations to only logicano images",
@@ -151,12 +158,6 @@ def get_argparse():
         action="store_true",
         help="if set to True, don't use geo augmentation, but still equally train normal and logicano",
     )
-    parser.add_argument(
-        "--use_rotate_flip",
-        action="store_true",
-        help="if set to True, then apply HFlip/VFlip/Rotate augmentations to the training images",
-    )
-    # TODO: add to slurm
     parser.add_argument(
         "--use_seg_network",
         action="store_true",
@@ -398,6 +399,10 @@ def main(config, seed):
 
     # autoencoder = get_autoencoder(out_channels)
     autoencoder = Autoencoder(out_channels=out_channels)
+    if config.use_seg_network:
+        segnet = SegmentationNet(inplanes=out_channels)
+        segnet.train()
+        segnet = segnet.to(device)
 
     # teacher frozen
     teacher.eval()
@@ -426,12 +431,20 @@ def main(config, seed):
     # with open("teacher_std.t", "rb") as f:
     #     teacher_std = torch.load(f)
 
-    # TODO: update
-    optimizer = torch.optim.Adam(
-        itertools.chain(student.parameters(), autoencoder.parameters()),
-        lr=1e-4,
-        weight_decay=1e-5,
-    )
+    if config.use_seg_network:
+        optimizer = torch.optim.Adam(
+            itertools.chain(
+                student.parameters(), autoencoder.parameters(), segnet.parameters()
+            ),
+            lr=1e-4,
+            weight_decay=1e-5,
+        )
+    else:
+        optimizer = torch.optim.Adam(
+            itertools.chain(student.parameters(), autoencoder.parameters()),
+            lr=1e-4,
+            weight_decay=1e-5,
+        )
 
     # step_size is 66500
     scheduler = torch.optim.lr_scheduler.StepLR(
@@ -576,9 +589,7 @@ def main(config, seed):
                 loss_ae = torch.mean(distance_ae)
                 loss_stae = torch.mean(distance_stae)
 
-                # TODO: add new loss for mask branch
                 loss_total = loss_st + loss_ae + loss_stae
-
             else:
                 # train logicano
                 logicano_image = logicano["image"]  # [1, 3, 256, 256]
@@ -605,46 +616,88 @@ def main(config, seed):
                 teacher_output = (teacher_output - teacher_mean) / teacher_std
                 student_output = student(logicano_image)
                 autoencoder_output = autoencoder(logicano_image)
-                map_st = torch.mean(
-                    (teacher_output - student_output[:, :out_channels]) ** 2,
-                    dim=1,
-                    keepdim=True,
-                )  # shape: (bs, 1, h, w)
-                map_ae = torch.mean(
-                    (autoencoder_output - student_output[:, out_channels:]) ** 2,
-                    dim=1,
-                    keepdim=True,
-                )
-
-                map_st = torch.nn.functional.interpolate(
-                    map_st, (image_size, image_size), mode="bilinear"
-                )
-                map_ae = torch.nn.functional.interpolate(
-                    map_ae, (image_size, image_size), mode="bilinear"
-                )
-
-                map_combined = 0.5 * map_st + 0.5 * map_ae  # [1, 1, h, w]
 
                 if config.logicano_loss == "focal":
-                    # TODO: add new loss for mask branch
-                    _, _, h, w = map_combined.shape
-                    map_combined = map_combined.reshape(1, 1, -1)
-                    map_combined = F.normalize(map_combined, dim=2)
-                    map_combined = map_combined.reshape(1, 1, h, w)  # prob of anormalcy
+                    if config.use_seg_network:
+                        # teacher-student branch
+                        teacher_output = l2_normalize(teacher_output)
+                        student_output_t = l2_normalize(
+                            student_output[:, :out_channels]
+                        )
+                        seg_input_ts = -teacher_output * student_output_t
+                        seg_input_ts = torch.nn.functional.interpolate(
+                            seg_input_ts, (image_size, image_size), mode="bilinear"
+                        )
 
-                    map_combined_inverse = 1 - map_combined  # prob of normal
-                    map_combined = torch.cat(
-                        [map_combined_inverse, map_combined], dim=1
-                    )
+                        # ae-student branch
+                        autoencoder_output = l2_normalize(autoencoder_output)
+                        student_output_ae = l2_normalize(
+                            student_output[:, out_channels:]
+                        )
+                        seg_input_aes = -autoencoder_output * student_output_ae
+                        seg_input_aes = torch.nn.functional.interpolate(
+                            seg_input_aes, (image_size, image_size), mode="bilinear"
+                        )
 
-                    # loss_focal for overall negative target pixels only
-                    loss_overall_negative = loss_focal(map_combined, overall_gt)
-                    # loss for positive pixels in individual gts
+                        # combined
+                        seg_input = torch.cat(
+                            [seg_input_ts, seg_input_aes], dim=0
+                        )  # [2, 384, 256, 256]
+                        seg_output = segnet(
+                            seg_input
+                        )  # [2, 1, 256, 256], higher value means higher anomaly chance
+                        seg_output = torch.mean(seg_output, dim=0, keepdim=True)
+                        seg_output_inverse = 1 - seg_output
+                        seg_output = torch.cat([seg_output_inverse, seg_output], dim=1)
 
-                    loss_individual_positive = loss_individual_gt(
-                        map_combined[0], individual_gts
-                    )
-                    loss_total = loss_overall_negative + loss_individual_positive
+                        # loss_focal for overall negative target pixels only
+                        loss_overall_negative = loss_focal(seg_output, overall_gt)
+                        # loss for positive pixels in individual gts
+                        loss_individual_positive = loss_individual_gt(
+                            seg_output[0], individual_gts
+                        )
+                        loss_total = loss_overall_negative + loss_individual_positive
+                    else:
+                        map_st = torch.mean(
+                            (teacher_output - student_output[:, :out_channels]) ** 2,
+                            dim=1,
+                            keepdim=True,
+                        )  # shape: (bs, 1, h, w)
+                        map_ae = torch.mean(
+                            (autoencoder_output - student_output[:, out_channels:])
+                            ** 2,
+                            dim=1,
+                            keepdim=True,
+                        )
+
+                        map_st = torch.nn.functional.interpolate(
+                            map_st, (image_size, image_size), mode="bilinear"
+                        )
+                        map_ae = torch.nn.functional.interpolate(
+                            map_ae, (image_size, image_size), mode="bilinear"
+                        )
+
+                        map_combined = 0.5 * map_st + 0.5 * map_ae  # [1, 1, h, w]
+                        _, _, h, w = map_combined.shape
+                        map_combined = map_combined.reshape(1, 1, -1)
+                        map_combined = F.normalize(map_combined, dim=2)
+                        map_combined = map_combined.reshape(
+                            1, 1, h, w
+                        )  # prob of abnormalcy
+
+                        map_combined_inverse = 1 - map_combined  # prob of normal
+                        map_combined = torch.cat(
+                            [map_combined_inverse, map_combined], dim=1
+                        )
+
+                        # loss_focal for overall negative target pixels only
+                        loss_overall_negative = loss_focal(map_combined, overall_gt)
+                        # loss for positive pixels in individual gts
+
+                        loss_individual_positive = loss_individual_gt(
+                            map_combined[0], individual_gts
+                        )
+                        loss_total = loss_overall_negative + loss_individual_positive
 
                 else:
                     raise Exception("Unimplemented logicano_loss")
@@ -815,39 +868,89 @@ def main(config, seed):
     teacher.eval()
     student.eval()
     autoencoder.eval()
+    if config.use_seg_network:
+        segnet.eval()
+        torch.save(segnet, os.path.join(train_output_dir, "segnet_final.pth"))
 
     # torch.save(teacher, os.path.join(train_output_dir, "teacher_final.pth"))
     torch.save(student, os.path.join(train_output_dir, "student_final.pth"))
     torch.save(autoencoder, os.path.join(train_output_dir, "autoencoder_final.pth"))
 
-    q_st_start, q_st_end, q_ae_start, q_ae_end = map_normalization(
-        out_channels=out_channels,
-        validation_loader=validation_loader,
-        teacher=teacher,
-        student=student,
-        autoencoder=autoencoder,
-        teacher_mean=teacher_mean,
-        teacher_std=teacher_std,
-        config=config,
-        desc="Final map normalization",
-    )
-    auc = test(
-        out_channels=out_channels,
-        test_set=test_set,
-        teacher=teacher,
-        student=student,
-        autoencoder=autoencoder,
-        teacher_mean=teacher_mean,
-        teacher_std=teacher_std,
-        q_st_start=q_st_start,
-        q_st_end=q_st_end,
-        q_ae_start=q_ae_start,
-        q_ae_end=q_ae_end,
-        config=config,
-        output_dir=output_dir,
-        test_output_dir=test_output_dir,
-        desc="Final inference",
-    )
+    if config.use_seg_network:
+        (
+            q_st_start,
+            q_st_end,
+            q_ae_start,
+            q_ae_end,
+            q_seg_start,
+            q_seg_end,
+        ) = map_normalization(
+            out_channels=out_channels,
+            validation_loader=validation_loader,
+            teacher=teacher,
+            student=student,
+            autoencoder=autoencoder,
+            segnet=segnet,
+            teacher_mean=teacher_mean,
+            teacher_std=teacher_std,
+            config=config,
+            desc="Final map normalization",
+        )
+        print(f"q_seg_start: {q_seg_start}")
+        print(f"q_seg_end: {q_seg_end}")
+        auc = test(
+            out_channels=out_channels,
+            test_set=test_set,
+            teacher=teacher,
+            student=student,
+            autoencoder=autoencoder,
+            segnet=segnet,
+            teacher_mean=teacher_mean,
+            teacher_std=teacher_std,
+            q_st_start=q_st_start,
+            q_st_end=q_st_end,
+            q_ae_start=q_ae_start,
+            q_ae_end=q_ae_end,
+            q_seg_start=q_seg_start,
+            q_seg_end=q_seg_end,
+            config=config,
+            output_dir=output_dir,
+            test_output_dir=test_output_dir,
+            desc="Final inference",
+        )
+    else:
+        q_st_start, q_st_end, q_ae_start, q_ae_end = map_normalization(
+            out_channels=out_channels,
+            validation_loader=validation_loader,
+            teacher=teacher,
+            student=student,
+            autoencoder=autoencoder,
+            segnet=None,
+            teacher_mean=teacher_mean,
+            teacher_std=teacher_std,
+            config=config,
+            desc="Final map normalization",
+        )
+        auc = test(
+            out_channels=out_channels,
+            test_set=test_set,
+            teacher=teacher,
+            student=student,
+            autoencoder=autoencoder,
+            segnet=None,
+            teacher_mean=teacher_mean,
+            teacher_std=teacher_std,
+            q_st_start=q_st_start,
+            q_st_end=q_st_end,
+            q_ae_start=q_ae_start,
+            q_ae_end=q_ae_end,
+            q_seg_start=None,
+            q_seg_end=None,
+            config=config,
+            output_dir=output_dir,
+            test_output_dir=test_output_dir,
+            desc="Final inference",
+        )
     print("Final image auc: {:.4f}".format(auc))
 
 
@@ -858,12 +961,15 @@ def test(
     teacher,
     student,
     autoencoder,
+    segnet,
     teacher_mean,
     teacher_std,
     q_st_start,
     q_st_end,
     q_ae_start,
     q_ae_end,
+    q_seg_start,
+    q_seg_end,
     config,
     output_dir,
     test_output_dir=None,
@@ -888,20 +994,42 @@ def test(
 
         image = image.to(device)
 
-        map_combined, map_st, map_ae = predict(
-            config=config,
-            out_channels=out_channels,
-            image=image,
-            teacher=teacher,
-            student=student,
-            autoencoder=autoencoder,
-            teacher_mean=teacher_mean,
-            teacher_std=teacher_std,
-            q_st_start=q_st_start,
-            q_st_end=q_st_end,
-            q_ae_start=q_ae_start,
-            q_ae_end=q_ae_end,
-        )
+        if config.use_seg_network:
+            map_combined, map_st, map_ae, map_seg = predict(
+                config=config,
+                out_channels=out_channels,
+                image=image,
+                teacher=teacher,
+                student=student,
+                autoencoder=autoencoder,
+                segnet=segnet,
+                teacher_mean=teacher_mean,
+                teacher_std=teacher_std,
+                q_st_start=q_st_start,
+                q_st_end=q_st_end,
+                q_ae_start=q_ae_start,
+                q_ae_end=q_ae_end,
+                q_seg_start=q_seg_start,
+                q_seg_end=q_seg_end,
+            )
+        else:
+            map_combined, map_st, map_ae = predict(
+                config=config,
+                out_channels=out_channels,
+                image=image,
+                teacher=teacher,
+                student=student,
+                autoencoder=autoencoder,
+                segnet=segnet,
+                teacher_mean=teacher_mean,
+                teacher_std=teacher_std,
+                q_st_start=q_st_start,
+                q_st_end=q_st_end,
+                q_ae_start=q_ae_start,
+                q_ae_end=q_ae_end,
+                q_seg_start=q_seg_start,
+                q_seg_end=q_seg_end,
+            )
 
         if config.analysis_heatmap and False:
             if map_comb_min is None:
@@ -1018,18 +1146,48 @@ def predict(
     teacher,
     student,
     autoencoder,
+    segnet,
     teacher_mean,
     teacher_std,
     q_st_start=None,
     q_st_end=None,
     q_ae_start=None,
     q_ae_end=None,
+    q_seg_start=None,
+    q_seg_end=None,
 ):
     teacher_output = teacher(image)
 
     teacher_output = (teacher_output - teacher_mean) / teacher_std
     student_output = student(image)
     autoencoder_output = autoencoder(image)
+
+    if config.use_seg_network:
+        # teacher-student branch
+        teacher_output = l2_normalize(teacher_output)
+        student_output_t = l2_normalize(student_output[:, :out_channels])
+        seg_input_ts = -teacher_output * student_output_t
+        seg_input_ts = torch.nn.functional.interpolate(
+            seg_input_ts, (image_size, image_size), mode="bilinear"
+        )
+
+        # ae-student branch
+        autoencoder_output = l2_normalize(autoencoder_output)
+        student_output_ae = l2_normalize(student_output[:, out_channels:])
+        seg_input_aes = -autoencoder_output * student_output_ae
+        seg_input_aes = torch.nn.functional.interpolate(
+            seg_input_aes, (image_size, image_size), mode="bilinear"
+        )
+
+        # combined
+        seg_input = torch.cat(
+            [seg_input_ts, seg_input_aes], dim=0
+        )  # [2, 384, 256, 256]
+        map_seg = segnet(
+            seg_input
+        )  # [2, 1, 256, 256], higher value means higher anomaly chance
+        map_seg = torch.mean(map_seg, dim=0, keepdim=True)  # [1, 1, 256, 256]
+
     map_st = torch.mean(
         (teacher_output - student_output[:, :out_channels]) ** 2, dim=1, keepdim=True
     )  # shape: (bs, 1, h, w)
@@ -1051,9 +1209,15 @@ def predict(
         map_st = 0.1 * (map_st - q_st_start) / (q_st_end - q_st_start)
     if q_ae_start is not None:
         map_ae = 0.1 * (map_ae - q_ae_start) / (q_ae_end - q_ae_start)
-    map_combined = 0.5 * map_st + 0.5 * map_ae
+    if config.use_seg_network and q_seg_start is not None:
+        map_seg = 0.1 * (map_seg - q_seg_start) / (q_seg_end - q_seg_start)
 
-    return map_combined, map_st, map_ae
+    if config.use_seg_network:
+        map_combined = 1.0 / 3 * map_st + 1.0 / 3 * map_ae + 1.0 / 3 * map_seg
+        return map_combined, map_st, map_ae, map_seg
+    else:
+        map_combined = 0.5 * map_st + 0.5 * map_ae
+        return map_combined, map_st, map_ae
 
 
 @torch.no_grad()
@@ -1063,6 +1227,7 @@ def map_normalization(
     teacher,
     student,
     autoencoder,
+    segnet,
     teacher_mean,
     teacher_std,
     config,
@@ -1070,33 +1235,58 @@ def map_normalization(
 ):
     maps_st = []
     maps_ae = []
+    if config.use_seg_network:
+        maps_seg = []
     # ignore augmented ae image
     for images in tqdm(validation_loader, desc=desc):
         (image, _) = images
 
         image = image.to(device)
 
-        map_combined, map_st, map_ae = predict(
-            config=config,
-            out_channels=out_channels,
-            image=image,
-            teacher=teacher,
-            student=student,
-            autoencoder=autoencoder,
-            teacher_mean=teacher_mean,
-            teacher_std=teacher_std,
-        )
+        if config.use_seg_network:
+            map_combined, map_st, map_ae, map_seg = predict(
+                config=config,
+                out_channels=out_channels,
+                image=image,
+                teacher=teacher,
+                student=student,
+                autoencoder=autoencoder,
+                segnet=segnet,
+                teacher_mean=teacher_mean,
+                teacher_std=teacher_std,
+            )
+            maps_seg.append(map_seg)
+        else:
+            map_combined, map_st, map_ae = predict(
+                config=config,
+                out_channels=out_channels,
+                image=image,
+                teacher=teacher,
+                student=student,
+                autoencoder=autoencoder,
+                segnet=segnet,
+                teacher_mean=teacher_mean,
+                teacher_std=teacher_std,
+            )
         maps_st.append(map_st)
         maps_ae.append(map_ae)
     maps_st = torch.cat(maps_st)
-    maps_ae = torch.cat(maps_ae)
     q_st_start = torch.quantile(
         maps_st, q=0.9
     )  # means 90% of values lie below q_st_start
     q_st_end = torch.quantile(maps_st, q=0.995)
+
+    maps_ae = torch.cat(maps_ae)
     q_ae_start = torch.quantile(maps_ae, q=0.9)
     q_ae_end = torch.quantile(maps_ae, q=0.995)
-    return q_st_start, q_st_end, q_ae_start, q_ae_end
+
+    if config.use_seg_network:
+        maps_seg = torch.cat(maps_seg)
+        q_seg_start = torch.quantile(maps_seg, q=0.9)
+        q_seg_end = torch.quantile(maps_seg, q=0.995)
+        return q_st_start, q_st_end, q_ae_start, q_ae_end, q_seg_start, q_seg_end
+    else:
+        return q_st_start, q_st_end, q_ae_start, q_ae_end
 
 
 @torch.no_grad()

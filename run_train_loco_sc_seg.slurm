@@ -37,17 +37,17 @@ python -u efficientad.py \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
   \
   --train_steps 70000 \
-  --seeds 10 30 40 \
+  --seeds 10 20 30 \
   \
   --include_logicano \
-  --logicano_select absolute \
-  --num_logicano 10 \
+  --logicano_select percent \
+  --percent_logicano 1.0 \
   \
-  --logicano_loss focal \
+  --equal_train_normal_logicano \
   \
-  --geo_augment \
+  --use_seg_network \
   \
-  --note "geo_augment on both" \
+  --note "use segmentation network" \
 
 ##Log this job's resource usage stats###
 my-job-stats -a -n -s
