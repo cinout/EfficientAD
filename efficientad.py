@@ -174,6 +174,12 @@ def get_argparse():
         default=1.0,
         help="used if segmentation network is used",
     )
+    parser.add_argument(
+        "--w_f1loss",
+        type=float,
+        default=1.0,
+        help="used if use_l1_loss is on",
+    )
     return parser.parse_args()
 
 
@@ -425,22 +431,22 @@ def main(config, seed):
     autoencoder = autoencoder.to(device)
 
     # TODO: uncomment below
-    teacher_mean, teacher_std = teacher_normalization(
-        teacher,
-        old_train_loader
-        if config.include_logicano
-        and not (
-            config.geo_augment
-            or config.equal_train_normal_logicano
-            or config.geo_augment_only_on_logicano
-        )
-        else train_loader,
-        config,
-    )
-    # with open("teacher_mean.t", "rb") as f:
-    #     teacher_mean = torch.load(f)
-    # with open("teacher_std.t", "rb") as f:
-    #     teacher_std = torch.load(f)
+    # teacher_mean, teacher_std = teacher_normalization(
+    #     teacher,
+    #     old_train_loader
+    #     if config.include_logicano
+    #     and not (
+    #         config.geo_augment
+    #         or config.equal_train_normal_logicano
+    #         or config.geo_augment_only_on_logicano
+    #     )
+    #     else train_loader,
+    #     config,
+    # )
+    with open("teacher_mean.t", "rb") as f:
+        teacher_mean = torch.load(f)
+    with open("teacher_std.t", "rb") as f:
+        teacher_std = torch.load(f)
 
     if config.use_seg_network:
         optimizer = torch.optim.Adam(
@@ -657,9 +663,13 @@ def main(config, seed):
                         seg_output = segnet(
                             seg_input
                         )  # [2, 1, 256, 256], higher value means higher anomaly chance
-                        seg_output = torch.mean(seg_output, dim=0, keepdim=True)
+                        seg_output = torch.mean(
+                            seg_output, dim=0, keepdim=True
+                        )  # [1, 1, 256, 256]
                         seg_output_inverse = 1 - seg_output
-                        seg_output = torch.cat([seg_output_inverse, seg_output], dim=1)
+                        seg_output = torch.cat(
+                            [seg_output_inverse, seg_output], dim=1
+                        )  # [1, 2, 256, 256]
 
                         # loss_focal for overall negative target pixels only
                         loss_overall_negative = loss_focal(seg_output, overall_gt)
@@ -669,6 +679,11 @@ def main(config, seed):
                         )
                         loss_total = loss_overall_negative + loss_individual_positive
                         loss_total = config.w_segloss * loss_total
+
+                        if config.use_l1_loss:
+                            loss_total += config.w_f1loss * F.l1_loss(
+                                seg_output[:, 1, :, :], overall_gt, reduction="mean"
+                            )
                     else:
                         map_st = torch.mean(
                             (teacher_output - student_output[:, :out_channels]) ** 2,
@@ -710,6 +725,11 @@ def main(config, seed):
                             map_combined[0], individual_gts
                         )
                         loss_total = loss_overall_negative + loss_individual_positive
+
+                        if config.use_l1_loss:
+                            loss_total += config.w_f1loss * F.l1_loss(
+                                map_combined[:, 1, :, :], overall_gt, reduction="mean"
+                            )
 
                 else:
                     raise Exception("Unimplemented logicano_loss")
@@ -840,6 +860,11 @@ def main(config, seed):
                         map_combined[0], individual_gts
                     )
                     loss_total = loss_overall_negative + loss_individual_positive
+
+                    if config.use_l1_loss:
+                        loss_total += config.w_f1loss * F.l1_loss(
+                            map_combined[:, 1, :, :], overall_gt, reduction="mean"
+                        )
 
                 elif config.logicano_loss == "sphere":
                     dist = (map_combined - center_c) ** 2  # [1, 1, orig.h, orig.w]

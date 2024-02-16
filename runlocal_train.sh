@@ -11,6 +11,7 @@ python -u efficientad.py \
   --equal_train_normal_logicano \
   --use_seg_network \
   --train_steps 10 \
+  --use_l1_loss \
 
 #  breakfast_box
 #  juice_bottle
