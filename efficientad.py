@@ -163,6 +163,17 @@ def get_argparse():
         action="store_true",
         help="if set to True, then use segmentation network for calculating seg loss",
     )
+    parser.add_argument(
+        "--use_l1_loss",
+        action="store_true",
+        help="if set to True, then add l1 loss to focal loss",
+    )
+    parser.add_argument(
+        "--w_segloss",
+        type=float,
+        default=1.0,
+        help="used if segmentation network is used",
+    )
     return parser.parse_args()
 
 
@@ -657,6 +668,7 @@ def main(config, seed):
                             seg_output[0], individual_gts
                         )
                         loss_total = loss_overall_negative + loss_individual_positive
+                        loss_total = config.w_segloss * loss_total
                     else:
                         map_st = torch.mean(
                             (teacher_output - student_output[:, :out_channels]) ** 2,
