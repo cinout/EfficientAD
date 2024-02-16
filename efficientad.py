@@ -431,22 +431,22 @@ def main(config, seed):
     autoencoder = autoencoder.to(device)
 
     # TODO: uncomment below
-    teacher_mean, teacher_std = teacher_normalization(
-        teacher,
-        old_train_loader
-        if config.include_logicano
-        and not (
-            config.geo_augment
-            or config.equal_train_normal_logicano
-            or config.geo_augment_only_on_logicano
-        )
-        else train_loader,
-        config,
-    )
-    # with open("teacher_mean.t", "rb") as f:
-    #     teacher_mean = torch.load(f)
-    # with open("teacher_std.t", "rb") as f:
-    #     teacher_std = torch.load(f)
+    # teacher_mean, teacher_std = teacher_normalization(
+    #     teacher,
+    #     old_train_loader
+    #     if config.include_logicano
+    #     and not (
+    #         config.geo_augment
+    #         or config.equal_train_normal_logicano
+    #         or config.geo_augment_only_on_logicano
+    #     )
+    #     else train_loader,
+    #     config,
+    # )
+    with open("teacher_mean.t", "rb") as f:
+        teacher_mean = torch.load(f)
+    with open("teacher_std.t", "rb") as f:
+        teacher_std = torch.load(f)
 
     if config.use_seg_network:
         optimizer = torch.optim.Adam(
@@ -682,7 +682,9 @@ def main(config, seed):
 
                         if config.use_l1_loss:
                             loss_total += config.w_f1loss * F.l1_loss(
-                                seg_output[:, 1, :, :], overall_gt, reduction="mean"
+                                seg_output[:, 1, :, :].unsqueeze(1),
+                                overall_gt,
+                                reduction="mean",
                             )
                     else:
                         map_st = torch.mean(
@@ -728,7 +730,9 @@ def main(config, seed):
 
                         if config.use_l1_loss:
                             loss_total += config.w_f1loss * F.l1_loss(
-                                map_combined[:, 1, :, :], overall_gt, reduction="mean"
+                                map_combined[:, 1, :, :].unsqueeze(1),
+                                overall_gt,
+                                reduction="mean",
                             )
 
                 else:
@@ -863,7 +867,9 @@ def main(config, seed):
 
                     if config.use_l1_loss:
                         loss_total += config.w_f1loss * F.l1_loss(
-                            map_combined[:, 1, :, :], overall_gt, reduction="mean"
+                            map_combined[:, 1, :, :].unsqueeze(1),
+                            overall_gt,
+                            reduction="mean",
                         )
 
                 elif config.logicano_loss == "sphere":
