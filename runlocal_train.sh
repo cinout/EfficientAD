@@ -10,8 +10,8 @@ python -u efficientad.py \
   --logicano_loss focal \
   --equal_train_normal_logicano \
   --use_seg_network \
-  --train_steps 10 \
   --use_l1_loss \
+  # --train_steps 10 \
 
 #  breakfast_box
 #  juice_bottle

@@ -289,6 +289,7 @@ class LogicalAnomalyDataset(Dataset):
         # overall_gt_img = Image.fromarray(data)
         # overall_gt_img.save(f"{file_name}_gt_overall.png", "PNG")
 
+        overall_gt = overall_gt.to(torch.long)
         return img, overall_gt, individual_gts
 
     def __getitem__(self, index):
