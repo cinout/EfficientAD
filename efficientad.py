@@ -180,7 +180,6 @@ def get_argparse():
         default=1.0,
         help="used if use_l1_loss is on",
     )
-    # TODO: add to slurm
     parser.add_argument(
         "--trained_folder",
         type=str,
@@ -955,11 +954,13 @@ def main(config, seed):
         torch.save(student, os.path.join(train_output_dir, "student_final.pth"))
         torch.save(autoencoder, os.path.join(train_output_dir, "autoencoder_final.pth"))
     else:
-        # TODO: more to do with seed
         folder_name = f"{config.trained_folder}_sd{seed}_[{acronym[config.subdataset]}]"
         autoencoder_dict = torch.load(
             os.path.join(
                 folder_name,
+                "trainings",
+                "mvtec_loco",
+                config.subdataset,
                 "autoencoder_final.pth",
             ),
             map_location=device,
