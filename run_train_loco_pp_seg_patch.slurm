@@ -46,7 +46,7 @@ python -u efficientad.py \
   --equal_train_normal_logicano \
   \
   --note "use segmentation network" \
-  --trained_folder outputs/folder_segloss/output_20240216_123205_39_62 \
+  --trained_folder outputs/folder_segloss_w5/output_20240216_123527_46_56 \
 
 ##Log this job's resource usage stats###
 my-job-stats -a -n -s
