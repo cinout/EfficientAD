@@ -44,8 +44,6 @@ python -u efficientad.py \
   \
   --equal_train_normal_logicano \
   \
-  --use_seg_network \
-  \
   --note "use segmentation network" \
   --trained_folder outputs/folder_segloss/output_20240216_115824_29_40 \
 
