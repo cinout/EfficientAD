@@ -968,6 +968,9 @@ def main(config, seed):
         student_dict = torch.load(
             os.path.join(
                 folder_name,
+                "trainings",
+                "mvtec_loco",
+                config.subdataset,
                 "student_final.pth",
             ),
             map_location=device,
