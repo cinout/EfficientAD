@@ -567,26 +567,241 @@ def main(config, seed):
             or config.equal_train_normal_logicano
             or config.geo_augment_only_on_logicano
         ):
-            # normal and logicano use separate dataloaders
-            for (
-                iteration,
-                normal,
-                logicano,
-                image_penalty,
-            ) in zip(
-                tqdm_obj,
-                train_loader_for_geoaug_infinite
-                if config.geo_augment
-                else train_loader_infinite,
-                logicano_dataloader_infite,
-                penalty_loader_infinite,
-            ):
-                # take turns to train normal and logicano
-                criterion = iteration % 2 == 0
+            if config.include_logicano:
+                # normal and logicano use separate dataloaders
+                for (
+                    iteration,
+                    normal,
+                    logicano,
+                    image_penalty,
+                ) in zip(
+                    tqdm_obj,
+                    train_loader_for_geoaug_infinite
+                    if config.geo_augment
+                    else train_loader_infinite,
+                    logicano_dataloader_infite,
+                    penalty_loader_infinite,
+                ):
+                    # take turns to train normal and logicano
+                    criterion = iteration % 2 == 0
 
-                if criterion:
-                    # train normal
+                    if criterion:
+                        # train normal
 
+                        (image_st, image_ae) = normal
+
+                        image_st = image_st.to(device)
+                        image_ae = image_ae.to(device)
+
+                        if image_penalty is not None:
+                            image_penalty = image_penalty.to(device)
+
+                        with torch.no_grad():
+                            teacher_output_st = teacher(image_st)
+                            teacher_output_st = (
+                                teacher_output_st - teacher_mean
+                            ) / teacher_std
+                        student_output_st = student(image_st)[
+                            :, :out_channels
+                        ]  # the first half of student outputs
+                        distance_st = (teacher_output_st - student_output_st) ** 2
+                        d_hard = torch.quantile(distance_st, q=0.999)
+                        loss_hard = torch.mean(distance_st[distance_st >= d_hard])
+
+                        if image_penalty is not None:
+                            student_output_penalty = student(image_penalty)[
+                                :, :out_channels
+                            ]
+                            loss_penalty = torch.mean(student_output_penalty**2)
+                            loss_st = loss_hard + loss_penalty
+                        else:
+                            loss_st = loss_hard
+
+                        ae_output = autoencoder(image_ae)
+
+                        with torch.no_grad():
+                            teacher_output_ae = teacher(image_ae)
+                            teacher_output_ae = (
+                                teacher_output_ae - teacher_mean
+                            ) / teacher_std
+                        student_output_ae = student(image_ae)[
+                            :, out_channels:
+                        ]  # the second half of student outputs
+                        distance_ae = (teacher_output_ae - ae_output) ** 2
+                        distance_stae = (ae_output - student_output_ae) ** 2
+                        loss_ae = torch.mean(distance_ae)
+                        loss_stae = torch.mean(distance_stae)
+
+                        loss_total = loss_st + loss_ae + loss_stae
+                    else:
+                        # train logicano
+                        logicano_image = logicano["image"]  # [1, 3, 256, 256]
+                        overall_gt = logicano["overall_gt"]  # [1, 1, orig.h, orig.w]
+                        individual_gts = logicano[
+                            "individual_gts"
+                        ]  # each item: [1, 1, orig.h, orig.w]
+
+                        # _, _, orig_height, orig_width = overall_gt.shape
+
+                        logicano_image = logicano_image.to(device)
+                        overall_gt = overall_gt.to(device)
+                        individual_gts = [
+                            {
+                                "gt": item["gt"].to(device),
+                                "pixel_type": item["pixel_type"],
+                                "orig_height": item["orig_height"],
+                                "orig_width": item["orig_width"],
+                            }
+                            for item in individual_gts
+                        ]
+
+                        teacher_output = teacher(logicano_image)
+                        teacher_output = (teacher_output - teacher_mean) / teacher_std
+                        student_output = student(logicano_image)
+                        autoencoder_output = autoencoder(logicano_image)
+
+                        if config.logicano_loss == "focal":
+                            if config.use_seg_network:
+                                # teacher-student branch
+                                teacher_output = l2_normalize(teacher_output)
+                                student_output_t = l2_normalize(
+                                    student_output[:, :out_channels]
+                                )
+                                seg_input_ts = -teacher_output * student_output_t
+                                seg_input_ts = torch.nn.functional.interpolate(
+                                    seg_input_ts,
+                                    (image_size, image_size),
+                                    mode="bilinear",
+                                )
+
+                                # ae-student branch
+                                autoencoder_output = l2_normalize(autoencoder_output)
+                                student_output_ae = l2_normalize(
+                                    student_output[:, out_channels:]
+                                )
+                                seg_input_aes = -autoencoder_output * student_output_ae
+                                seg_input_aes = torch.nn.functional.interpolate(
+                                    seg_input_aes,
+                                    (image_size, image_size),
+                                    mode="bilinear",
+                                )
+
+                                # combined
+                                seg_input = torch.cat(
+                                    [seg_input_ts, seg_input_aes], dim=0
+                                )  # [2, 384, 256, 256]
+                                seg_input = torch.mean(
+                                    seg_input, dim=0, keepdim=True
+                                )  # [1, 384, 256, 256]
+                                seg_input = torch.cat(
+                                    [seg_input, seg_input], dim=0
+                                )  # [2, 384, 256, 256]
+
+                                seg_output = segnet(
+                                    seg_input
+                                )  # [2, 1, 256, 256], higher value means higher anomaly chance
+                                seg_output = torch.mean(
+                                    seg_output, dim=0, keepdim=True
+                                )  # [1, 1, 256, 256]
+                                seg_output_inverse = 1 - seg_output
+                                seg_output = torch.cat(
+                                    [seg_output_inverse, seg_output], dim=1
+                                )  # [1, 2, 256, 256]
+
+                                # loss_focal for overall negative target pixels only
+                                loss_overall_negative = loss_focal(
+                                    seg_output, overall_gt
+                                )
+                                # loss for positive pixels in individual gts
+                                loss_individual_positive = loss_individual_gt(
+                                    seg_output[0], individual_gts
+                                )
+                                loss_total = (
+                                    loss_overall_negative + loss_individual_positive
+                                )
+                                loss_total = config.w_segloss * loss_total
+
+                                if config.use_l1_loss:
+                                    loss_total += config.w_f1loss * F.l1_loss(
+                                        seg_output[:, 1, :, :].unsqueeze(1),
+                                        overall_gt,
+                                        reduction="mean",
+                                    )
+                            else:
+                                map_st = torch.mean(
+                                    (teacher_output - student_output[:, :out_channels])
+                                    ** 2,
+                                    dim=1,
+                                    keepdim=True,
+                                )  # shape: (bs, 1, h, w)
+                                map_ae = torch.mean(
+                                    (
+                                        autoencoder_output
+                                        - student_output[:, out_channels:]
+                                    )
+                                    ** 2,
+                                    dim=1,
+                                    keepdim=True,
+                                )
+
+                                map_st = torch.nn.functional.interpolate(
+                                    map_st, (image_size, image_size), mode="bilinear"
+                                )
+                                map_ae = torch.nn.functional.interpolate(
+                                    map_ae, (image_size, image_size), mode="bilinear"
+                                )
+
+                                map_combined = (
+                                    0.5 * map_st + 0.5 * map_ae
+                                )  # [1, 1, h, w]
+                                _, _, h, w = map_combined.shape
+                                map_combined = map_combined.reshape(1, 1, -1)
+                                map_combined = F.normalize(map_combined, dim=2)
+                                map_combined = map_combined.reshape(
+                                    1, 1, h, w
+                                )  # prob of abnormalcy
+
+                                map_combined_inverse = (
+                                    1 - map_combined
+                                )  # prob of normal
+                                map_combined = torch.cat(
+                                    [map_combined_inverse, map_combined], dim=1
+                                )
+
+                                # loss_focal for overall negative target pixels only
+                                loss_overall_negative = loss_focal(
+                                    map_combined, overall_gt
+                                )
+                                # loss for positive pixels in individual gts
+
+                                loss_individual_positive = loss_individual_gt(
+                                    map_combined[0], individual_gts
+                                )
+                                loss_total = (
+                                    loss_overall_negative + loss_individual_positive
+                                )
+
+                                if config.use_l1_loss:
+                                    loss_total += config.w_f1loss * F.l1_loss(
+                                        map_combined[:, 1, :, :].unsqueeze(1),
+                                        overall_gt,
+                                        reduction="mean",
+                                    )
+
+                        else:
+                            raise Exception("Unimplemented logicano_loss")
+
+            else:
+                # just augmented normal images
+                for (
+                    iteration,
+                    normal,
+                    image_penalty,
+                ) in zip(
+                    tqdm_obj,
+                    train_loader_for_geoaug_infinite,
+                    penalty_loader_infinite,
+                ):
                     (image_st, image_ae) = normal
 
                     image_st = image_st.to(device)
@@ -632,161 +847,19 @@ def main(config, seed):
                     loss_stae = torch.mean(distance_stae)
 
                     loss_total = loss_st + loss_ae + loss_stae
-                else:
-                    # train logicano
-                    logicano_image = logicano["image"]  # [1, 3, 256, 256]
-                    overall_gt = logicano["overall_gt"]  # [1, 1, orig.h, orig.w]
-                    individual_gts = logicano[
-                        "individual_gts"
-                    ]  # each item: [1, 1, orig.h, orig.w]
 
-                    # _, _, orig_height, orig_width = overall_gt.shape
+            writer.add_scalar("Loss/train", loss_total, iteration)
+            optimizer.zero_grad()
+            loss_total.backward()
+            optimizer.step()
+            scheduler.step()
 
-                    logicano_image = logicano_image.to(device)
-                    overall_gt = overall_gt.to(device)
-                    individual_gts = [
-                        {
-                            "gt": item["gt"].to(device),
-                            "pixel_type": item["pixel_type"],
-                            "orig_height": item["orig_height"],
-                            "orig_width": item["orig_width"],
-                        }
-                        for item in individual_gts
-                    ]
-
-                    teacher_output = teacher(logicano_image)
-                    teacher_output = (teacher_output - teacher_mean) / teacher_std
-                    student_output = student(logicano_image)
-                    autoencoder_output = autoencoder(logicano_image)
-
-                    if config.logicano_loss == "focal":
-                        if config.use_seg_network:
-                            # teacher-student branch
-                            teacher_output = l2_normalize(teacher_output)
-                            student_output_t = l2_normalize(
-                                student_output[:, :out_channels]
-                            )
-                            seg_input_ts = -teacher_output * student_output_t
-                            seg_input_ts = torch.nn.functional.interpolate(
-                                seg_input_ts, (image_size, image_size), mode="bilinear"
-                            )
-
-                            # ae-student branch
-                            autoencoder_output = l2_normalize(autoencoder_output)
-                            student_output_ae = l2_normalize(
-                                student_output[:, out_channels:]
-                            )
-                            seg_input_aes = -autoencoder_output * student_output_ae
-                            seg_input_aes = torch.nn.functional.interpolate(
-                                seg_input_aes, (image_size, image_size), mode="bilinear"
-                            )
-
-                            # combined
-                            seg_input = torch.cat(
-                                [seg_input_ts, seg_input_aes], dim=0
-                            )  # [2, 384, 256, 256]
-                            seg_input = torch.mean(
-                                seg_input, dim=0, keepdim=True
-                            )  # [1, 384, 256, 256]
-                            seg_input = torch.cat(
-                                [seg_input, seg_input], dim=0
-                            )  # [2, 384, 256, 256]
-
-                            seg_output = segnet(
-                                seg_input
-                            )  # [2, 1, 256, 256], higher value means higher anomaly chance
-                            seg_output = torch.mean(
-                                seg_output, dim=0, keepdim=True
-                            )  # [1, 1, 256, 256]
-                            seg_output_inverse = 1 - seg_output
-                            seg_output = torch.cat(
-                                [seg_output_inverse, seg_output], dim=1
-                            )  # [1, 2, 256, 256]
-
-                            # loss_focal for overall negative target pixels only
-                            loss_overall_negative = loss_focal(seg_output, overall_gt)
-                            # loss for positive pixels in individual gts
-                            loss_individual_positive = loss_individual_gt(
-                                seg_output[0], individual_gts
-                            )
-                            loss_total = (
-                                loss_overall_negative + loss_individual_positive
-                            )
-                            loss_total = config.w_segloss * loss_total
-
-                            if config.use_l1_loss:
-                                loss_total += config.w_f1loss * F.l1_loss(
-                                    seg_output[:, 1, :, :].unsqueeze(1),
-                                    overall_gt,
-                                    reduction="mean",
-                                )
-                        else:
-                            map_st = torch.mean(
-                                (teacher_output - student_output[:, :out_channels])
-                                ** 2,
-                                dim=1,
-                                keepdim=True,
-                            )  # shape: (bs, 1, h, w)
-                            map_ae = torch.mean(
-                                (autoencoder_output - student_output[:, out_channels:])
-                                ** 2,
-                                dim=1,
-                                keepdim=True,
-                            )
-
-                            map_st = torch.nn.functional.interpolate(
-                                map_st, (image_size, image_size), mode="bilinear"
-                            )
-                            map_ae = torch.nn.functional.interpolate(
-                                map_ae, (image_size, image_size), mode="bilinear"
-                            )
-
-                            map_combined = 0.5 * map_st + 0.5 * map_ae  # [1, 1, h, w]
-                            _, _, h, w = map_combined.shape
-                            map_combined = map_combined.reshape(1, 1, -1)
-                            map_combined = F.normalize(map_combined, dim=2)
-                            map_combined = map_combined.reshape(
-                                1, 1, h, w
-                            )  # prob of abnormalcy
-
-                            map_combined_inverse = 1 - map_combined  # prob of normal
-                            map_combined = torch.cat(
-                                [map_combined_inverse, map_combined], dim=1
-                            )
-
-                            # loss_focal for overall negative target pixels only
-                            loss_overall_negative = loss_focal(map_combined, overall_gt)
-                            # loss for positive pixels in individual gts
-
-                            loss_individual_positive = loss_individual_gt(
-                                map_combined[0], individual_gts
-                            )
-                            loss_total = (
-                                loss_overall_negative + loss_individual_positive
-                            )
-
-                            if config.use_l1_loss:
-                                loss_total += config.w_f1loss * F.l1_loss(
-                                    map_combined[:, 1, :, :].unsqueeze(1),
-                                    overall_gt,
-                                    reduction="mean",
-                                )
-
-                    else:
-                        raise Exception("Unimplemented logicano_loss")
-
-                writer.add_scalar("Loss/train", loss_total, iteration)
-                optimizer.zero_grad()
-                loss_total.backward()
-                optimizer.step()
-                scheduler.step()
-
-                if iteration % 200 == 0:
-                    print(
-                        "Iteration: ",
-                        iteration,
-                        "Current loss: {:.4f}".format(loss_total.item()),
-                    )
+            if iteration % 200 == 0:
+                print(
+                    "Iteration: ",
+                    iteration,
+                    "Current loss: {:.4f}".format(loss_total.item()),
+                )
         else:
             # normal and/or logicano share the same dataloader
             for (
