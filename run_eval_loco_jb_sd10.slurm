@@ -20,8 +20,8 @@ module purge
 eval "$(conda shell.bash hook)"
 conda activate eff
 
-timestamp="20240219_115209_99_86_sd10_[jb]"
-folder_name="folder_seg"
+timestamp="20240220_014035_68_16_sd10_[jb]"
+folder_name="folder_geo_normal"
 
 python -u mvtec_loco_ad_evaluation/evaluate_experiment.py \
   --object_name "juice_bottle" \
