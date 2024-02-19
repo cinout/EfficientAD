@@ -685,6 +685,13 @@ def main(config, seed):
                             seg_input = torch.cat(
                                 [seg_input_ts, seg_input_aes], dim=0
                             )  # [2, 384, 256, 256]
+                            seg_input = torch.mean(
+                                seg_input, dim=0, keepdim=True
+                            )  # [1, 384, 256, 256]
+                            seg_input = torch.cat(
+                                [seg_input, seg_input], dim=0
+                            )  # [2, 384, 256, 256]
+
                             seg_output = segnet(
                                 seg_input
                             )  # [2, 1, 256, 256], higher value means higher anomaly chance
