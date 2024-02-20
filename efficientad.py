@@ -309,7 +309,6 @@ def main(config, seed):
     )
 
     if config.include_logicano:
-        # reconfigure train_set
         logicano_data = LogicalAnomalyDataset(
             logicano_select=config.logicano_select,
             num_logicano=config.num_logicano,
