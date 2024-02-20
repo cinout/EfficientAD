@@ -16,7 +16,6 @@ mean_tensor = [0.485, 0.456, 0.406]
 std_tensor = [0.229, 0.224, 0.225]
 scale = (0.8, 1)
 ratio = (3 / 4, 4 / 3)
-rot_multipler_choices = [0, 1, 2, 3]
 
 
 class MyDummyDataset(Dataset):
@@ -104,8 +103,10 @@ class NormalDatasetForGeoAug(Dataset):
         )
 
         geo_trans_img = geoaug_transform(image)
-        if self.use_rotate_flip:
-            rot_multipler = random.choice(rot_multipler_choices)
+        if (
+            self.use_rotate_flip and random.random() > 0.5
+        ):  # reduce the prob of applying rotation to normal images
+            rot_multipler = random.choice([0, 1, 2, 3])
             geo_trans_img = geo_trans_img.rotate(90 * rot_multipler)
         return (
             default_transform(geo_trans_img),
@@ -202,7 +203,7 @@ class LogicalAnomalyDataset(Dataset):
             randomness_of_crop = random.random()
             if self.use_rotate_flip:
                 randomnes_of_flip = random.random()
-                rot_multipler = random.choice(rot_multipler_choices)
+                rot_multipler = random.choice([0, 1, 2, 3])
 
         """
         transform input image itself
