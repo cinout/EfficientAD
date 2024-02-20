@@ -35,16 +35,16 @@ python -u efficientad.py \
   --stg1_ckpt outputs/folder_baseline/output_20240131_215528_9_92_sd10_[jb]/trainings/mvtec_loco/juice_bottle \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
   \
-  --train_steps 50000 \
+  --train_steps 40000 \
   --seeds 10 \
+  --note "[DEBUG], normal training" \
   \
-  --include_logicano \
-  --logicano_select percent \
-  --percent_logicano 0.5 \
-  \
-  --equal_train_normal_logicano \
-  \
-  --note "50% logicano, equal [DEBUG!!!!]" \
+  # --include_logicano \
+  # --logicano_select percent \
+  # --percent_logicano 0.5 \
+  # \
+  # --equal_train_normal_logicano \
+  
 
 ##Log this job's resource usage stats###
 my-job-stats -a -n -s
