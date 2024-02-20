@@ -3,10 +3,16 @@ python -u efficientad.py \
   --subdataset breakfast_box \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
   --stg1_ckpt outputs/folder_baseline/output_20240131_213923_16_56_sd10_[bb]/trainings/mvtec_loco/breakfast_box \
+  \
+  --train_steps 40 \
   --seeds 10 \
-  --logicano_select absolute \
-  --num_logicano 10 \
-  --geo_augment \
+  \
+  --include_logicano \
+  --logicano_select percent \
+  --percent_logicano 0.1 \
+  \
+  --equal_train_normal_logicano \
+  \
   # --use_seg_network \
   # --equal_train_normal_logicano \
   # --logicano_loss focal \
