@@ -152,11 +152,6 @@ def get_argparse():
         help="if set to True, then apply RandomResizedCrop augmentations to only logicano images",
     )
     parser.add_argument(
-        "--equal_train_normal_logicano",
-        action="store_true",
-        help="if set to True, don't use geo augmentation, but still equally train normal and logicano",
-    )
-    parser.add_argument(
         "--use_l1_loss",
         action="store_true",
         help="if set to True, then add l1 loss to focal loss",
@@ -321,37 +316,18 @@ def main(config, seed):
         )
         # _, orig_height, orig_width = logicano_data[0]["overall_gt"].shape
 
-        if (
-            config.geo_augment
-            or config.equal_train_normal_logicano
-            or config.geo_augment_only_on_logicano
-        ):
-            logicano_dataloader = DataLoader(
-                logicano_data,
-                batch_size=1,
-                shuffle=True,
-                num_workers=4,
-                pin_memory=True,
-            )
-            logicano_dataloader_infite = InfiniteDataloader(logicano_dataloader)
-
-        else:
-            logicanos_for_train = []
-            normals_for_train = []
-            for logicano in logicano_data:
-                logicanos_for_train.append(logicano)
-            for x in train_set:
-                normals_for_train.append(x)
-            train_set = logicanos_for_train + normals_for_train
-            train_set = MyDummyDataset(train_set)
-            old_train_loader = train_loader  # for teacher normalization purpose
-            train_loader = DataLoader(
-                train_set, batch_size=1, shuffle=True, num_workers=4, pin_memory=True
-            )
+        logicano_dataloader = DataLoader(
+            logicano_data,
+            batch_size=1,
+            shuffle=True,
+            num_workers=4,
+            pin_memory=True,
+        )
+        logicano_dataloader_infite = InfiniteDataloader(logicano_dataloader)
 
     train_loader_infinite = InfiniteDataloader(
         train_loader
-    )  # when config.geo_augment or config.equal_train_normal_logicano, only contain normal; otherwise, both normal and logicano
+    )  # when config.geo_augment, only contain normal; otherwise, both normal and logicano
     validation_loader = DataLoader(validation_set, batch_size=1)
 
     if pretrain_penalty:
@@ -427,14 +403,7 @@ def main(config, seed):
     # TODO: uncomment below
     teacher_mean, teacher_std = teacher_normalization(
         teacher,
-        old_train_loader
-        if config.include_logicano
-        and not (
-            config.geo_augment
-            or config.equal_train_normal_logicano
-            or config.geo_augment_only_on_logicano
-        )
-        else train_loader,
+        train_loader,
         config,
     )
     # with open("teacher_mean.t", "rb") as f:
@@ -467,11 +436,7 @@ def main(config, seed):
 
         tqdm_obj = tqdm(range(config.train_steps))
 
-        if (
-            config.geo_augment
-            or config.equal_train_normal_logicano
-            or config.geo_augment_only_on_logicano
-        ):
+        if config.geo_augment or config.geo_augment_only_on_logicano:
             if config.include_logicano:
                 # normal and logicano use separate dataloaders
                 for (

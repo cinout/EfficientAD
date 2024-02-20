@@ -6,12 +6,12 @@ python -u efficientad.py \
   \
   --train_steps 40 \
   --seeds 10 \
-  \
-  --include_logicano \
-  --logicano_select percent \
-  --percent_logicano 0.1 \
-  \
-  --equal_train_normal_logicano \
+  # \
+  # --include_logicano \
+  # --logicano_select percent \
+  # --percent_logicano 0.1 \
+  # \
+  # --equal_train_normal_logicano \
   \
   # --use_seg_network \
   # --equal_train_normal_logicano \

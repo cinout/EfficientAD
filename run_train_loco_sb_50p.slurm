@@ -42,8 +42,6 @@ python -u efficientad.py \
   --logicano_select percent \
   --percent_logicano 0.5 \
   \
-  --equal_train_normal_logicano \
-  \
   --note "50% logicano, equal" \
 
 

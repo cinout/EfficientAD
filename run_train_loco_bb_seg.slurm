@@ -42,8 +42,6 @@ python -u efficientad.py \
   --logicano_select percent \
   --percent_logicano 1.0 \
   \
-  --equal_train_normal_logicano \
-  \
   --note "use segmentation network" \
   --use_seg_network \
   # --trained_folder outputs/folder_segloss_l1loss/output_20240216_135349_4_41 \

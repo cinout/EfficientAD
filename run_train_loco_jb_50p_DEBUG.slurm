@@ -37,13 +37,17 @@ python -u efficientad.py \
   \
   --train_steps 40000 \
   --seeds 10 \
-  --note "[DEBUG], normal training" \
+  \
+  --include_logicano \
+  --logicano_select percent \
+  --percent_logicano 0.5 \
+  \
+  --note "50% logicano, equal" \
   \
   # --include_logicano \
   # --logicano_select percent \
   # --percent_logicano 0.5 \
   # \
-  # --equal_train_normal_logicano \
   
 
 ##Log this job's resource usage stats###
