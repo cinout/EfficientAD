@@ -7,9 +7,11 @@ python -u efficientad.py \
   --train_steps 40 \
   --seeds 10 \
   \
-  --include_logicano \
-  --logicano_select percent \
-  --percent_logicano 0.5 \
+  --use_lid_score \
+  --trained_folder outputs/folder_baseline/output_20240131_213923_16_56 \
+  # --include_logicano \
+  # --logicano_select percent \
+  # --percent_logicano 0.5 \
   
 #  breakfast_box
 #  juice_bottle

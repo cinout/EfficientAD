@@ -153,6 +153,11 @@ def get_argparse():
         default="",
         help="path of trained model weights",
     )
+    parser.add_argument(
+        "--use_lid_score",
+        action="store_true",
+        help="if set to True, then add add lid score map",
+    )
 
     parser.add_argument(
         "--use_l1_loss",
@@ -182,6 +187,17 @@ acronym = {
     "screw_bag": "sb",
     "splicing_connectors": "sc",
 }
+
+
+def lid_mle(data, reference, k=20, compute_mode="use_mm_for_euclid_dist_if_necessary"):
+    b = data.shape[0]
+    k = min(k, b - 2)
+    data = torch.flatten(data, start_dim=1)
+    reference = torch.flatten(reference, start_dim=1)
+    r = torch.cdist(data, reference, p=2, compute_mode=compute_mode)
+    a, idx = torch.sort(r, dim=1)
+    lids = -k / torch.sum(torch.log(a[:, 1:k] / a[:, k].view(-1, 1) + 1.0e-4), dim=1)
+    return lids
 
 
 def train_transform(image, config):
@@ -651,6 +667,7 @@ def main(config, seed):
         torch.save(student, os.path.join(train_output_dir, "student_final.pth"))
         torch.save(autoencoder, os.path.join(train_output_dir, "autoencoder_final.pth"))
     else:
+        # load pretrained weights for AE and student
         folder_name = f"{config.trained_folder}_sd{seed}_[{acronym[config.subdataset]}]"
         autoencoder_dict = torch.load(
             os.path.join(
@@ -681,35 +698,85 @@ def main(config, seed):
     student.eval()
     autoencoder.eval()
 
-    q_st_start, q_st_end, q_ae_start, q_ae_end = map_normalization(
-        out_channels=out_channels,
-        validation_loader=validation_loader,
-        teacher=teacher,
-        student=student,
-        autoencoder=autoencoder,
-        teacher_mean=teacher_mean,
-        teacher_std=teacher_std,
-        config=config,
-        desc="Final map normalization",
-    )
-    auc = test(
-        out_channels=out_channels,
-        test_set=test_set,
-        teacher=teacher,
-        student=student,
-        autoencoder=autoencoder,
-        teacher_mean=teacher_mean,
-        teacher_std=teacher_std,
-        q_st_start=q_st_start,
-        q_st_end=q_st_end,
-        q_ae_start=q_ae_start,
-        q_ae_end=q_ae_end,
-        config=config,
-        output_dir=output_dir,
-        test_output_dir=test_output_dir,
-        desc="Final inference",
-    )
-    print("Final image auc: {:.4f}".format(auc))
+    if config.use_lid_score:
+        trained_features = []
+        for item in train_loader:
+            (train_image, _) = item
+            train_image = train_image.to(device)
+            output = autoencoder(train_image)
+            trained_features.append(output)
+        trained_features = torch.cat(trained_features, dim=0)  # [#train, 384, 64, 64]
+
+        (
+            q_st_start,
+            q_st_end,
+            q_ae_start,
+            q_ae_end,
+            q_lid_start,
+            q_lid_end,
+        ) = map_normalization(
+            out_channels=out_channels,
+            validation_loader=validation_loader,
+            teacher=teacher,
+            student=student,
+            autoencoder=autoencoder,
+            teacher_mean=teacher_mean,
+            teacher_std=teacher_std,
+            config=config,
+            trained_features=trained_features,
+            desc="Final map normalization",
+        )
+
+        auc = test(
+            out_channels=out_channels,
+            test_set=test_set,
+            teacher=teacher,
+            student=student,
+            autoencoder=autoencoder,
+            teacher_mean=teacher_mean,
+            teacher_std=teacher_std,
+            q_st_start=q_st_start,
+            q_st_end=q_st_end,
+            q_ae_start=q_ae_start,
+            q_ae_end=q_ae_end,
+            q_lid_start=q_lid_start,
+            q_lid_end=q_lid_end,
+            config=config,
+            output_dir=output_dir,
+            test_output_dir=test_output_dir,
+            trained_features=trained_features,
+            desc="Final inference",
+        )
+    else:
+        q_st_start, q_st_end, q_ae_start, q_ae_end = map_normalization(
+            out_channels=out_channels,
+            validation_loader=validation_loader,
+            teacher=teacher,
+            student=student,
+            autoencoder=autoencoder,
+            teacher_mean=teacher_mean,
+            teacher_std=teacher_std,
+            config=config,
+            desc="Final map normalization",
+        )
+        auc = test(
+            out_channels=out_channels,
+            test_set=test_set,
+            teacher=teacher,
+            student=student,
+            autoencoder=autoencoder,
+            teacher_mean=teacher_mean,
+            teacher_std=teacher_std,
+            q_st_start=q_st_start,
+            q_st_end=q_st_end,
+            q_ae_start=q_ae_start,
+            q_ae_end=q_ae_end,
+            config=config,
+            output_dir=output_dir,
+            test_output_dir=test_output_dir,
+            desc="Final inference",
+        )
+        print("Final image auc: {:.4f}".format(auc))
 
 
 @torch.no_grad()
@@ -728,6 +795,9 @@ def test(
     config,
     output_dir,
     test_output_dir=None,
+    q_lid_start=None,
+    q_lid_end=None,
+    trained_features=None,
     desc="Running inference",
 ):
     y_true = []
@@ -745,20 +815,39 @@ def test(
 
         image = image.to(device)
 
-        map_combined, map_st, map_ae = predict(
-            config=config,
-            out_channels=out_channels,
-            image=image,
-            teacher=teacher,
-            student=student,
-            autoencoder=autoencoder,
-            teacher_mean=teacher_mean,
-            teacher_std=teacher_std,
-            q_st_start=q_st_start,
-            q_st_end=q_st_end,
-            q_ae_start=q_ae_start,
-            q_ae_end=q_ae_end,
-        )
+        if config.use_lid_score:
+            map_combined, map_st, map_ae, map_lid = predict(
+                config=config,
+                out_channels=out_channels,
+                image=image,
+                teacher=teacher,
+                student=student,
+                autoencoder=autoencoder,
+                teacher_mean=teacher_mean,
+                teacher_std=teacher_std,
+                q_st_start=q_st_start,
+                q_st_end=q_st_end,
+                q_ae_start=q_ae_start,
+                q_ae_end=q_ae_end,
+                q_lid_start=q_lid_start,
+                q_lid_end=q_lid_end,
+                trained_features=trained_features,
+            )
+        else:
+            map_combined, map_st, map_ae = predict(
+                config=config,
+                out_channels=out_channels,
+                image=image,
+                teacher=teacher,
+                student=student,
+                autoencoder=autoencoder,
+                teacher_mean=teacher_mean,
+                teacher_std=teacher_std,
+                q_st_start=q_st_start,
+                q_st_end=q_st_end,
+                q_ae_start=q_ae_start,
+                q_ae_end=q_ae_end,
+            )
 
         defect_class = os.path.basename(os.path.dirname(path))
         y_true_image = 0 if defect_class == "good" else 1
@@ -798,6 +887,9 @@ def predict(
     q_st_end=None,
     q_ae_start=None,
     q_ae_end=None,
+    q_lid_start=None,
+    q_lid_end=None,
+    trained_features=None,
 ):
     teacher_output = teacher(image)
 
@@ -827,8 +919,29 @@ def predict(
     if q_ae_start is not None:
         map_ae = 0.1 * (map_ae - q_ae_start) / (q_ae_end - q_ae_start)
 
-    map_combined = 0.5 * map_st + 0.5 * map_ae
-    return map_combined, map_st, map_ae
+    if config.use_lid_score:
+        _, _, H, W = autoencoder_output.shape
+        map_lid = torch.zeros(size=(1, 1, H, W))
+        for i in range(H):
+            for j in range(W):
+                map_lid[:, :, i, j] = lid_mle(
+                    data=autoencoder_output[:, :, i, j],
+                    reference=trained_features[:, :, i, j],
+                )
+
+        map_lid = torch.nn.functional.interpolate(
+            map_lid, (image_size, image_size), mode="bilinear"
+        )
+        map_lid = map_lid.to(device)
+
+        if q_lid_start is not None:
+            map_lid = 0.1 * (map_lid - q_lid_start) / (q_lid_end - q_lid_start)
+
+        map_combined = 1 / 3 * map_st + 1 / 3 * map_ae + 1 / 3 * map_lid
+        return map_combined, map_st, map_ae, map_lid
+    else:
+        map_combined = 0.5 * map_st + 0.5 * map_ae
+        return map_combined, map_st, map_ae
 
 
 @torch.no_grad()
@@ -841,10 +954,13 @@ def map_normalization(
     teacher_mean,
     teacher_std,
     config,
+    trained_features=None,
     desc="Map normalization",
 ):
     maps_st = []
     maps_ae = []
+    if config.use_lid_score:
+        maps_lid = []
 
     # ignore augmented ae image
     for images in tqdm(validation_loader, desc=desc):
@@ -852,18 +968,34 @@ def map_normalization(
 
         image = image.to(device)
 
-        map_combined, map_st, map_ae = predict(
-            config=config,
-            out_channels=out_channels,
-            image=image,
-            teacher=teacher,
-            student=student,
-            autoencoder=autoencoder,
-            teacher_mean=teacher_mean,
-            teacher_std=teacher_std,
-        )
+        if config.use_lid_score:
+            map_combined, map_st, map_ae, map_lid = predict(
+                config=config,
+                out_channels=out_channels,
+                image=image,
+                teacher=teacher,
+                student=student,
+                autoencoder=autoencoder,
+                teacher_mean=teacher_mean,
+                teacher_std=teacher_std,
+                trained_features=trained_features,
+            )
+        else:
+            map_combined, map_st, map_ae = predict(
+                config=config,
+                out_channels=out_channels,
+                image=image,
+                teacher=teacher,
+                student=student,
+                autoencoder=autoencoder,
+                teacher_mean=teacher_mean,
+                teacher_std=teacher_std,
+            )
         maps_st.append(map_st)
         maps_ae.append(map_ae)
+        if config.use_lid_score:
+            maps_lid.append(map_lid)
+
     maps_st = torch.cat(maps_st)
     q_st_start = torch.quantile(
         maps_st, q=0.9
@@ -874,7 +1006,13 @@ def map_normalization(
     q_ae_start = torch.quantile(maps_ae, q=0.9)
     q_ae_end = torch.quantile(maps_ae, q=0.995)
 
-    return q_st_start, q_st_end, q_ae_start, q_ae_end
+    if config.use_lid_score:
+        maps_lid = torch.cat(maps_lid)
+        q_lid_start = torch.quantile(maps_lid, q=0.9)
+        q_lid_end = torch.quantile(maps_lid, q=0.995)
+        return q_st_start, q_st_end, q_ae_start, q_ae_end, q_lid_start, q_lid_end
+    else:
+        return q_st_start, q_st_end, q_ae_start, q_ae_end
 
 
 @torch.no_grad()
