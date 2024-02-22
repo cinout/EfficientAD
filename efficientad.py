@@ -699,12 +699,20 @@ def main(config, seed):
     autoencoder.eval()
 
     if config.use_lid_score:
+        # TODO: change trained_features
         trained_features = []
         for item in train_loader:
             (train_image, _) = item
             train_image = train_image.to(device)
-            output = autoencoder(train_image)
-            trained_features.append(output)
+            autoencoder_output = autoencoder(train_image)
+            student_output = student(train_image)
+            teacher_output = teacher(train_image)
+            teacher_output = (teacher_output - teacher_mean) / teacher_std
+
+            diff_st = teacher_output - student_output[:, :out_channels]
+            diff_sae = autoencoder_output - student_output[:, out_channels:]
+            trained_features.append(0.5 * diff_st + 0.5 * diff_sae)
+
         trained_features = torch.cat(trained_features, dim=0)  # [#train, 384, 64, 64]
 
         (
@@ -920,12 +928,18 @@ def predict(
         map_ae = 0.1 * (map_ae - q_ae_start) / (q_ae_end - q_ae_start)
 
     if config.use_lid_score:
+        # TODO: change
         _, _, H, W = autoencoder_output.shape
         map_lid = torch.zeros(size=(1, 1, H, W))
+
+        diff_st = teacher_output - student_output[:, :out_channels]
+        diff_sae = autoencoder_output - student_output[:, out_channels:]
+        diff = 0.5 * diff_st + 0.5 * diff_sae
+
         for i in range(H):
             for j in range(W):
                 map_lid[:, :, i, j] = lid_mle(
-                    data=autoencoder_output[:, :, i, j],
+                    data=diff[:, :, i, j],
                     reference=trained_features[:, :, i, j],
                 )
 

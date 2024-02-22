@@ -41,7 +41,7 @@ python -u efficientad.py \
   --use_lid_score \
   --trained_folder outputs/folder_baseline/output_20240131_215545_7_68 \
   \
-  --note "use_lid, ae" \
+  --note "use_lid, diff" \
 
 
 ##Log this job's resource usage stats###
