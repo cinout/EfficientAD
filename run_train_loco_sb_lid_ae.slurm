@@ -11,7 +11,7 @@
 
 #SBATCH --job-name="train_sb"
 #SBATCH --account=punim1623
-#SBATCH --time=0-03:00:00
+#SBATCH --time=0-01:00:00
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -36,7 +36,7 @@ python -u efficientad.py \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
   \
   --train_steps 70000 \
-  --seeds 10 20 30 \
+  --seeds 10 \
   \
   --use_lid_score \
   --trained_folder outputs/folder_baseline/output_20240131_215545_7_68 \
