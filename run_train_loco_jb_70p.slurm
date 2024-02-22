@@ -40,10 +40,10 @@ python -u efficientad.py \
   \
   --include_logicano \
   --logicano_select percent \
-  --percent_logicano 0.7 \
+  --percent_logicano 0.6 \
 
   \
-  --note "70% logicano, equal" \
+  --note "60% logicano, equal" \
 
 ##Log this job's resource usage stats###
 my-job-stats -a -n -s
