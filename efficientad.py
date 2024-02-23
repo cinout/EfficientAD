@@ -700,7 +700,8 @@ def main(config, seed):
 
     if config.use_lid_score:
         # TODO: change trained_features
-        trained_features = []
+        trained_features_st = []
+        trained_features_sae = []
         for item in train_loader:
             (train_image, _) = item
             train_image = train_image.to(device)
@@ -711,9 +712,15 @@ def main(config, seed):
 
             diff_st = teacher_output - student_output[:, :out_channels]
             diff_sae = autoencoder_output - student_output[:, out_channels:]
-            trained_features.append(0.5 * diff_st + 0.5 * diff_sae)
+            trained_features_st.append(diff_st)
+            trained_features_sae.append(diff_sae)
 
-        trained_features = torch.cat(trained_features, dim=0)  # [#train, 384, 64, 64]
+        trained_features_st = torch.cat(
+            trained_features_st, dim=0
+        )  # [#train, 384, 64, 64]
+        trained_features_sae = torch.cat(
+            trained_features_sae, dim=0
+        )  # [#train, 384, 64, 64]
 
         (
             q_st_start,
@@ -731,7 +738,8 @@ def main(config, seed):
             teacher_mean=teacher_mean,
             teacher_std=teacher_std,
             config=config,
-            trained_features=trained_features,
+            trained_features_st=trained_features_st,
+            trained_features_sae=trained_features_sae,
             desc="Final map normalization",
         )
 
@@ -752,7 +760,8 @@ def main(config, seed):
             config=config,
             output_dir=output_dir,
             test_output_dir=test_output_dir,
-            trained_features=trained_features,
+            trained_features_st=trained_features_st,
+            trained_features_sae=trained_features_sae,
             desc="Final inference",
         )
     else:
@@ -805,7 +814,8 @@ def test(
     test_output_dir=None,
     q_lid_start=None,
     q_lid_end=None,
-    trained_features=None,
+    trained_features_st=None,
+    trained_features_sae=None,
     desc="Running inference",
 ):
     y_true = []
@@ -839,7 +849,8 @@ def test(
                 q_ae_end=q_ae_end,
                 q_lid_start=q_lid_start,
                 q_lid_end=q_lid_end,
-                trained_features=trained_features,
+                trained_features_st=trained_features_st,
+                trained_features_sae=trained_features_sae,
             )
         else:
             map_combined, map_st, map_ae = predict(
@@ -897,7 +908,8 @@ def predict(
     q_ae_end=None,
     q_lid_start=None,
     q_lid_end=None,
-    trained_features=None,
+    trained_features_st=None,
+    trained_features_sae=None,
 ):
     teacher_output = teacher(image)
 
@@ -934,13 +946,15 @@ def predict(
 
         diff_st = teacher_output - student_output[:, :out_channels]
         diff_sae = autoencoder_output - student_output[:, out_channels:]
-        diff = 0.5 * diff_st + 0.5 * diff_sae
 
         for i in range(H):
             for j in range(W):
                 map_lid[:, :, i, j] = lid_mle(
-                    data=diff[:, :, i, j],
-                    reference=trained_features[:, :, i, j],
+                    data=diff_st[:, :, i, j],
+                    reference=trained_features_st[:, :, i, j],
+                ) + lid_mle(
+                    data=diff_sae[:, :, i, j],
+                    reference=trained_features_sae[:, :, i, j],
                 )
 
         map_lid = torch.nn.functional.interpolate(
@@ -968,7 +982,8 @@ def map_normalization(
     teacher_mean,
     teacher_std,
     config,
-    trained_features=None,
+    trained_features_st=None,
+    trained_features_sae=None,
     desc="Map normalization",
 ):
     maps_st = []
@@ -992,7 +1007,8 @@ def map_normalization(
                 autoencoder=autoencoder,
                 teacher_mean=teacher_mean,
                 teacher_std=teacher_std,
-                trained_features=trained_features,
+                trained_features_st=trained_features_st,
+                trained_features_sae=trained_features_sae,
             )
         else:
             map_combined, map_st, map_ae = predict(
