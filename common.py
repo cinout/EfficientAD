@@ -75,6 +75,8 @@ class IndividualGTLoss(torch.nn.Module):
     def forward(self, predicted, gts):
         # predicted.shape: (2, orig.h, orig.w)
         loss_per_gt = []
+        predicted = predicted.view(predicted.shape[0], -1)  # shape: (2, H*W)
+        predicted = predicted[1]  # shape: (H*W, )
         for gt in gts:
             # gt.shape: [1, 1, orig.h, orig.w]
             # find unique config for the gt
@@ -107,28 +109,27 @@ class IndividualGTLoss(torch.nn.Module):
             mask = (gt == 1).squeeze(1)
 
             # num_class = predicted.shape[0]
-            predicted = predicted.view(predicted.shape[0], -1)  # shape: (2, H*W)
-            predicted = predicted[1]  # shape: (H*W, )
-            predicted = torch.masked_select(predicted, mask)
-            predicted = (
-                (1.0 - self.smooth) * predicted
-                + self.smooth * (1 - predicted)
+
+            masked_predicted = torch.masked_select(predicted, mask)
+            masked_predicted = (
+                (1.0 - self.smooth) * masked_predicted
+                + self.smooth * (1 - masked_predicted)
                 + self.smooth
             )
-            logpt = predicted.log()
-            loss = -1 * torch.pow((1 - predicted), self.gamma) * logpt
+            logpt = masked_predicted.log()
+            loss = -1 * torch.pow((1 - masked_predicted), self.gamma) * logpt
 
             # idx = gt.cpu().long()
             # one_hot_key = torch.FloatTensor(gt.size(0), num_class).zero_()
             # print(one_hot_key.shape)
             # one_hot_key = one_hot_key.scatter_(1, idx, 1)
-            # if one_hot_key.device != predicted.device:
-            #     one_hot_key = one_hot_key.to(predicted.device)
+            # if one_hot_key.device != masked_predicted.device:
+            #     one_hot_key = one_hot_key.to(masked_predicted.device)
             # if self.smooth:
             #     one_hot_key = torch.clamp(
             #         one_hot_key, self.smooth / (num_class - 1), 1.0 - self.smooth
             #     )
-            # pt = (one_hot_key * predicted).sum(1) + self.smooth
+            # pt = (one_hot_key * masked_predicted).sum(1) + self.smooth
 
             # # use mask to only calculate loss of positive pixels
             # mask = (gt == 1).squeeze(1)
@@ -146,18 +147,18 @@ class IndividualGTLoss(torch.nn.Module):
             #     loss, k=saturation_area, largest=False
             # )
 
-            # TODO: surgery here
-            saturated_loss_values = saturated_loss_values.mean()
+            # # : surgery here
+            # saturated_loss_values = saturated_loss_values.mean()
 
             loss_per_gt.append(saturated_loss_values)
 
-        # TODO: surgery here
-        return sum(loss_per_gt)
+        #  surgery here
+        # return sum(loss_per_gt)
 
-        # loss_per_gt = torch.cat(loss_per_gt, dim=0)
-        # if self.size_average:
-        #     loss_per_gt = loss_per_gt.mean()
-        # return loss_per_gt
+        loss_per_gt = torch.cat(loss_per_gt, dim=0)
+        if self.size_average:
+            loss_per_gt = loss_per_gt.mean()
+        return loss_per_gt
 
 
 class FocalLoss(torch.nn.Module):
