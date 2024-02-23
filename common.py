@@ -146,12 +146,18 @@ class IndividualGTLoss(torch.nn.Module):
             #     loss, k=saturation_area, largest=False
             # )
 
+            # TODO: surgery here
+            saturated_loss_values = saturated_loss_values.mean()
+
             loss_per_gt.append(saturated_loss_values)
 
-        loss_per_gt = torch.cat(loss_per_gt, dim=0)
-        if self.size_average:
-            loss_per_gt = loss_per_gt.mean()
-        return loss_per_gt
+        # TODO: surgery here
+        return sum(loss_per_gt)
+
+        # loss_per_gt = torch.cat(loss_per_gt, dim=0)
+        # if self.size_average:
+        #     loss_per_gt = loss_per_gt.mean()
+        # return loss_per_gt
 
 
 class FocalLoss(torch.nn.Module):
