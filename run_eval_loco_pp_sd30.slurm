@@ -21,7 +21,7 @@ eval "$(conda shell.bash hook)"
 conda activate eff
 
 timestamp="20240223_165148_60_42_sd30_[pp]"
-folder_name="folder_baseline_lid_diff"
+folder_name="folder_doublecheck"
 
 python -u mvtec_loco_ad_evaluation/evaluate_experiment.py \
   --object_name "pushpins" \
