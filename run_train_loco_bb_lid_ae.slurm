@@ -38,10 +38,10 @@ python -u efficientad.py \
   --train_steps 70000 \
   --seeds 10 \
   \
-  --use_lid_score \
   --trained_folder outputs/folder_baseline/output_20240131_213923_16_56 \
   \
-  --note "use_lid, diff" \
+  --note "not using lid_score, just to see if the original code is intact" \
+  # --use_lid_score \
 
 
 ##Log this job's resource usage stats###
