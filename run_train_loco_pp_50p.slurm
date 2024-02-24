@@ -43,6 +43,7 @@ python -u efficientad.py \
   --logicano_select percent \
   --percent_logicano 0.5 \
   \
+  --limit_on_loss \
   --note "50% logicano, equal" \
 
 ##Log this job's resource usage stats###
