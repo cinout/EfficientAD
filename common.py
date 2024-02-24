@@ -61,30 +61,28 @@ class IndividualGTLossForSphere(torch.nn.Module):
 class IndividualGTLoss(torch.nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
-        defects_config_path = os.path.join(
-            "datasets/loco/", config.subdataset, "defects_config.json"
-        )
 
-        defects = json.load(open(defects_config_path))
-        self.config = {e["pixel_value"]: e for e in defects}
-
+        self.limit_on_loss = config.limit_on_loss
         self.gamma = 2
         self.smooth = 1e-5
         self.size_average = True
+
+        defects_config_path = os.path.join(
+            "datasets/loco/", config.subdataset, "defects_config.json"
+        )
+        defects = json.load(open(defects_config_path))
+        self.config = {e["pixel_value"]: e for e in defects}
 
     def forward(self, predicted, gts):
         # predicted.shape: (2, orig.h, orig.w)
         loss_per_gt = []
         predicted = predicted.view(predicted.shape[0], -1)  # shape: (2, H*W)
-        predicted = predicted[1]  # shape: (H*W, )
+        predicted = predicted[1]  # shape: (H*W, ), prob of abnormal
         for gt in gts:
-            # gt.shape: [1, 1, orig.h, orig.w]
-            # find unique config for the gt
-
             pixel_type = gt["pixel_type"].item()
             orig_width = gt["orig_width"].item()
             orig_height = gt["orig_height"].item()
-            gt = gt["gt"]
+            gt = gt["gt"]  # [1, 1, orig.h, orig.w]
 
             pixel_detail = self.config[pixel_type]
             saturation_threshold = pixel_detail["saturation_threshold"]
@@ -104,11 +102,9 @@ class IndividualGTLoss(torch.nn.Module):
 
             gt = gt.squeeze(0)
             gt = gt.view(gt.shape[0], -1)
-            gt = gt.transpose(0, 1)
+            gt = gt.transpose(0, 1)  # [H*W, 1]
 
-            mask = (gt == 1).squeeze(1)
-
-            # num_class = predicted.shape[0]
+            mask = (gt == 1).squeeze(1)  # [H*W, ]
 
             masked_predicted = torch.masked_select(predicted, mask)
             masked_predicted = (
@@ -118,24 +114,6 @@ class IndividualGTLoss(torch.nn.Module):
             )
             logpt = masked_predicted.log()
             loss = -1 * torch.pow((1 - masked_predicted), self.gamma) * logpt
-
-            # idx = gt.cpu().long()
-            # one_hot_key = torch.FloatTensor(gt.size(0), num_class).zero_()
-            # print(one_hot_key.shape)
-            # one_hot_key = one_hot_key.scatter_(1, idx, 1)
-            # if one_hot_key.device != masked_predicted.device:
-            #     one_hot_key = one_hot_key.to(masked_predicted.device)
-            # if self.smooth:
-            #     one_hot_key = torch.clamp(
-            #         one_hot_key, self.smooth / (num_class - 1), 1.0 - self.smooth
-            #     )
-            # pt = (one_hot_key * masked_predicted).sum(1) + self.smooth
-
-            # # use mask to only calculate loss of positive pixels
-            # mask = (gt == 1).squeeze(1)
-            # pt = torch.masked_select(pt, mask)
-            # logpt = pt.log()
-            # loss = -1 * torch.pow((1 - pt), self.gamma) * logpt
 
             # RANDOMLY choose k
             length = loss.size()[0]

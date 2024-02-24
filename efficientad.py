@@ -170,6 +170,11 @@ def get_argparse():
         default=1.0,
         help="used if use_l1_loss is on",
     )
+    parser.add_argument(
+        "--limit_on_loss",
+        action="store_true",
+        help="if set to True, then limit the # of loss by the saturation_area",
+    )
 
     return parser.parse_args()
 
