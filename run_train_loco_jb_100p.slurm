@@ -42,7 +42,8 @@ python -u efficientad.py \
   --logicano_select percent \
   --percent_logicano 1.0 \
   \
-  --note "100% logicano, equal, with adjusted loss_invidual_gt" \
+  --limit_on_loss \
+  --note "100% logicano, equal, with adjusted loss_invidual_gt, limit_on_loss" \
 
 ##Log this job's resource usage stats###
 my-job-stats -a -n -s

@@ -112,23 +112,43 @@ class IndividualGTLoss(torch.nn.Module):
                 + self.smooth * (1 - masked_predicted)
                 + self.smooth
             )
-            logpt = masked_predicted.log()
-            loss = -1 * torch.pow((1 - masked_predicted), self.gamma) * logpt
 
-            # RANDOMLY choose k
-            length = loss.size()[0]
-            loss = loss[torch.randperm(length)]
-            saturated_loss_values = loss[:saturation_area]
+            if self.limit_on_loss and saturation_area < masked_predicted.shape[0]:
+                masked_predicted, _ = torch.sort(masked_predicted)
 
-            # # choose k smallest losses
-            # saturated_loss_values, _ = torch.topk(
-            #     loss, k=saturation_area, largest=False
-            # )
+                # tops should be abnormal prob
+                tops = masked_predicted[masked_predicted.shape[0] - saturation_area :]
+                logpt_tops = tops.log()
+                loss_tops = -1 * torch.pow((1 - tops), self.gamma) * logpt_tops
 
-            # # : surgery here
-            # saturated_loss_values = saturated_loss_values.mean()
+                # bottoms should be normal prob
+                bottoms = masked_predicted[
+                    : masked_predicted.shape[0] - saturation_area
+                ]
+                bottoms = 1 - bottoms
+                logpt_bottoms = bottoms.log()
+                loss_bottoms = -1 * torch.pow((1 - bottoms), self.gamma) * logpt_bottoms
 
-            loss_per_gt.append(saturated_loss_values)
+                loss_combined = torch.cat([loss_tops, loss_bottoms], dim=0)
+                loss_per_gt.append(loss_combined)
+            else:
+                logpt = masked_predicted.log()
+                loss = -1 * torch.pow((1 - masked_predicted), self.gamma) * logpt
+
+                # RANDOMLY choose k
+                length = loss.size()[0]
+                loss = loss[torch.randperm(length)]
+                saturated_loss_values = loss[:saturation_area]
+
+                # # choose k smallest losses
+                # saturated_loss_values, _ = torch.topk(
+                #     loss, k=saturation_area, largest=False
+                # )
+
+                # # : surgery here
+                # saturated_loss_values = saturated_loss_values.mean()
+
+                loss_per_gt.append(saturated_loss_values)
 
         #  surgery here
         # return sum(loss_per_gt)

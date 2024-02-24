@@ -10,6 +10,8 @@ python -u efficientad.py \
   --include_logicano \
   --logicano_select percent \
   --percent_logicano 1.0 \
+  --limit_on_loss \
+  --note "100% logicano, equal, with adjusted loss_invidual_gt, limit_on_loss" \
   # \
   # --use_lid_score \
   # --trained_folder outputs/folder_baseline/output_20240131_213923_16_56 \
