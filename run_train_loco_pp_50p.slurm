@@ -9,7 +9,7 @@
 ###SBATCH --qos=gpgpudeeplearn
 ###SBATCH --constraint=dlg4|dlg5
 
-#SBATCH --job-name="train_bb"
+#SBATCH --job-name="train_pp"
 #SBATCH --account=punim1623
 #SBATCH --time=0-21:00:00
 
@@ -29,10 +29,11 @@ conda activate eff
 set -e
 set -x
 
+
 python -u efficientad.py \
   --dataset mvtec_loco \
-  --subdataset breakfast_box \
-  --stg1_ckpt outputs/folder_baseline/output_20240131_213923_16_56_sd10_[bb]/trainings/mvtec_loco/breakfast_box \
+  --subdataset pushpins \
+  --stg1_ckpt outputs/folder_baseline/output_20240131_215528_43_52_sd10_[pp]/trainings/mvtec_loco/pushpins \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
   \
   --train_steps 70000 \
@@ -40,10 +41,9 @@ python -u efficientad.py \
   \
   --include_logicano \
   --logicano_select percent \
-  --percent_logicano 0.6 \
+  --percent_logicano 0.5 \
   \
-  --note "60% logicano, equal" \
-
+  --note "50% logicano, equal" \
 
 ##Log this job's resource usage stats###
 my-job-stats -a -n -s

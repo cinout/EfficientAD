@@ -9,7 +9,7 @@
 ###SBATCH --qos=gpgpudeeplearn
 ###SBATCH --constraint=dlg4|dlg5
 
-#SBATCH --job-name="train_sb"
+#SBATCH --job-name="train_jb"
 #SBATCH --account=punim1623
 #SBATCH --time=0-21:00:00
 
@@ -31,8 +31,8 @@ set -x
 
 python -u efficientad.py \
   --dataset mvtec_loco \
-  --subdataset screw_bag \
-  --stg1_ckpt outputs/folder_baseline/output_20240131_215545_7_68_sd10_[sb]/trainings/mvtec_loco/screw_bag \
+  --subdataset juice_bottle \
+  --stg1_ckpt outputs/folder_baseline/output_20240131_215528_9_92_sd10_[jb]/trainings/mvtec_loco/juice_bottle \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
   \
   --train_steps 70000 \
@@ -40,10 +40,9 @@ python -u efficientad.py \
   \
   --include_logicano \
   --logicano_select percent \
-  --percent_logicano 0.6 \
+  --percent_logicano 0.5 \
   \
-  --note "60% logicano, equal" \
-
+  --note "50% logicano, equal" \
 
 ##Log this job's resource usage stats###
 my-job-stats -a -n -s
