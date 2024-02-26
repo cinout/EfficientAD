@@ -954,10 +954,10 @@ def predict(
 
         for i in range(H):
             for j in range(W):
-                map_lid[:, :, i, j] = lid_mle(
+                map_lid[:, :, i, j] = -lid_mle(
                     data=diff_st[:, :, i, j],
                     reference=trained_features_st[:, :, i, j],
-                ) + lid_mle(
+                ) - lid_mle(
                     data=diff_sae[:, :, i, j],
                     reference=trained_features_sae[:, :, i, j],
                 )
