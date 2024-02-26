@@ -704,7 +704,6 @@ def main(config, seed):
     autoencoder.eval()
 
     if config.use_lid_score:
-        # TODO: change trained_features
         trained_features_st = []
         trained_features_sae = []
         for item in train_loader:
@@ -715,8 +714,9 @@ def main(config, seed):
             teacher_output = teacher(train_image)
             teacher_output = (teacher_output - teacher_mean) / teacher_std
 
-            diff_st = teacher_output - student_output[:, :out_channels]
-            diff_sae = autoencoder_output - student_output[:, out_channels:]
+            # TODO: absolute? L2?
+            diff_st = (teacher_output - student_output[:, :out_channels]) ** 2
+            diff_sae = (autoencoder_output - student_output[:, out_channels:]) ** 2
             trained_features_st.append(diff_st)
             trained_features_sae.append(diff_sae)
 
@@ -945,12 +945,12 @@ def predict(
         map_ae = 0.1 * (map_ae - q_ae_start) / (q_ae_end - q_ae_start)
 
     if config.use_lid_score:
-        # TODO: change
         _, _, H, W = autoencoder_output.shape
         map_lid = torch.zeros(size=(1, 1, H, W))
 
-        diff_st = teacher_output - student_output[:, :out_channels]
-        diff_sae = autoencoder_output - student_output[:, out_channels:]
+        # TODO: absolute? L2?
+        diff_st = (teacher_output - student_output[:, :out_channels]) ** 2
+        diff_sae = (autoencoder_output - student_output[:, out_channels:]) ** 2
 
         for i in range(H):
             for j in range(W):
