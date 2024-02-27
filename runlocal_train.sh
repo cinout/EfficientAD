@@ -8,7 +8,7 @@ python -u efficientad.py \
   --seeds 10 \
   \
   --lid_score_train \
-  --lid_train_onwhat diff_mean \
+  # --lid_train_onwhat diff_mean \
   
   # \
   # --lid_score_eval \

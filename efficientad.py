@@ -357,6 +357,7 @@ def main(config, seed):
         shuffle=True,
         num_workers=4,
         pin_memory=True,
+        drop_last=config.lid_score_train,
     )
 
     train_loader_infinite = InfiniteDataloader(train_loader)
