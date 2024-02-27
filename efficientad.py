@@ -628,6 +628,10 @@ def main(config, seed):
                 queue_student_st = torch.randn(queue_size, 384, 64, 64)
                 queue_student_ae = torch.randn(queue_size, 384, 64, 64)
                 queue_autoencoder = torch.randn(queue_size, 384, 64, 64)
+                queue_teacher = queue_teacher.to(device)
+                queue_student_st = queue_student_st.to(device)
+                queue_student_ae = queue_student_ae.to(device)
+                queue_autoencoder = queue_autoencoder.to(device)
                 queue_ptr = 0
 
             for (
