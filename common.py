@@ -519,7 +519,7 @@ def get_pdn_small(out_channels=384, padding=False):
 
 
 class PDN_Small(nn.Module):
-    def __init__(self, out_channels=384, padding=False) -> None:
+    def __init__(self, out_channels=384, padding=False, config=None) -> None:
         super().__init__()
         pad_mult = 1 if padding else 0
 
@@ -543,6 +543,15 @@ class PDN_Small(nn.Module):
         self.conv4 = nn.Conv2d(
             in_channels=256, out_channels=out_channels, kernel_size=4
         )
+        # if config.lid_score_train:
+        #     self.K = 64
+        #     self.register_buffer(
+        #         "queue", torch.randn(self.K, 384, 64, 64), persistent=False
+        #     )
+        #     # self.queue = nn.functional.normalize(self.queue, dim=0)
+        #     self.register_buffer(
+        #         "queue_ptr", torch.zeros(1, dtype=torch.long), persistent=False
+        #     )
 
     def forward(self, x):
         x1 = self.conv1(x)
@@ -559,6 +568,16 @@ class PDN_Small(nn.Module):
         x4 = self.conv4(x4)
 
         return x4
+
+    # @torch.no_grad()
+    # def _dequeue_and_enqueue(self, keys):
+    #     batch_size = keys.shape[0]
+    #     ptr = int(self.queue_ptr)
+    #     assert self.K % batch_size == 0  # for simplicity
+    #     # replace the keys at ptr (dequeue and enqueue)
+    #     self.queue[ptr : ptr + batch_size, :] = keys
+    #     ptr = (ptr + batch_size) % self.K  # move pointer
+    #     self.queue_ptr[0] = ptr
 
 
 def get_pdn_medium(out_channels=384, padding=False):

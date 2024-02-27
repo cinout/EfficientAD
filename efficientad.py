@@ -153,11 +153,6 @@ def get_argparse():
         default="",
         help="path of trained model weights",
     )
-    parser.add_argument(
-        "--use_lid_score",
-        action="store_true",
-        help="if set to True, then add add lid score map",
-    )
 
     parser.add_argument(
         "--use_l1_loss",
@@ -176,6 +171,23 @@ def get_argparse():
         help="if set to True, then limit the # of loss by the saturation_area",
     )
 
+    parser.add_argument(
+        "--lid_score_eval",
+        action="store_true",
+        help="if set to True, then add add lid score map",
+    )
+
+    parser.add_argument(
+        "--lid_score_train",
+        action="store_true",
+        help="if set to True, then add lid score to loss",
+    )
+    parser.add_argument(
+        "--lid_train_onwhat",
+        type=str,
+        choices=["separate_mean", "diff_mean"],
+        default="separate_mean",
+    )
     return parser.parse_args()
 
 
@@ -340,7 +352,11 @@ def main(config, seed):
         raise Exception("Unknown config.dataset")
 
     train_loader = DataLoader(
-        train_set, batch_size=1, shuffle=True, num_workers=4, pin_memory=True
+        train_set,
+        batch_size=8 if config.lid_score_train else 1,
+        shuffle=True,
+        num_workers=4,
+        pin_memory=True,
     )
 
     train_loader_infinite = InfiniteDataloader(train_loader)
@@ -363,7 +379,11 @@ def main(config, seed):
             config.imagenet_train_path, transform=penalty_transform
         )
         penalty_loader = DataLoader(
-            penalty_set, batch_size=1, shuffle=True, num_workers=4, pin_memory=True
+            penalty_set,
+            batch_size=8 if config.lid_score_train else 1,
+            shuffle=True,
+            num_workers=4,
+            pin_memory=True,
         )
         penalty_loader_infinite = InfiniteDataloader(penalty_loader)
     else:
@@ -371,8 +391,8 @@ def main(config, seed):
 
     # create models
     if config.model_size == "small":
-        teacher = PDN_Small(out_channels=out_channels, padding=True)
-        student = PDN_Small(out_channels=2 * out_channels, padding=True)
+        teacher = PDN_Small(out_channels=out_channels, padding=True, config=config)
+        student = PDN_Small(out_channels=2 * out_channels, padding=True, config=config)
         # teacher = get_pdn_small(out_channels, padding=True)
         # student = get_pdn_small(2 * out_channels, padding=True)
     elif config.model_size == "medium":
@@ -601,6 +621,15 @@ def main(config, seed):
                     )
         else:
             # only normal images (may be augmented)
+            if config.lid_score_train:
+                # set up queues
+                queue_size = 64
+                queue_teacher = torch.randn(queue_size, 384, 64, 64)
+                queue_student_st = torch.randn(queue_size, 384, 64, 64)
+                queue_student_ae = torch.randn(queue_size, 384, 64, 64)
+                queue_autoencoder = torch.randn(queue_size, 384, 64, 64)
+                queue_ptr = 0
+
             for (
                 iteration,
                 normal,
@@ -650,7 +679,86 @@ def main(config, seed):
                 loss_ae = torch.mean(distance_ae)
                 loss_stae = torch.mean(distance_stae)
 
-                loss_total = loss_st + loss_ae + loss_stae
+                if config.lid_score_train:
+                    batch_size = teacher_output_st.shape[0]
+                    assert queue_size % batch_size == 0  # for simplicity
+                    queue_teacher[
+                        queue_ptr : queue_ptr + batch_size, :
+                    ] = teacher_output_st.clone().detach()
+                    queue_student_st[
+                        queue_ptr : queue_ptr + batch_size, :
+                    ] = student_output_st.clone().detach()
+                    queue_student_ae[
+                        queue_ptr : queue_ptr + batch_size, :
+                    ] = student_output_ae.clone().detach()
+                    queue_autoencoder[
+                        queue_ptr : queue_ptr + batch_size, :
+                    ] = ae_output.clone().detach()
+                    queue_ptr = (queue_ptr + batch_size) % queue_size
+                    print(f"queue_ptr: {queue_ptr}")
+                    print(f"queue_autoencoder.shape: {queue_autoencoder.shape}")
+
+                    if config.lid_train_onwhat == "separate_mean":
+                        # student_output_st
+                        # student_output_ae
+                        # ae_output
+                        all_lid_scores = []
+                        _, _, H, W = student_output_st.shape
+                        for i in range(H):
+                            for j in range(W):
+                                all_lid_scores.append(
+                                    lid_mle(
+                                        data=student_output_st[:, :, i, j],
+                                        reference=queue_student_st[:, :, i, j],
+                                    )
+                                )
+
+                                all_lid_scores.append(
+                                    lid_mle(
+                                        data=student_output_ae[:, :, i, j],
+                                        reference=queue_student_ae[:, :, i, j],
+                                    )
+                                )
+                                all_lid_scores.append(
+                                    lid_mle(
+                                        data=ae_output[:, :, i, j],
+                                        reference=queue_autoencoder[:, :, i, j],
+                                    )
+                                )
+
+                    elif config.lid_train_onwhat == "diff_mean":
+                        all_lid_scores = []
+                        _, _, H, W = distance_st.shape
+                        for i in range(H):
+                            for j in range(W):
+                                all_lid_scores.append(
+                                    lid_mle(
+                                        data=distance_st[:, :, i, j],
+                                        reference=(
+                                            (queue_teacher - queue_student_st) ** 2
+                                        )[:, :, i, j],
+                                    )
+                                )
+
+                                all_lid_scores.append(
+                                    lid_mle(
+                                        data=distance_stae[:, :, i, j],
+                                        reference=(
+                                            (queue_autoencoder - queue_student_ae) ** 2
+                                        )[:, :, i, j],
+                                    )
+                                )
+
+                    all_lid_scores = torch.cat(all_lid_scores, dim=0)
+
+                    all_lid_scores = 1.0 * torch.log(
+                        all_lid_scores / 1.0 + 1.0e-4
+                    )  # TODO: change the two hps (\beta, \delta)
+                    loss_lid = torch.mean(all_lid_scores)
+
+                    loss_total = loss_st + loss_ae + loss_stae + loss_lid
+                else:
+                    loss_total = loss_st + loss_ae + loss_stae
 
                 writer.add_scalar("Loss/train", loss_total, iteration)
                 optimizer.zero_grad()
@@ -699,11 +807,15 @@ def main(config, seed):
         autoencoder = autoencoder.to(device)
         student = student.to(device)
 
+    if config.lid_score_train:
+        # TODO: since we don't know how to use the lid score, we might as well stop here and evaluate later
+        return
+
     teacher.eval()
     student.eval()
     autoencoder.eval()
 
-    if config.use_lid_score:
+    if config.lid_score_eval:
         trained_features_st = []
         trained_features_sae = []
         for item in train_loader:
@@ -838,7 +950,7 @@ def test(
 
         image = image.to(device)
 
-        if config.use_lid_score:
+        if config.lid_score_eval:
             map_combined, map_st, map_ae, map_lid = predict(
                 config=config,
                 out_channels=out_channels,
@@ -944,7 +1056,7 @@ def predict(
     if q_ae_start is not None:
         map_ae = 0.1 * (map_ae - q_ae_start) / (q_ae_end - q_ae_start)
 
-    if config.use_lid_score:
+    if config.lid_score_eval:
         _, _, H, W = autoencoder_output.shape
         map_lid = torch.zeros(size=(1, 1, H, W))
 
@@ -993,7 +1105,7 @@ def map_normalization(
 ):
     maps_st = []
     maps_ae = []
-    if config.use_lid_score:
+    if config.lid_score_eval:
         maps_lid = []
 
     # ignore augmented ae image
@@ -1002,7 +1114,7 @@ def map_normalization(
 
         image = image.to(device)
 
-        if config.use_lid_score:
+        if config.lid_score_eval:
             map_combined, map_st, map_ae, map_lid = predict(
                 config=config,
                 out_channels=out_channels,
@@ -1028,7 +1140,7 @@ def map_normalization(
             )
         maps_st.append(map_st)
         maps_ae.append(map_ae)
-        if config.use_lid_score:
+        if config.lid_score_eval:
             maps_lid.append(map_lid)
 
     maps_st = torch.cat(maps_st)
@@ -1041,7 +1153,7 @@ def map_normalization(
     q_ae_start = torch.quantile(maps_ae, q=0.9)
     q_ae_end = torch.quantile(maps_ae, q=0.995)
 
-    if config.use_lid_score:
+    if config.lid_score_eval:
         maps_lid = torch.cat(maps_lid)
         q_lid_start = torch.quantile(maps_lid, q=0.9)
         q_lid_end = torch.quantile(maps_lid, q=0.995)

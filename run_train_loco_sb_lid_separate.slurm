@@ -9,9 +9,9 @@
 ###SBATCH --qos=gpgpudeeplearn
 ###SBATCH --constraint=dlg4|dlg5
 
-#SBATCH --job-name="train_sc"
+#SBATCH --job-name="train_sb"
 #SBATCH --account=punim1623
-#SBATCH --time=0-02:00:00
+#SBATCH --time=1-02:00:00
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -31,16 +31,16 @@ set -x
 
 python -u efficientad.py \
   --dataset mvtec_loco \
-  --subdataset breakfast_box \
-  --stg1_ckpt outputs/folder_baseline/output_20240131_213923_16_56_sd10_[bb]/trainings/mvtec_loco/breakfast_box \
+  --subdataset screw_bag \
+  --stg1_ckpt outputs/folder_baseline/output_20240131_215545_7_68_sd10_[sb]/trainings/mvtec_loco/screw_bag \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
   \
   --train_steps 70000 \
-  --seeds 10 \
+  --seeds 10 20 30 \
   \
-  --use_lid_score \
-  --trained_folder outputs/folder_baseline/output_20240131_213923_16_56 \
-  --note "lid (L2)" \
+  --lid_score_train \
+  --lid_train_onwhat separate_mean \
+  --note "lid, separate_mean" \
 
 
 ##Log this job's resource usage stats###

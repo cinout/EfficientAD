@@ -2,16 +2,16 @@
 
 ###SBATCH --partition=gpu-a100
 
-###SBATCH --partition=feit-gpu-a100
-###SBATCH --qos=feit
+#SBATCH --partition=feit-gpu-a100
+#SBATCH --qos=feit
 
-#SBATCH --partition=deeplearn
-#SBATCH --qos=gpgpudeeplearn
-#SBATCH --constraint=dlg4|dlg5
+###SBATCH --partition=deeplearn
+###SBATCH --qos=gpgpudeeplearn
+###SBATCH --constraint=dlg4|dlg5
 
-#SBATCH --job-name="train_sc"
+#SBATCH --job-name="train_bb"
 #SBATCH --account=punim1623
-#SBATCH --time=0-02:00:00
+#SBATCH --time=1-02:00:00
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -29,19 +29,19 @@ conda activate eff
 set -e
 set -x
 
-
 python -u efficientad.py \
   --dataset mvtec_loco \
-  --subdataset pushpins \
-  --stg1_ckpt outputs/folder_baseline/output_20240131_215528_43_52_sd10_[pp]/trainings/mvtec_loco/pushpins \
+  --subdataset breakfast_box \
+  --stg1_ckpt outputs/folder_baseline/output_20240131_213923_16_56_sd10_[bb]/trainings/mvtec_loco/breakfast_box \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
   \
   --train_steps 70000 \
-  --seeds 10 \
+  --seeds 10 20 30 \
   \
-  --use_lid_score \
-  --trained_folder outputs/folder_baseline/output_20240131_215528_43_52 \
-  --note "lid (L2)" \
+  --lid_score_train \
+  --lid_train_onwhat separate_mean \
+  --note "lid, separate_mean" \
+
 
 ##Log this job's resource usage stats###
 my-job-stats -a -n -s
