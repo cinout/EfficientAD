@@ -699,59 +699,94 @@ def main(config, seed):
                         queue_ptr : queue_ptr + batch_size, :
                     ] = ae_output.clone().detach()
                     queue_ptr = (queue_ptr + batch_size) % queue_size
-                    print(f"queue_ptr: {queue_ptr}")
-                    print(f"queue_autoencoder.shape: {queue_autoencoder.shape}")
 
                     if config.lid_train_onwhat == "separate_mean":
                         # student_output_st
                         # student_output_ae
                         # ae_output
                         all_lid_scores = []
-                        _, _, H, W = student_output_st.shape
-                        for i in range(H):
-                            for j in range(W):
-                                all_lid_scores.append(
-                                    lid_mle(
-                                        data=student_output_st[:, :, i, j],
-                                        reference=queue_student_st[:, :, i, j],
-                                    )
-                                )
 
-                                all_lid_scores.append(
-                                    lid_mle(
-                                        data=student_output_ae[:, :, i, j],
-                                        reference=queue_student_ae[:, :, i, j],
-                                    )
-                                )
-                                all_lid_scores.append(
-                                    lid_mle(
-                                        data=ae_output[:, :, i, j],
-                                        reference=queue_autoencoder[:, :, i, j],
-                                    )
-                                )
+                        all_lid_scores.append(
+                            lid_mle(
+                                data=student_output_st,
+                                reference=queue_student_st,
+                            )
+                        )
+
+                        all_lid_scores.append(
+                            lid_mle(
+                                data=student_output_ae,
+                                reference=queue_student_ae,
+                            )
+                        )
+                        all_lid_scores.append(
+                            lid_mle(
+                                data=ae_output,
+                                reference=queue_autoencoder,
+                            )
+                        )
+
+                        # _, _, H, W = student_output_st.shape
+
+                        # for i in range(H):
+                        #     for j in range(W):
+                        #         all_lid_scores.append(
+                        #             lid_mle(
+                        #                 data=student_output_st[:, :, i, j],
+                        #                 reference=queue_student_st[:, :, i, j],
+                        #             )
+                        #         )
+
+                        #         all_lid_scores.append(
+                        #             lid_mle(
+                        #                 data=student_output_ae[:, :, i, j],
+                        #                 reference=queue_student_ae[:, :, i, j],
+                        #             )
+                        #         )
+                        #         all_lid_scores.append(
+                        #             lid_mle(
+                        #                 data=ae_output[:, :, i, j],
+                        #                 reference=queue_autoencoder[:, :, i, j],
+                        #             )
+                        #         )
 
                     elif config.lid_train_onwhat == "diff_mean":
                         all_lid_scores = []
-                        _, _, H, W = distance_st.shape
-                        for i in range(H):
-                            for j in range(W):
-                                all_lid_scores.append(
-                                    lid_mle(
-                                        data=distance_st[:, :, i, j],
-                                        reference=(
-                                            (queue_teacher - queue_student_st) ** 2
-                                        )[:, :, i, j],
-                                    )
-                                )
 
-                                all_lid_scores.append(
-                                    lid_mle(
-                                        data=distance_stae[:, :, i, j],
-                                        reference=(
-                                            (queue_autoencoder - queue_student_ae) ** 2
-                                        )[:, :, i, j],
-                                    )
-                                )
+                        all_lid_scores.append(
+                            lid_mle(
+                                data=distance_st,
+                                reference=(queue_teacher - queue_student_st) ** 2,
+                            )
+                        )
+
+                        all_lid_scores.append(
+                            lid_mle(
+                                data=distance_stae,
+                                reference=(queue_autoencoder - queue_student_ae) ** 2,
+                            )
+                        )
+
+                        # _, _, H, W = distance_st.shape
+                        # for i in range(H):
+                        #     for j in range(W):
+                        #         all_lid_scores.append(
+                        #             lid_mle(
+                        #                 data=distance_st[:, :, i, j],
+                        #                 reference=(
+                        #                     (queue_teacher - queue_student_st) ** 2
+                        #                 )[:, :, i, j],
+                        #             )
+                        #         )
+
+                        #         all_lid_scores.append(
+                        #             lid_mle(
+                        #                 data=distance_stae[:, :, i, j],
+                        #                 reference=(
+                        #                     (queue_autoencoder - queue_student_ae) ** 2
+                        #                 )[:, :, i, j],
+                        #             )
+                        #         )
 
                     all_lid_scores = torch.cat(all_lid_scores, dim=0)
 
