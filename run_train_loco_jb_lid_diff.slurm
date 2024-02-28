@@ -40,7 +40,8 @@ python -u efficientad.py \
   \
   --lid_score_train \
   --lid_train_onwhat diff_mean \
-  --note "lid, diff_mean" \
+  --lid_regularizer 3.0 \
+  --note "lid, diff_mean, regularizer=3.0" \
 
 ##Log this job's resource usage stats###
 my-job-stats -a -n -s

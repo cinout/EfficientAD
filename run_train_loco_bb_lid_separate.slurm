@@ -40,7 +40,8 @@ python -u efficientad.py \
   \
   --lid_score_train \
   --lid_train_onwhat separate_mean \
-  --note "lid, separate_mean" \
+  --lid_regularizer 3.0 \
+  --note "lid, separate_mean, regularizer=3.0" \
 
 
 ##Log this job's resource usage stats###
