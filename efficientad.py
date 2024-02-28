@@ -188,6 +188,12 @@ def get_argparse():
         choices=["separate_mean", "diff_mean"],
         default="separate_mean",
     )
+    parser.add_argument(
+        "--lid_regularizer",
+        type=float,
+        default=1.0,
+        help="the denominator for loss of lid_score during training",
+    )
     return parser.parse_args()
 
 
@@ -792,7 +798,7 @@ def main(config, seed):
                     all_lid_scores = torch.cat(all_lid_scores, dim=0)
 
                     all_lid_scores = 1.0 * torch.log(
-                        all_lid_scores / 1.0 + 1.0e-4
+                        all_lid_scores / config.lid_regularizer + 1.0e-4
                     )  # TODO: change the two hps (\beta, \delta)
                     loss_lid = torch.mean(all_lid_scores)
 
