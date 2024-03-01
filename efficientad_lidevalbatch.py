@@ -964,8 +964,8 @@ def main(config, seed):
 
 @torch.no_grad()
 def generate_map_lid(diffs_st, diffs_sae, trained_features_st, trained_features_sae):
-    _, _, H, W = diffs_st.shape
-    map_lid = torch.zeros(size=(1, 1, H, W))
+    B, _, H, W = diffs_st.shape
+    map_lid = torch.zeros(size=(B, 1, H, W))
 
     for i in range(H):
         for j in range(W):
