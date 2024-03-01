@@ -29,17 +29,15 @@ conda activate eff
 set -e
 set -x
 
-
 python -u efficientad.py \
   --dataset mvtec_loco \
   --subdataset splicing_connectors \
-  --stg1_ckpt outputs/folder_baseline/output_20240131_215545_79_5_sd10_[sc]/trainings/mvtec_loco/splicing_connectors \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
   \
   --train_steps 70000 \
   --seeds 10 20 30 \
   \
-  --trained_folder outputs/folder_baseline/output_20240131_213923_16_56 \
+  --trained_folder outputs/ckpts_lid_sepa/output_20240228_002747_94_89 \
   --note "[], no_lid" \
 
 ##Log this job's resource usage stats###

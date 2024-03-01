@@ -37,7 +37,7 @@ python -u efficientad.py \
   --train_steps 70000 \
   --seeds 10 20 30 \
   \
-  --trained_folder outputs/folder_baseline/output_20240131_213923_16_56 \
+  --trained_folder outputs/ckpts_lid_sepa/output_20240228_002744_34_12 \
   --note "[], no_lid" \
 
 
