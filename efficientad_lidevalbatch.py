@@ -969,10 +969,10 @@ def generate_map_lid(diffs_st, diffs_sae, trained_features_st, trained_features_
 
     for i in range(H):
         for j in range(W):
-            map_lid[:, :, i, j] = -lid_mle(
+            map_lid[:, :, i, j] = lid_mle(
                 data=diffs_st[:, :, i, j],
                 reference=trained_features_st[:, :, i, j],
-            ).unsqueeze(1) - lid_mle(
+            ).unsqueeze(1) + lid_mle(
                 data=diffs_sae[:, :, i, j],
                 reference=trained_features_sae[:, :, i, j],
             ).unsqueeze(
