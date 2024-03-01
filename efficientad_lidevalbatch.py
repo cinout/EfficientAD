@@ -802,7 +802,7 @@ def main(config, seed):
 
                     all_lid_scores = 1.0 * torch.log(
                         all_lid_scores / config.lid_regularizer + 1.0e-4
-                    )  # TODO: change the two hps (\beta, \delta)
+                    )
                     loss_lid = torch.mean(all_lid_scores)
 
                     loss_total = loss_st + loss_ae + loss_stae + loss_lid
@@ -963,6 +963,27 @@ def main(config, seed):
 
 
 @torch.no_grad()
+def generate_map_lid(diffs_st, diffs_sae, trained_features_st, trained_features_sae):
+    _, _, H, W = diffs_st.shape
+    map_lid = torch.zeros(size=(1, 1, H, W))
+
+    for i in range(H):
+        for j in range(W):
+            map_lid[:, :, i, j] = -lid_mle(
+                data=diffs_st[:, :, i, j],
+                reference=trained_features_st[:, :, i, j],
+            ) - lid_mle(
+                data=diffs_sae[:, :, i, j],
+                reference=trained_features_sae[:, :, i, j],
+            )
+    map_lid = torch.nn.functional.interpolate(
+        map_lid, (image_size, image_size), mode="bilinear"
+    )
+    map_lid = map_lid.to(device)
+    return map_lid
+
+
+@torch.no_grad()
 def test(
     out_channels,
     test_set,
@@ -987,20 +1008,26 @@ def test(
     y_true = []
     y_score = []
 
+    if config.lid_score_eval:
+        maps_st = []
+        maps_ae = []
+        diffs_st = []
+        diffs_sae = []
+        paths = []
+        orig_heights = []
+        orig_widths = []
+
     for image, target, path in tqdm(test_set, desc=desc):
         orig_width = image.width
         orig_height = image.height
 
         images = train_transform(image, config=config)
-
         (image, _) = images
-
         image = image[None]
-
         image = image.to(device)
 
         if config.lid_score_eval:
-            map_combined, map_st, map_ae, map_lid = predict(
+            map_st, map_ae, diff_st, diff_sae = predict(
                 config=config,
                 out_channels=out_channels,
                 image=image,
@@ -1013,11 +1040,14 @@ def test(
                 q_st_end=q_st_end,
                 q_ae_start=q_ae_start,
                 q_ae_end=q_ae_end,
-                q_lid_start=q_lid_start,
-                q_lid_end=q_lid_end,
-                trained_features_st=trained_features_st,
-                trained_features_sae=trained_features_sae,
             )
+            maps_st.append(map_st)
+            maps_ae.append(map_ae)
+            diffs_st.append(diff_st)
+            diffs_sae.append(diff_sae)
+            paths.append(path)
+            orig_heights.append(orig_height)
+            orig_widths.append(orig_width)
         else:
             map_combined, map_st, map_ae = predict(
                 config=config,
@@ -1034,24 +1064,62 @@ def test(
                 q_ae_end=q_ae_end,
             )
 
-        defect_class = os.path.basename(os.path.dirname(path))
-        y_true_image = 0 if defect_class == "good" else 1
-        y_score_image = np.max(map_combined[0, 0].cpu().numpy())
-        y_true.append(y_true_image)
-        y_score.append(y_score_image)
+            defect_class = os.path.basename(os.path.dirname(path))
+            y_true_image = 0 if defect_class == "good" else 1
+            y_score_image = np.max(map_combined[0, 0].cpu().numpy())
+            y_true.append(y_true_image)
+            y_score.append(y_score_image)
 
-        # save into riff format
-        map_combined = torch.nn.functional.interpolate(
-            map_combined, (orig_height, orig_width), mode="bilinear"
+            # save into riff format
+            map_combined = torch.nn.functional.interpolate(
+                map_combined, (orig_height, orig_width), mode="bilinear"
+            )
+            map_combined = map_combined[0, 0].cpu().numpy()
+
+            if test_output_dir is not None:
+                img_nm = os.path.split(path)[1].split(".")[0]
+                if not os.path.exists(os.path.join(test_output_dir, defect_class)):
+                    os.makedirs(os.path.join(test_output_dir, defect_class))
+                file = os.path.join(test_output_dir, defect_class, img_nm + ".tiff")
+                tifffile.imwrite(file, map_combined)
+
+    if config.lid_score_eval:
+        diffs_st = torch.cat(diffs_st, dim=0)  # [#test, 384, 64, 64]
+        diffs_sae = torch.cat(diffs_sae, dim=0)
+
+        maps_lid = generate_map_lid(
+            diffs_st, diffs_sae, trained_features_st, trained_features_sae
         )
-        map_combined = map_combined[0, 0].cpu().numpy()
 
-        if test_output_dir is not None:
-            img_nm = os.path.split(path)[1].split(".")[0]
-            if not os.path.exists(os.path.join(test_output_dir, defect_class)):
-                os.makedirs(os.path.join(test_output_dir, defect_class))
-            file = os.path.join(test_output_dir, defect_class, img_nm + ".tiff")
-            tifffile.imwrite(file, map_combined)
+        assert (
+            q_lid_start is not None
+        ), "in test(), the quantile of lid_score should be available"
+
+        maps_lid = 0.1 * (maps_lid - q_lid_start) / (q_lid_end - q_lid_start)
+
+        for map_st, map_ae, map_lid, path, orig_height, orig_width in zip(
+            maps_st, maps_ae, maps_lid, paths, orig_heights, orig_widths
+        ):
+            map_combined = 1 / 3 * map_st + 1 / 3 * map_ae + 1 / 3 * map_lid
+
+            defect_class = os.path.basename(os.path.dirname(path))
+            y_true_image = 0 if defect_class == "good" else 1
+            y_score_image = np.max(map_combined[0, 0].cpu().numpy())
+            y_true.append(y_true_image)
+            y_score.append(y_score_image)
+
+            # save into riff format
+            map_combined = torch.nn.functional.interpolate(
+                map_combined, (orig_height, orig_width), mode="bilinear"
+            )
+            map_combined = map_combined[0, 0].cpu().numpy()
+
+            if test_output_dir is not None:
+                img_nm = os.path.split(path)[1].split(".")[0]
+                if not os.path.exists(os.path.join(test_output_dir, defect_class)):
+                    os.makedirs(os.path.join(test_output_dir, defect_class))
+                file = os.path.join(test_output_dir, defect_class, img_nm + ".tiff")
+                tifffile.imwrite(file, map_combined)
 
     auc = roc_auc_score(y_true=y_true, y_score=y_score)
     return auc * 100
@@ -1072,10 +1140,6 @@ def predict(
     q_st_end=None,
     q_ae_start=None,
     q_ae_end=None,
-    q_lid_start=None,
-    q_lid_end=None,
-    trained_features_st=None,
-    trained_features_sae=None,
 ):
     teacher_output = teacher(image)
 
@@ -1106,33 +1170,11 @@ def predict(
         map_ae = 0.1 * (map_ae - q_ae_start) / (q_ae_end - q_ae_start)
 
     if config.lid_score_eval:
-        _, _, H, W = autoencoder_output.shape
-        map_lid = torch.zeros(size=(1, 1, H, W))
-
         # TODO: absolute? L2?
         diff_st = (teacher_output - student_output[:, :out_channels]) ** 2
         diff_sae = (autoencoder_output - student_output[:, out_channels:]) ** 2
 
-        for i in range(H):
-            for j in range(W):
-                map_lid[:, :, i, j] = -lid_mle(
-                    data=diff_st[:, :, i, j],
-                    reference=trained_features_st[:, :, i, j],
-                ) - lid_mle(
-                    data=diff_sae[:, :, i, j],
-                    reference=trained_features_sae[:, :, i, j],
-                )
-
-        map_lid = torch.nn.functional.interpolate(
-            map_lid, (image_size, image_size), mode="bilinear"
-        )
-        map_lid = map_lid.to(device)
-
-        if q_lid_start is not None:
-            map_lid = 0.1 * (map_lid - q_lid_start) / (q_lid_end - q_lid_start)
-
-        map_combined = 1 / 3 * map_st + 1 / 3 * map_ae + 1 / 3 * map_lid
-        return map_combined, map_st, map_ae, map_lid
+        return map_st, map_ae, diff_st, diff_sae
     else:
         map_combined = 0.5 * map_st + 0.5 * map_ae
         return map_combined, map_st, map_ae
@@ -1155,7 +1197,8 @@ def map_normalization(
     maps_st = []
     maps_ae = []
     if config.lid_score_eval:
-        maps_lid = []
+        diffs_st = []
+        diffs_sae = []
 
     # ignore augmented ae image
     for images in tqdm(validation_loader, desc=desc):
@@ -1164,7 +1207,7 @@ def map_normalization(
         image = image.to(device)
 
         if config.lid_score_eval:
-            map_combined, map_st, map_ae, map_lid = predict(
+            map_st, map_ae, diff_st, diff_sae = predict(
                 config=config,
                 out_channels=out_channels,
                 image=image,
@@ -1173,8 +1216,6 @@ def map_normalization(
                 autoencoder=autoencoder,
                 teacher_mean=teacher_mean,
                 teacher_std=teacher_std,
-                trained_features_st=trained_features_st,
-                trained_features_sae=trained_features_sae,
             )
         else:
             map_combined, map_st, map_ae = predict(
@@ -1189,8 +1230,10 @@ def map_normalization(
             )
         maps_st.append(map_st)
         maps_ae.append(map_ae)
+
         if config.lid_score_eval:
-            maps_lid.append(map_lid)
+            diffs_st.append(diff_st)  # each [1, 384, 64, 64]
+            diffs_sae.append(diff_sae)
 
     maps_st = torch.cat(maps_st)
     q_st_start = torch.quantile(
@@ -1203,7 +1246,13 @@ def map_normalization(
     q_ae_end = torch.quantile(maps_ae, q=0.995)
 
     if config.lid_score_eval:
-        maps_lid = torch.cat(maps_lid)
+        diffs_st = torch.cat(diffs_st, dim=0)  # [#validation, 384, 64, 64]
+        diffs_sae = torch.cat(diffs_sae, dim=0)
+
+        maps_lid = generate_map_lid(
+            diffs_st, diffs_sae, trained_features_st, trained_features_sae
+        )
+
         q_lid_start = torch.quantile(maps_lid, q=0.9)
         q_lid_end = torch.quantile(maps_lid, q=0.995)
         return q_st_start, q_st_end, q_ae_start, q_ae_end, q_lid_start, q_lid_end
