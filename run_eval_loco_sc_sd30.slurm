@@ -20,8 +20,8 @@ module purge
 eval "$(conda shell.bash hook)"
 conda activate eff
 
-timestamp="20240301_203701_59_13_sd30_[sc]"
-folder_name="folder_lid_diff_eval_lid_diff"
+timestamp="20240301_205747_57_24_sd30_[sc]"
+folder_name="folder_lid_diff_eval_nolid"
 
 python -u mvtec_loco_ad_evaluation/evaluate_experiment.py \
   --object_name "splicing_connectors" \
