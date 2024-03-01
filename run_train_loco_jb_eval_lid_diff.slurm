@@ -38,9 +38,9 @@ python -u efficientad.py \
   --seeds 10 20 30 \
   \
   --trained_folder outputs/ckpts_lid_sepa/output_20240228_002737_18_55 \
-  --note "[ckpts_lid_sepa], lid_sepa" \
+  --note "[ckpts_lid_sepa], lid_diff" \
   --lid_score_eval \
-  --lid_eval_onwhat separate_mean \
+  --lid_eval_onwhat diff_mean \
 
 ##Log this job's resource usage stats###
 my-job-stats -a -n -s

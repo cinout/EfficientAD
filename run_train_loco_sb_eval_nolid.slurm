@@ -38,7 +38,7 @@ python -u efficientad.py \
   --seeds 10 20 30 \
   \
   --trained_folder outputs/ckpts_lid_sepa/output_20240228_002744_34_12 \
-  --note "[], no_lid" \
+  --note "[ckpts_lid_sepa], no_lid" \
 
 
 ##Log this job's resource usage stats###
