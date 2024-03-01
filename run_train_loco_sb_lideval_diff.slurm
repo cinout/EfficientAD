@@ -39,7 +39,7 @@ python -u efficientad_lidevalbatch.py \
   --seeds 10 \
   \
   --lid_score_eval \
-  --trained_folder outputs/folder_baseline/output_20240131_213923_16_56 \
+  --trained_folder outputs/folder_baseline/output_20240131_215545_7_68 \
   --note "lid_eval, diff" \
 
 
