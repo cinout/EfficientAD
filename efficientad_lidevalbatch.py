@@ -959,7 +959,7 @@ def main(config, seed):
             test_output_dir=test_output_dir,
             desc="Final inference",
         )
-        print("Final image auc: {:.4f}".format(auc))
+    print("Final image auc: {:.4f}".format(auc))
 
 
 @torch.no_grad()
