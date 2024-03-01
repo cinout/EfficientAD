@@ -1,4 +1,4 @@
-python -u efficientad_lidevalbatch.py \
+python -u efficientad.py \
   --dataset mvtec_loco \
   --subdataset breakfast_box \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \

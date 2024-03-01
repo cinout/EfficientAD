@@ -11,7 +11,7 @@
 
 #SBATCH --job-name="train_bb"
 #SBATCH --account=punim1623
-#SBATCH --time=0-00:20:00
+#SBATCH --time=0-00:30:00
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -29,18 +29,16 @@ conda activate eff
 set -e
 set -x
 
-python -u efficientad_lidevalbatch.py \
+python -u efficientad.py \
   --dataset mvtec_loco \
   --subdataset breakfast_box \
-  --stg1_ckpt outputs/folder_baseline/output_20240131_213923_16_56_sd10_[bb]/trainings/mvtec_loco/breakfast_box \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
   \
   --train_steps 70000 \
-  --seeds 10 \
+  --seeds 10 20 30 \
   \
-  --lid_score_eval \
   --trained_folder outputs/folder_baseline/output_20240131_213923_16_56 \
-  --note "lid_eval, diff" \
+  --note "[], no_lid" \
 
 
 ##Log this job's resource usage stats###
