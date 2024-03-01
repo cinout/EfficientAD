@@ -37,7 +37,7 @@ python -u efficientad.py \
   --train_steps 70000 \
   --seeds 10 20 30 \
   \
-  --trained_folder outputs/ckpts_lid_sepa/output_20240228_002806_9_93 \
+  --trained_folder outputs/ckpts_lid_sepa/output_20240228_010410_37_35 \
   --note "[ckpts_lid_sepa], lid_sepa" \
   --lid_score_eval \
   --lid_eval_onwhat separate_mean \
