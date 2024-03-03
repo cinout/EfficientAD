@@ -37,8 +37,8 @@ python -u efficientad.py \
   --train_steps 70000 \
   --seeds 10 20 30 \
   \
-  --trained_folder outputs/ckpts_lid_diff/output_20240228_003610_35_76 \
-  --note "[ckpts_lid_diff], lid_diff" \
+  --trained_folder outputs/ckpts_lid_diff_tmp3/output_20240228_152815_6_67 \
+  --note "[ckpts_lid_diff_tmp3], lid_diff" \
   --lid_score_eval \
   --lid_eval_onwhat diff_mean \
 

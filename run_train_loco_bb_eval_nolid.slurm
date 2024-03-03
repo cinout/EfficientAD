@@ -37,8 +37,8 @@ python -u efficientad.py \
   --train_steps 70000 \
   --seeds 10 20 30 \
   \
-  --trained_folder outputs/ckpts_lid_diff/output_20240228_002806_9_93 \
-  --note "[ckpts_lid_diff], no_lid" \
+  --trained_folder outputs/ckpts_lid_diff_tmp3/output_20240228_153733_99_100 \
+  --note "[ckpts_lid_diff_tmp3], no_lid" \
 
 
 ##Log this job's resource usage stats###
