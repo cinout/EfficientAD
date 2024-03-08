@@ -11,7 +11,7 @@
 
 #SBATCH --job-name="train_bb"
 #SBATCH --account=punim1623
-#SBATCH --time=2-08:00:00
+#SBATCH --time=0-16:00:00
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -38,10 +38,10 @@ python -u efficientad.py \
   --train_steps 70000 \
   --seeds 10 20 30 \
   \
-  --lid_score_train \
-  --lid_train_onwhat diff_mean \
-  --lid_regularizer 3.0 \
-  --note "lid, diff_mean, regularizer=3.0" \
+  --use_masked_conv \
+  --pos_masked_conv d5 \
+  --w_loss_masked_conv 1.0 \
+  --note "masked_conv, d5, w=1.0" \
 
 
 ##Log this job's resource usage stats###
