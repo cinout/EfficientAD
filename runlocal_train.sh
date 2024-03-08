@@ -4,12 +4,13 @@ python -u efficientad.py \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
   --stg1_ckpt outputs/folder_baseline/output_20240131_213923_16_56_sd10_[bb]/trainings/mvtec_loco/breakfast_box \
   \
-  --train_steps 70000 \
+  --train_steps 12 \
   --seeds 10 \
   \
-  --lid_score_eval \
-  --trained_folder outputs/folder_baseline/output_20240131_213923_16_56 \
-  --note "lid_eval, diff" \
+  --use_masked_conv \
+  --pos_masked_conv d7 \
+  --w_loss_masked_conv 1.0 \
+  --note "masked conv" \
   
   # \
   # --lid_score_eval \

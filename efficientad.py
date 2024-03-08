@@ -199,6 +199,20 @@ def get_argparse():
         default=1.0,
         help="the denominator for loss of lid_score during training",
     )
+
+    parser.add_argument(
+        "--use_masked_conv",
+        action="store_true",
+        help="if set to True, then apply masked convolution on AE",
+    )
+    parser.add_argument(
+        "--pos_masked_conv",
+        type=str,
+        choices=["d4", "d5", "d6", "d7"],
+        default="d6",
+    )
+    parser.add_argument("--w_loss_masked_conv", type=float, default=1.0)
+
     return parser.parse_args()
 
 
@@ -437,7 +451,7 @@ def main(config, seed):
     teacher.load_state_dict(pretrained_teacher_model, strict=False)
 
     # autoencoder = get_autoencoder(out_channels)
-    autoencoder = Autoencoder(out_channels=out_channels)
+    autoencoder = Autoencoder(out_channels=out_channels, config=config)
 
     # teacher frozen
     teacher.eval()
@@ -686,7 +700,10 @@ def main(config, seed):
                 else:
                     loss_st = loss_hard
 
-                ae_output = autoencoder(image_ae)
+                if config.use_masked_conv:
+                    ae_output, loss_ssmctb = autoencoder(image_ae)
+                else:
+                    ae_output = autoencoder(image_ae)
 
                 with torch.no_grad():
                     teacher_output_ae = teacher(image_ae)
@@ -813,7 +830,12 @@ def main(config, seed):
 
                     loss_total = loss_st + loss_ae + loss_stae + loss_lid
                 else:
-                    loss_total = loss_st + loss_ae + loss_stae
+                    loss_total = (
+                        loss_st
+                        + loss_ae
+                        + loss_stae
+                        + config.w_loss_masked_conv * loss_ssmctb
+                    )
 
                 writer.add_scalar("Loss/train", loss_total, iteration)
                 optimizer.zero_grad()
@@ -1154,7 +1176,11 @@ def predict(
 
     teacher_output = (teacher_output - teacher_mean) / teacher_std
     student_output = student(image)
-    autoencoder_output = autoencoder(image)
+
+    if config.use_masked_conv:
+        autoencoder_output, _ = autoencoder(image)
+    else:
+        autoencoder_output = autoencoder(image)
 
     map_st = torch.mean(
         (teacher_output - student_output[:, :out_channels]) ** 2, dim=1, keepdim=True

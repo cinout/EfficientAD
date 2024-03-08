@@ -9,6 +9,7 @@ import json, os
 import numpy as np
 from typing import Callable, Optional
 from torch import Tensor
+from torch_ssmctb import SSMCTB
 
 
 class IndividualGTLossForSphere(torch.nn.Module):
@@ -363,8 +364,11 @@ class VectorQuantizerEMA(nn.Module):
 
 
 class Autoencoder(nn.Module):
-    def __init__(self, out_channels=384) -> None:
+    def __init__(self, out_channels=384, config=None) -> None:
         super().__init__()
+        self.use_masked_conv = config.use_masked_conv
+        self.pos_masked_conv = config.pos_masked_conv
+
         self.relu = nn.ReLU(inplace=True)
 
         self.enc_conv1 = nn.Conv2d(
@@ -428,6 +432,15 @@ class Autoencoder(nn.Module):
         # self.enc_vq1 = VectorQuantizerEMA(num_embeddings=32, embedding_dim=64)
         # self.enc_vq2 = VectorQuantizerEMA(num_embeddings=16, embedding_dim=64)
         # self.enc_vq3 = VectorQuantizerEMA(num_embeddings=8, embedding_dim=64)
+        if self.use_masked_conv:
+            if self.pos_masked_conv == "d4":
+                self.ssmctb = SSMCTB(channels=64)
+            elif self.pos_masked_conv == "d5":
+                self.ssmctb = SSMCTB(channels=64)
+            elif self.pos_masked_conv == "d6":
+                self.ssmctb = SSMCTB(channels=64)
+            elif self.pos_masked_conv == "d7":
+                self.ssmctb = SSMCTB(channels=64)
 
     def forward(self, x, return_bn=False, return_both=False):
         # encoder
@@ -477,26 +490,41 @@ class Autoencoder(nn.Module):
         x = self.relu(x)
         x = self.dropout(x)  # shape: [1, 64, 33, 33]
 
+        if self.use_masked_conv and self.pos_masked_conv == "d4":
+            x, loss = self.ssmctb(x)
+
         x = self.dec_up5(x)
         x = self.dec_conv5(x)
         x = self.relu(x)
         x = self.dropout(x)  # shape: [1, 64, 64, 64]
+
+        if self.use_masked_conv and self.pos_masked_conv == "d5":
+            x, loss = self.ssmctb(x)
 
         x = self.dec_up6(x)
         x = self.dec_conv6(x)
         x = self.relu(x)
         x = self.dropout(x)  # shape: [1, 64, 128, 128]
 
+        if self.use_masked_conv and self.pos_masked_conv == "d6":
+            x, loss = self.ssmctb(x)
+
         x = self.dec_up7(x)
         x = self.dec_conv7(x)
         x = self.relu(x)  # shape: [1, 64, 64, 64]
+
+        if self.use_masked_conv and self.pos_masked_conv == "d7":
+            x, loss = self.ssmctb(x)
 
         x = self.dec_conv8(x)  # shape: [1, 384, 64, 64]
 
         if return_both:
             return (bn, x)
         else:
-            return x
+            if self.use_masked_conv:
+                return x, loss
+            else:
+                return x
 
 
 def get_pdn_small(out_channels=384, padding=False):
