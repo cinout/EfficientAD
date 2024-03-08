@@ -9,7 +9,7 @@
 #SBATCH --qos=gpgpudeeplearn
 #SBATCH --constraint=dlg4|dlg5
 
-#SBATCH --job-name="train_pp"
+#SBATCH --job-name="train_bb"
 #SBATCH --account=punim1623
 #SBATCH --time=0-16:00:00
 
@@ -29,11 +29,10 @@ conda activate eff
 set -e
 set -x
 
-
 python -u efficientad.py \
   --dataset mvtec_loco \
-  --subdataset pushpins \
-  --stg1_ckpt outputs/folder_baseline/output_20240131_215528_43_52_sd10_[pp]/trainings/mvtec_loco/pushpins \
+  --subdataset breakfast_box \
+  --stg1_ckpt outputs/folder_baseline/output_20240131_213923_16_56_sd10_[bb]/trainings/mvtec_loco/breakfast_box \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
   \
   --train_steps 70000 \
@@ -41,8 +40,9 @@ python -u efficientad.py \
   \
   --use_masked_conv \
   --pos_masked_conv d5 \
-  --w_loss_masked_conv 1.0 \
-  --note "masked_conv, d5, w=1.0" \
+  --w_loss_masked_conv 50.0 \
+  --note "masked_conv, d5, w=50.0" \
+
 
 ##Log this job's resource usage stats###
 my-job-stats -a -n -s

@@ -9,7 +9,7 @@ python -u efficientad.py \
   \
   --use_masked_conv \
   --pos_masked_conv d7 \
-  --w_loss_masked_conv 1.0 \
+  --w_loss_masked_conv 50.0 \
   --note "masked conv" \
   
   # \
