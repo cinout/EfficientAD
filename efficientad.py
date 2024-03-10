@@ -29,6 +29,7 @@ import cv2
 import torch.nn.functional as F
 from dataset import LogicalAnomalyDataset, MyDummyDataset, NormalDatasetForGeoAug
 from torch.utils.tensorboard import SummaryWriter
+import matplotlib.pyplot as plt
 
 timestamp = (
     datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -212,6 +213,12 @@ def get_argparse():
         default="d6",
     )
     parser.add_argument("--w_loss_masked_conv", type=float, default=1.0)
+
+    parser.add_argument(
+        "--debug_mode",
+        action="store_true",
+        help="if set to True, then enter debug mode",
+    )
 
     return parser.parse_args()
 
@@ -887,6 +894,84 @@ def main(config, seed):
     teacher.eval()
     student.eval()
     autoencoder.eval()
+
+    if config.debug_mode:
+
+        feature_maps_folder = os.path.join(
+            output_dir, "feature_maps", config.subdataset
+        )
+        os.makedirs(feature_maps_folder)
+        for image, target, path in tqdm(test_set):
+            path_portions = path.split("/")
+            anomaly_type = path_portions[-2]
+            idx = path_portions[-1].split(".png")[0]
+
+            images = train_transform(image, config=config)
+            (image, _) = images
+            image = image[None]
+            image = image.to(device)
+
+            autoencoder_output = autoencoder(image)
+            autoencoder_output = autoencoder_output.squeeze(0)
+
+            teacher_output = teacher(image)
+            teacher_output = teacher_output.squeeze(0)
+
+            student_output = student(image)
+            student_output = student_output.squeeze(0)
+            student_t_output = student_output[:out_channels, :, :]
+            student_ae_output = student_output[out_channels:, :, :]
+
+            gray_scale_autoencoder = torch.sum(autoencoder_output, 0)
+            gray_scale_autoencoder = (
+                gray_scale_autoencoder / autoencoder_output.shape[0]
+            )
+            gray_scale_autoencoder = gray_scale_autoencoder.data.cpu().numpy()
+
+            gray_scale_teacher = torch.sum(teacher_output, 0)
+            gray_scale_teacher = gray_scale_teacher / teacher_output.shape[0]
+            gray_scale_teacher = gray_scale_teacher.data.cpu().numpy()
+
+            gray_scale_student_t = torch.sum(student_t_output, 0)
+            gray_scale_student_t = gray_scale_student_t / student_t_output.shape[0]
+            gray_scale_student_t = gray_scale_student_t.data.cpu().numpy()
+
+            gray_scale_student_ae = torch.sum(student_ae_output, 0)
+            gray_scale_student_ae = gray_scale_student_ae / student_ae_output.shape[0]
+            gray_scale_student_ae = gray_scale_student_ae.data.cpu().numpy()
+
+            all_gray_scales = [
+                gray_scale_autoencoder,
+                gray_scale_student_ae,
+                gray_scale_student_t,
+                gray_scale_teacher,
+            ]
+
+            fig = plt.figure(figsize=(50, 200))
+
+            for i in range(len(all_gray_scales)):
+                title = ""
+                if i == 0:
+                    title = "AE"
+                elif i == 1:
+                    title = "S_AE"
+                elif i == 2:
+                    title = "S_T"
+                elif i == 3:
+                    title = "T"
+
+                a = fig.add_subplot(1, 4, i + 1)
+                imgplot = plt.imshow(all_gray_scales[i])
+                a.set_title(title, fontsize=30)
+                a.axis("off")
+
+            plt.savefig(
+                os.path.join(feature_maps_folder, f"{anomaly_type}_{idx}.jpg"),
+                bbox_inches="tight",
+            )
+            plt.close()
+
+        exit()
 
     if config.lid_score_eval:
         trained_features_st = []

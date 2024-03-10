@@ -7,9 +7,8 @@ python -u efficientad.py \
   --train_steps 12 \
   --seeds 10 \
   \
-  --use_masked_conv \
-  --pos_masked_conv d7 \
-  --w_loss_masked_conv 50.0 \
+  --trained_folder outputs/folder_baseline/output_20240131_213923_16_56 \
+  --debug_mode \
   --note "masked conv" \
   
   # \
