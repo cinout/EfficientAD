@@ -434,13 +434,29 @@ class Autoencoder(nn.Module):
         # self.enc_vq3 = VectorQuantizerEMA(num_embeddings=8, embedding_dim=64)
         if self.use_masked_conv:
             if self.pos_masked_conv == "d4":
-                self.ssmctb = SSMCTB(channels=64)
+                self.ssmctb = SSMCTB(
+                    channels=64,
+                    kernel_dim=config.masked_kernel,
+                    dilation=config.masked_dilation,
+                )
             elif self.pos_masked_conv == "d5":
-                self.ssmctb = SSMCTB(channels=64)
+                self.ssmctb = SSMCTB(
+                    channels=64,
+                    kernel_dim=config.masked_kernel,
+                    dilation=config.masked_dilation,
+                )
             elif self.pos_masked_conv == "d6":
-                self.ssmctb = SSMCTB(channels=64)
+                self.ssmctb = SSMCTB(
+                    channels=64,
+                    kernel_dim=config.masked_kernel,
+                    dilation=config.masked_dilation,
+                )
             elif self.pos_masked_conv == "d7":
-                self.ssmctb = SSMCTB(channels=64)
+                self.ssmctb = SSMCTB(
+                    channels=64,
+                    kernel_dim=config.masked_kernel,
+                    dilation=config.masked_dilation,
+                )
 
     def forward(self, x, return_bn=False, return_both=False):
         # encoder

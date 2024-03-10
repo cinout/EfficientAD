@@ -11,7 +11,7 @@
 
 #SBATCH --job-name="train_sb"
 #SBATCH --account=punim1623
-#SBATCH --time=0-12:00:00
+#SBATCH --time=0-10:00:00
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -40,8 +40,8 @@ python -u efficientad.py \
   \
   --use_masked_conv \
   --pos_masked_conv d6 \
-  --w_loss_masked_conv 200.0 \
-  --note "masked_conv, d6, w=200.0" \
+  --masked_dilation 3 \
+  --note "masked_conv, d6, w=50.0, dilation=3" \
 
 
 ##Log this job's resource usage stats###

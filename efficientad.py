@@ -213,6 +213,16 @@ def get_argparse():
         default="d6",
     )
     parser.add_argument("--w_loss_masked_conv", type=float, default=1.0)
+    parser.add_argument(
+        "--masked_dilation",
+        type=int,
+        default=1,
+    )
+    parser.add_argument(
+        "--masked_kernel",
+        type=int,
+        default=1,
+    )
 
     parser.add_argument(
         "--debug_mode",
