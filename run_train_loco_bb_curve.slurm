@@ -2,16 +2,16 @@
 
 ###SBATCH --partition=gpu-a100
 
-#SBATCH --partition=feit-gpu-a100
-#SBATCH --qos=feit
+###SBATCH --partition=feit-gpu-a100
+###SBATCH --qos=feit
 
-###SBATCH --partition=deeplearn
-###SBATCH --qos=gpgpudeeplearn
-###SBATCH --constraint=dlg4|dlg5
+#SBATCH --partition=deeplearn
+#SBATCH --qos=gpgpudeeplearn
+#SBATCH --constraint=dlg4|dlg5
 
 #SBATCH --job-name="train_bb"
 #SBATCH --account=punim1623
-#SBATCH --time=0-10:00:00
+#SBATCH --time=0-04:00:00
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -36,14 +36,9 @@ python -u efficientad.py \
   --imagenet_train_path ./datasets/Imagenet/ILSVRC/Data/CLS-LOC/train \
   \
   --train_steps 70000 \
-  --seeds 10 20 30 \
+  --seeds 10 \
   \
-  --use_masked_conv \
-  --pos_masked_conv d6 \
-  --w_loss_masked_conv 50.0 \
-  --masked_dilation 5 \
-  --masked_kernel 5 \
-  --note "masked_conv, d6, w=50.0, dilation=5, kernel=5" \
+  --note "loss curve" \
 
 
 ##Log this job's resource usage stats###
