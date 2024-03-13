@@ -847,12 +847,15 @@ def main(config, seed):
 
                     loss_total = loss_st + loss_ae + loss_stae + loss_lid
                 else:
-                    loss_total = (
-                        loss_st
-                        + loss_ae
-                        + loss_stae
-                        + config.w_loss_masked_conv * loss_ssmctb
-                    )
+                    if config.use_masked_conv:
+                        loss_total = (
+                            loss_st
+                            + loss_ae
+                            + loss_stae
+                            + config.w_loss_masked_conv * loss_ssmctb
+                        )
+                    else:
+                        loss_total = loss_st + loss_ae + loss_stae
 
                 writer.add_scalar("Loss/train", loss_total, iteration)
                 optimizer.zero_grad()
