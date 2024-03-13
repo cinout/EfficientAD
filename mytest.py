@@ -8,15 +8,15 @@ from PIL import Image, ImageOps
 import torchvision.transforms.functional as TF
 import random
 
-saturation_area = 3
-shape = 10
-heyhey = torch.randn(size=(10,))
-print(heyhey)
-# k = 4
-# topk, _ = torch.topk(heyhey, k=k, largest=True)
-# print(topk)
-# low_k, _ = torch.topk(heyhey, k=len(heyhey) - k, largest=False)
-# print(low_k)
-heyhey, _ = torch.sort(heyhey)
-print(heyhey[: shape - saturation_area])
-print(heyhey[shape - saturation_area :])
+train_steps = 70000
+lid_history_step = 50
+lid_history_count = 60
+
+saved_iterations = []
+cur_iteration = train_steps - 1
+for v in range(lid_history_count):
+    saved_iterations.append(cur_iteration)
+    cur_iteration = cur_iteration - lid_history_step
+
+print(saved_iterations)
+print(len(saved_iterations))

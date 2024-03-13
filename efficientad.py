@@ -230,6 +230,12 @@ def get_argparse():
         help="if set to True, then enter debug mode",
     )
 
+    parser.add_argument(
+        "--lid_on_history",
+        action="store_true",
+        help="if set to True, then apply LID on loss history",
+    )
+
     return parser.parse_args()
 
 
@@ -246,6 +252,8 @@ acronym = {
     "screw_bag": "sb",
     "splicing_connectors": "sc",
 }
+lid_history_step = 50
+lid_history_count = 60
 
 
 def lid_mle(data, reference, k=20, compute_mode="use_mm_for_euclid_dist_if_necessary"):
@@ -511,6 +519,14 @@ def main(config, seed):
         )  # Writer will output to ./runs/ directory by default. You can change log_dir in here
 
         tqdm_obj = tqdm(range(config.train_steps))
+
+        if config.lid_on_history:
+            # note down all the ckpts to store
+            saved_iterations = []
+            cur_iteration = config.train_steps - 1
+            for v in range(lid_history_count):
+                saved_iterations.append(cur_iteration)
+                cur_iteration -= lid_history_step
 
         if config.include_logicano:
             for (
@@ -870,6 +886,18 @@ def main(config, seed):
                         "Current loss: {:.4f}".format(loss_total.item()),
                     )
 
+                if iteration in saved_iterations:
+                    torch.save(
+                        student.state_dict(),
+                        os.path.join(train_output_dir, f"student_ckpt_{iteration}.pth"),
+                    )
+                    torch.save(
+                        autoencoder.state_dict(),
+                        os.path.join(
+                            train_output_dir, f"autoencoder_ckpt_{iteration}.pth"
+                        ),
+                    )
+
         writer.flush()  # Call flush() method to make sure that all pending events have been written to disk
         writer.close()  # if you do not need the summary writer anymore, call close() method.
 
@@ -903,6 +931,10 @@ def main(config, seed):
         student.load_state_dict(student_dict.state_dict())
         autoencoder = autoencoder.to(device)
         student = student.to(device)
+
+    if config.lid_on_history:
+        # TODO: to implement in the next step
+        exit()
 
     teacher.eval()
     student.eval()

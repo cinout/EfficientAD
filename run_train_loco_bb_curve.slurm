@@ -11,7 +11,7 @@
 
 #SBATCH --job-name="train_bb"
 #SBATCH --account=punim1623
-#SBATCH --time=0-04:00:00
+#SBATCH --time=0-06:00:00
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -38,6 +38,7 @@ python -u efficientad.py \
   --train_steps 70000 \
   --seeds 10 \
   \
+  --lid_on_history \
   --note "loss curve" \
 
 
