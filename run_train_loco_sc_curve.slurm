@@ -40,7 +40,7 @@ python -u efficientad.py \
   --seeds 10 \
   \
   --trained_folder outputs/ckpts_isofor/output_20240313_165808_26_49 \
-  #--lid_on_history \
+  --lid_on_history \
   #--note "try iso_forest alone" \
 
 
