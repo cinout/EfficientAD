@@ -952,10 +952,12 @@ def main(config, seed):
                 )
                 # TODO: change back to autoencoder.load_state_dict(autoencoder_dict)
                 autoencoder.load_state_dict(autoencoder_dict)
+                # autoencoder.load_state_dict(autoencoder_dict.state_dict())
                 autoencoder = autoencoder.to(device)
                 autoencoder.eval()
                 # TODO: change back to student.load_state_dict(student_dict)
                 student.load_state_dict(student_dict)
+                # student.load_state_dict(student_dict.state_dict())
                 student = student.to(device)
                 student.eval()
                 autoencoder_student_pairs.append((autoencoder, student))
@@ -1039,6 +1041,8 @@ def main(config, seed):
                 orig_width = image.width
                 orig_height = image.height
                 (image_st, image_ae) = train_transform(image, config=config)
+                image_st = image_st[None]
+                image_ae = image_ae[None]
                 image_st = image_st.to(device)
                 image_ae = image_ae.to(device)
                 paths.append(path)
@@ -1074,7 +1078,9 @@ def main(config, seed):
                         test_data
                     )  # decision_function(X): the lower, the more abnormal
                     # anomaly_score.shape: [#test_img]
-                    map_isoforest_pred[:, :, i, j] = anomaly_score
+                    map_isoforest_pred[:, 0, i, j] = torch.tensor(
+                        anomaly_score, device=device
+                    )
 
             for idx, (path, orig_height, orig_width) in enumerate(
                 zip(paths, orig_heights, orig_widths)
@@ -1092,7 +1098,7 @@ def main(config, seed):
                     if not os.path.exists(os.path.join(test_output_dir, defect_class)):
                         os.makedirs(os.path.join(test_output_dir, defect_class))
                     file = os.path.join(test_output_dir, defect_class, img_nm + ".tiff")
-                    tifffile.imwrite(file, map_combined)
+                    tifffile.imwrite(file, pred)
 
     # if config.lid_on_history:
     #     # TODO: to implement in the next step
