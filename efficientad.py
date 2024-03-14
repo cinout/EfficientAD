@@ -1100,12 +1100,11 @@ def main(config, seed):
                     file = os.path.join(test_output_dir, defect_class, img_nm + ".tiff")
                     tifffile.imwrite(file, pred)
 
-    # if config.lid_on_history:
-    #     # TODO: to implement in the next step
-    #     exit()
+    if config.lid_on_history:
+        # TODO: to implement in the next step
+        exit()
 
     if config.debug_mode:
-
         feature_maps_folder = os.path.join(
             output_dir, "feature_maps", config.subdataset
         )
