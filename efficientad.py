@@ -236,6 +236,12 @@ def get_argparse():
         action="store_true",
         help="if set to True, then apply LID on loss history",
     )
+    # TODO: decide if you want to add to slurm
+    parser.add_argument(
+        "--use_last_loss",
+        action="store_true",
+        help="if set to True, then use last iteration's loss in lid_on_history",
+    )
 
     return parser.parse_args()
 
@@ -1007,6 +1013,7 @@ def main(config, seed):
                 image_ae = image_ae.to(device)
 
                 final_map_for_single_train_img = generate_iso_forest_features(
+                    config,
                     autoencoder_student_pairs,
                     teacher,
                     student,
@@ -1050,6 +1057,7 @@ def main(config, seed):
                 orig_widths.append(orig_width)
 
                 final_map_for_single_test_img = generate_iso_forest_features(
+                    config,
                     autoencoder_student_pairs,
                     teacher,
                     student,
@@ -1286,6 +1294,7 @@ def main(config, seed):
 
 @torch.no_grad()
 def generate_iso_forest_features(
+    config,
     autoencoder_student_pairs,
     teacher,
     student,
@@ -1332,28 +1341,31 @@ def generate_iso_forest_features(
                 reference=loss_maps_for_single_train_img[:, :, i, j],
             )
 
-    # calculate final loss map
-    final_loss_map_for_single_train_img = generate_loss_map(
-        teacher,
-        student,
-        autoencoder,
-        image_st,
-        image_ae,
-        teacher_mean,
-        teacher_std,
-    )  # [1, 384, 64, 64]
-    final_loss_map_for_single_train_img = torch.mean(
-        final_loss_map_for_single_train_img, dim=1
-    ).squeeze(
-        0
-    )  # [64, 64]
+    if config.use_last_loss:
+        # calculate final loss map
+        final_loss_map_for_single_train_img = generate_loss_map(
+            teacher,
+            student,
+            autoencoder,
+            image_st,
+            image_ae,
+            teacher_mean,
+            teacher_std,
+        )  # [1, 384, 64, 64]
+        final_loss_map_for_single_train_img = torch.mean(
+            final_loss_map_for_single_train_img, dim=1
+        ).squeeze(
+            0
+        )  # [64, 64]
 
-    final_map_for_single_train_img = torch.stack(
-        [lid_map_for_single_train_img, final_loss_map_for_single_train_img],
-        dim=0,
-    )  # [2, 64, 64], the first value is lid_score, second is loss
+        final_map_for_single_train_img = torch.stack(
+            [lid_map_for_single_train_img, final_loss_map_for_single_train_img],
+            dim=0,
+        )  # [2, 64, 64], the first value is lid_score, second is loss
 
-    return final_map_for_single_train_img
+        return final_map_for_single_train_img
+    else:
+        return lid_map_for_single_train_img.unsqueeze(0)
 
 
 @torch.no_grad()
