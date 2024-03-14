@@ -39,8 +39,8 @@ python -u efficientad.py \
   --seeds 10 \
   \
   --trained_folder outputs/ckpts_isofor/output_20240313_165807_32_25 \
-  --lid_on_history \
-  --note "try iso_forest alone" \
+  # --lid_on_history \
+  # --note "try iso_forest alone" \
 
 
 ##Log this job's resource usage stats###
