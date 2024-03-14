@@ -7,16 +7,9 @@ from torchvision import transforms
 from PIL import Image, ImageOps
 import torchvision.transforms.functional as TF
 import random
+import glob
 
-train_steps = 70000
-lid_history_step = 50
-lid_history_count = 60
-
-saved_iterations = []
-cur_iteration = train_steps - 1
-for v in range(lid_history_count):
-    saved_iterations.append(cur_iteration)
-    cur_iteration = cur_iteration - lid_history_step
-
-print(saved_iterations)
-print(len(saved_iterations))
+list1 = [1, 2, 3]
+list2 = ["a", "b", "c"]
+for res in enumerate(zip(list1, list2)):
+    print(res)

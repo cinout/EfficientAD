@@ -11,7 +11,7 @@
 
 #SBATCH --job-name="train_bb"
 #SBATCH --account=punim1623
-#SBATCH --time=0-06:00:00
+#SBATCH --time=0-02:00:00
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -38,8 +38,9 @@ python -u efficientad.py \
   --train_steps 70000 \
   --seeds 10 \
   \
+  --trained_folder outputs/ckpts_isofor/output_20240313_165807_32_25 \
   --lid_on_history \
-  --note "loss curve" \
+  --note "try iso_forest alone" \
 
 
 ##Log this job's resource usage stats###

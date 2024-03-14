@@ -8,7 +8,7 @@ python -u efficientad.py \
   --seeds 10 \
   \
   --trained_folder outputs/folder_baseline/output_20240131_213923_16_56 \
-  --debug_mode \
+  --lid_on_history \
   --note "masked conv" \
   
   # \

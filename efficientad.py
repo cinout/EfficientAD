@@ -30,6 +30,7 @@ import torch.nn.functional as F
 from dataset import LogicalAnomalyDataset, MyDummyDataset, NormalDatasetForGeoAug
 from torch.utils.tensorboard import SummaryWriter
 import matplotlib.pyplot as plt
+from sklearn.ensemble import IsolationForest
 
 timestamp = (
     datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -254,6 +255,20 @@ acronym = {
 }
 lid_history_step = 50
 lid_history_count = 60
+
+
+def lid_mle_modified(
+    data, reference, k=20, compute_mode="use_mm_for_euclid_dist_if_necessary"
+):
+    # for single input data
+    k = min(k, reference.shape[0])
+    data = torch.flatten(data, start_dim=1)  # [1, C]
+    reference = torch.flatten(reference, start_dim=1)  # [N, C]
+    r = torch.cdist(data, reference, p=2, compute_mode=compute_mode)  # [1, N]
+    a, idx = torch.sort(r, dim=1)
+    a = a.squeeze(0)
+    lids = -k / torch.sum(torch.log(a[0:k] / a[k - 1] + 1.0e-4))
+    return lids
 
 
 def lid_mle(data, reference, k=20, compute_mode="use_mm_for_euclid_dist_if_necessary"):
@@ -907,6 +922,50 @@ def main(config, seed):
     else:
         # load pretrained weights for AE and student
         folder_name = f"{config.trained_folder}_sd{seed}_[{acronym[config.subdataset]}]"
+
+        if config.lid_on_history:
+            # get all checkpoints
+            autoencoder_student_pairs = []
+            parent_dir = os.path.join(
+                folder_name,
+                "trainings",
+                "mvtec_loco",
+                config.subdataset,
+            )
+            ckpts = os.listdir(parent_dir)
+            ckpts = list(filter(lambda x: x.startswith("autoencoder_ckpt"), ckpts))
+            ckpts = [
+                item.split("autoencoder_ckpt_")[1].split(".pth")[0] for item in ckpts
+            ]
+            for iter in ckpts:
+                autoencoder = Autoencoder(out_channels=out_channels, config=config)
+                student = PDN_Small(
+                    out_channels=2 * out_channels, padding=True, config=config
+                )
+                autoencoder_dict = torch.load(
+                    os.path.join(parent_dir, f"autoencoder_ckpt_{iter}.pth"),
+                    map_location=device,
+                )
+                student_dict = torch.load(
+                    os.path.join(parent_dir, f"student_ckpt_{iter}.pth"),
+                    map_location=device,
+                )
+                # TODO: change back to autoencoder.load_state_dict(autoencoder_dict)
+                autoencoder.load_state_dict(autoencoder_dict)
+                autoencoder = autoencoder.to(device)
+                autoencoder.eval()
+                # TODO: change back to student.load_state_dict(student_dict)
+                student.load_state_dict(student_dict)
+                student = student.to(device)
+                student.eval()
+                autoencoder_student_pairs.append((autoencoder, student))
+
+            # the final ckpt (to single out for convenience)
+            autoencoder = Autoencoder(out_channels=out_channels, config=config)
+            student = PDN_Small(
+                out_channels=2 * out_channels, padding=True, config=config
+            )
+
         autoencoder_dict = torch.load(
             os.path.join(
                 folder_name,
@@ -932,13 +991,112 @@ def main(config, seed):
         autoencoder = autoencoder.to(device)
         student = student.to(device)
 
-    if config.lid_on_history:
-        # TODO: to implement in the next step
-        exit()
-
     teacher.eval()
     student.eval()
     autoencoder.eval()
+
+    if config.lid_on_history:
+        with torch.no_grad():
+            # train set
+            final_maps_for_train_imgs = []
+            for normal in tqdm(train_loader):
+                (image_st, image_ae) = normal
+                image_st = image_st.to(device)
+                image_ae = image_ae.to(device)
+
+                final_map_for_single_train_img = generate_iso_forest_features(
+                    autoencoder_student_pairs,
+                    teacher,
+                    student,
+                    autoencoder,
+                    image_st,
+                    image_ae,
+                    teacher_mean,
+                    teacher_std,
+                )
+
+                final_maps_for_train_imgs.append(final_map_for_single_train_img)
+
+            final_maps_for_train_imgs = torch.stack(
+                final_maps_for_train_imgs, dim=0
+            )  # [#train_img, 2, 64, 64]
+
+            # create a dictionary of IsolationForests by key of spatial location
+            iso_forest_dict = dict()
+            COUNT_TRAIN, C, H, W = final_maps_for_train_imgs.shape
+            for i in range(H):
+                for j in range(W):
+                    input = final_maps_for_train_imgs[:, :, i, j].cpu().numpy()
+                    iforest = IsolationForest().fit(input)
+                    iso_forest_dict[(i, j)] = iforest
+
+            # test set
+            final_maps_for_test_imgs = []
+            paths = []
+            orig_heights = []
+            orig_widths = []
+            for image, target, path in tqdm(test_set):
+                orig_width = image.width
+                orig_height = image.height
+                (image_st, image_ae) = train_transform(image, config=config)
+                image_st = image_st.to(device)
+                image_ae = image_ae.to(device)
+                paths.append(path)
+                orig_heights.append(orig_height)
+                orig_widths.append(orig_width)
+
+                final_map_for_single_test_img = generate_iso_forest_features(
+                    autoencoder_student_pairs,
+                    teacher,
+                    student,
+                    autoencoder,
+                    image_st,
+                    image_ae,
+                    teacher_mean,
+                    teacher_std,
+                )
+
+                final_maps_for_test_imgs.append(final_map_for_single_test_img)
+
+            final_maps_for_test_imgs = torch.stack(
+                final_maps_for_test_imgs, dim=0
+            )  # [#test_img, 2, 64, 64]
+
+            COUNT_TEST, C, H, W = final_maps_for_test_imgs.shape
+            map_isoforest_pred = torch.zeros(size=(COUNT_TEST, 1, H, W))
+            map_isoforest_pred = map_isoforest_pred.to(device)
+
+            for i in range(H):
+                for j in range(W):
+                    test_data = final_maps_for_test_imgs[:, :, i, j].cpu().numpy()
+                    iforest = iso_forest_dict[(i, j)]
+                    anomaly_score = -iforest.decision_function(
+                        test_data
+                    )  # decision_function(X): the lower, the more abnormal
+                    # anomaly_score.shape: [#test_img]
+                    map_isoforest_pred[:, :, i, j] = anomaly_score
+
+            for idx, (path, orig_height, orig_width) in enumerate(
+                zip(paths, orig_heights, orig_widths)
+            ):
+                defect_class = os.path.basename(os.path.dirname(path))
+
+                pred = map_isoforest_pred[idx].unsqueeze(0)
+                pred = torch.nn.functional.interpolate(
+                    pred, (orig_height, orig_width), mode="bilinear"
+                )
+                pred = pred[0, 0].cpu().numpy()
+
+                if test_output_dir is not None:
+                    img_nm = os.path.split(path)[1].split(".")[0]
+                    if not os.path.exists(os.path.join(test_output_dir, defect_class)):
+                        os.makedirs(os.path.join(test_output_dir, defect_class))
+                    file = os.path.join(test_output_dir, defect_class, img_nm + ".tiff")
+                    tifffile.imwrite(file, map_combined)
+
+    # if config.lid_on_history:
+    #     # TODO: to implement in the next step
+    #     exit()
 
     if config.debug_mode:
 
@@ -1119,6 +1277,102 @@ def main(config, seed):
             desc="Final inference",
         )
     print("Final image auc: {:.4f}".format(auc))
+
+
+@torch.no_grad()
+def generate_iso_forest_features(
+    autoencoder_student_pairs,
+    teacher,
+    student,
+    autoencoder,
+    image_st,
+    image_ae,
+    teacher_mean,
+    teacher_std,
+):
+    # obtain all loss maps by different ckpts
+    loss_maps_for_single_train_img = []
+    for ckpt_autoencoder, ckpt_student in autoencoder_student_pairs:
+        loss_map = generate_loss_map(
+            teacher,
+            ckpt_student,
+            ckpt_autoencoder,
+            image_st,
+            image_ae,
+            teacher_mean,
+            teacher_std,
+        )
+        loss_maps_for_single_train_img.append(loss_map)
+
+    loss_maps_for_single_train_img = torch.cat(
+        loss_maps_for_single_train_img, dim=0
+    )  # shape: [#history, 384, 64, 64]
+
+    # calculate LID scores at each point on the maps
+    HIS_COUNT, C, H, W = loss_maps_for_single_train_img.shape
+    lid_center = torch.zeros(
+        size=(1, C),
+        device=loss_maps_for_single_train_img.device,
+        dtype=loss_maps_for_single_train_img.dtype,
+    )
+    lid_center = lid_center.to(device)
+
+    lid_map_for_single_train_img = torch.zeros(size=(H, W))
+    lid_map_for_single_train_img = lid_map_for_single_train_img.to(device)
+
+    for i in range(H):
+        for j in range(W):
+            lid_map_for_single_train_img[i, j] = lid_mle_modified(
+                data=lid_center,
+                reference=loss_maps_for_single_train_img[:, :, i, j],
+            )
+
+    # calculate final loss map
+    final_loss_map_for_single_train_img = generate_loss_map(
+        teacher,
+        student,
+        autoencoder,
+        image_st,
+        image_ae,
+        teacher_mean,
+        teacher_std,
+    )  # [1, 384, 64, 64]
+    final_loss_map_for_single_train_img = torch.mean(
+        final_loss_map_for_single_train_img, dim=1
+    ).squeeze(
+        0
+    )  # [64, 64]
+
+    final_map_for_single_train_img = torch.stack(
+        [lid_map_for_single_train_img, final_loss_map_for_single_train_img],
+        dim=0,
+    )  # [2, 64, 64], the first value is lid_score, second is loss
+
+    return final_map_for_single_train_img
+
+
+@torch.no_grad()
+def generate_loss_map(
+    teacher, student, autoencoder, image_st, image_ae, teacher_mean, teacher_std
+):
+    teacher_output_st = teacher(image_st)
+    teacher_output_st = (teacher_output_st - teacher_mean) / teacher_std
+    student_output_st = student(image_st)[
+        :, :out_channels
+    ]  # the first half of student outputs
+    distance_st = (teacher_output_st - student_output_st) ** 2
+
+    ae_output = autoencoder(image_ae)
+
+    teacher_output_ae = teacher(image_ae)
+    teacher_output_ae = (teacher_output_ae - teacher_mean) / teacher_std
+    student_output_ae = student(image_ae)[
+        :, out_channels:
+    ]  # the second half of student outputs
+    distance_ae = (teacher_output_ae - ae_output) ** 2
+    distance_stae = (ae_output - student_output_ae) ** 2
+
+    return distance_st + distance_ae + distance_stae  # shape: [1, 384, 64, 64]
 
 
 @torch.no_grad()
