@@ -1322,6 +1322,17 @@ def generate_iso_forest_features(
         loss_maps_for_single_train_img, dim=0
     )  # shape: [#history, 384, 64, 64]
 
+    # calculate final loss map
+    final_loss_map_for_single_train_img = generate_loss_map(
+        teacher,
+        student,
+        autoencoder,
+        image_st,
+        image_ae,
+        teacher_mean,
+        teacher_std,
+    )  # [1, 384, 64, 64]
+
     # calculate LID scores at each point on the maps
     HIS_COUNT, C, H, W = loss_maps_for_single_train_img.shape
     lid_center = torch.zeros(
@@ -1337,21 +1348,14 @@ def generate_iso_forest_features(
     for i in range(H):
         for j in range(W):
             lid_map_for_single_train_img[i, j] = lid_mle_modified(
-                data=lid_center,
+                data=final_loss_map_for_single_train_img[
+                    :, :, i, j
+                ],  # TODO: or use lid_center?
                 reference=loss_maps_for_single_train_img[:, :, i, j],
             )
 
     if config.use_last_loss:
-        # calculate final loss map
-        final_loss_map_for_single_train_img = generate_loss_map(
-            teacher,
-            student,
-            autoencoder,
-            image_st,
-            image_ae,
-            teacher_mean,
-            teacher_std,
-        )  # [1, 384, 64, 64]
+
         final_loss_map_for_single_train_img = torch.mean(
             final_loss_map_for_single_train_img, dim=1
         ).squeeze(
@@ -1372,35 +1376,35 @@ def generate_iso_forest_features(
 def generate_loss_map(
     teacher, student, autoencoder, image_st, image_ae, teacher_mean, teacher_std
 ):
-    teacher_output = teacher(image_st)
-    teacher_output = (teacher_output - teacher_mean) / teacher_std
+    # teacher_output = teacher(image_st)
+    # teacher_output = (teacher_output - teacher_mean) / teacher_std
 
-    ae_output = autoencoder(image_st)
+    # ae_output = autoencoder(image_st)
 
-    student_output = student(image_st)
-    student_output_st = student_output[:, :out_channels]
-    student_output_ae = student_output[:, out_channels:]
+    # student_output = student(image_st)
+    # student_output_st = student_output[:, :out_channels]
+    # student_output_ae = student_output[:, out_channels:]
 
-    distance_st = (teacher_output - student_output_st) ** 2
-    distance_ae = (teacher_output - ae_output) ** 2
-    distance_stae = (ae_output - student_output_ae) ** 2
-
-    # teacher_output_st = teacher(image_st)
-    # teacher_output_st = (teacher_output_st - teacher_mean) / teacher_std
-    # student_output_st = student(image_st)[
-    #     :, :out_channels
-    # ]  # the first half of student outputs
-    # distance_st = (teacher_output_st - student_output_st) ** 2
-
-    # ae_output = autoencoder(image_ae)
-
-    # teacher_output_ae = teacher(image_ae)
-    # teacher_output_ae = (teacher_output_ae - teacher_mean) / teacher_std
-    # student_output_ae = student(image_ae)[
-    #     :, out_channels:
-    # ]  # the second half of student outputs
-    # distance_ae = (teacher_output_ae - ae_output) ** 2
+    # distance_st = (teacher_output - student_output_st) ** 2
+    # distance_ae = (teacher_output - ae_output) ** 2
     # distance_stae = (ae_output - student_output_ae) ** 2
+
+    teacher_output_st = teacher(image_st)
+    teacher_output_st = (teacher_output_st - teacher_mean) / teacher_std
+    student_output_st = student(image_st)[
+        :, :out_channels
+    ]  # the first half of student outputs
+    distance_st = (teacher_output_st - student_output_st) ** 2
+
+    ae_output = autoencoder(image_ae)
+
+    teacher_output_ae = teacher(image_ae)
+    teacher_output_ae = (teacher_output_ae - teacher_mean) / teacher_std
+    student_output_ae = student(image_ae)[
+        :, out_channels:
+    ]  # the second half of student outputs
+    distance_ae = (teacher_output_ae - ae_output) ** 2
+    distance_stae = (ae_output - student_output_ae) ** 2
 
     return distance_st + distance_ae + distance_stae  # shape: [1, 384, 64, 64]
 
